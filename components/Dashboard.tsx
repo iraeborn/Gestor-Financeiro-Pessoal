@@ -1,13 +1,11 @@
-
 import React, { useState } from 'react';
-import { AppState, Transaction, ViewMode, TransactionType, TransactionStatus, Account } from '../types';
+import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import AccountModal from './AccountModal';
-import SmartAdvisor from './SmartAdvisor';
-import Reports from './Reports'; // Import the new Reports component
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, MoreHorizontal } from 'lucide-react';
+import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart } from './Charts';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, ArrowRight, PieChart, BarChart3, Coins } from 'lucide-react';
 
 interface DashboardProps {
   state: AppState;
@@ -17,7 +15,7 @@ interface DashboardProps {
   onUpdateStatus: (t: Transaction) => void;
   onSaveAccount: (a: Account) => void;
   onDeleteAccount: (id: string) => void;
-  currentView: ViewMode;
+  onChangeView: (view: ViewMode) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -28,17 +26,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUpdateStatus, 
   onSaveAccount,
   onDeleteAccount,
-  currentView 
+  onChangeView
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
   const [isAccModalOpen, setAccModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
-  // --- Calculations for "Dual View" ---
+  // --- Calculations ---
   const currentRealBalance = state.accounts.reduce((acc, curr) => acc + curr.balance, 0);
 
-  // Projected: Real Balance + (Pending Income) - (Pending Expenses)
   const pendingIncome = state.transactions
     .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
     .reduce((acc, t) => acc + t.amount, 0);
@@ -49,7 +46,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
-  // Monthly stats
   const currentMonth = new Date().getMonth();
   const incomeMonth = state.transactions
     .filter(t => t.type === TransactionType.INCOME && new Date(t.date).getMonth() === currentMonth)
@@ -59,7 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     .filter(t => t.type === TransactionType.EXPENSE && new Date(t.date).getMonth() === currentMonth)
     .reduce((acc, t) => acc + t.amount, 0);
 
-  // Transaction Handlers
+  // --- Handlers ---
   const handleEditTrans = (t: Transaction) => {
     setEditingTransaction(t);
     setTransModalOpen(true);
@@ -74,7 +70,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     setEditingTransaction(null);
   };
 
-  // Account Handlers
   const handleEditAccount = (a: Account) => {
     setEditingAccount(a);
     setAccModalOpen(true);
@@ -95,22 +90,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     setEditingAccount(null);
   };
 
-  if (currentView === 'ADVISOR') {
-    return <SmartAdvisor data={state} />;
-  }
-
-  // Use the new Reports component
-  if (currentView === 'REPORTS') {
-    return <Reports transactions={state.transactions} />;
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header & Actions */}
+    <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Visão Geral</h1>
-          <p className="text-gray-500">Controle Duplo: Real vs. Projetado</p>
+          <p className="text-gray-500">Resumo financeiro e análise visual.</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -118,26 +103,26 @@ const Dashboard: React.FC<DashboardProps> = ({
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
           >
             <Plus className="w-5 h-5" />
-            Nova Transação
+            Lançamento Rápido
           </button>
         </div>
       </div>
 
-      {/* Dual View Cards */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Saldo Real (Disponível)" 
+          title="Saldo Real" 
           amount={currentRealBalance} 
           type="neutral" 
           icon={<Wallet className="w-6 h-6 text-indigo-600"/>}
-          subtitle="Caixa atual em todas as contas"
+          subtitle="Disponível agora"
         />
         <StatCard 
           title="Saldo Projetado" 
           amount={projectedBalance} 
           type={projectedBalance >= 0 ? 'info' : 'negative'} 
           icon={<CalendarClock className="w-6 h-6 text-blue-600"/>}
-          subtitle="Após quitar pendências"
+          subtitle="Após pendências"
         />
         <StatCard 
           title="Receitas (Mês)" 
@@ -153,21 +138,58 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
       </div>
 
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Fluxo de Caixa */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
+          <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-indigo-500"/> Fluxo Recente
+          </h3>
+          <CashFlowChart transactions={state.transactions} />
+        </div>
+
+        {/* Despesas por Categoria */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
+           <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <PieChart className="w-4 h-4 text-rose-500"/> Top Despesas
+          </h3>
+          <ExpensesByCategory transactions={state.transactions} />
+        </div>
+
+         {/* Distribuição de Saldo */}
+         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
+           <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <Coins className="w-4 h-4 text-emerald-500"/> Composição de Saldo
+          </h3>
+          <BalanceDistributionChart accounts={state.accounts} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Main Transaction List */}
-          <div className="xl:col-span-2 space-y-4">
-             <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-800">Lançamentos Recentes</h3>
+          {/* Left Column: Recent Activity */}
+          <div className="xl:col-span-2 space-y-6">
+             {/* Recent Transactions Feed */}
+             <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">Últimas Movimentações</h3>
+                  <button 
+                    onClick={() => onChangeView('TRANSACTIONS')}
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                  >
+                    Ver todas <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Limit to 5 for Dashboard */}
+                <TransactionList 
+                  transactions={state.transactions.slice(0, 5)} 
+                  onDelete={onDeleteTransaction}
+                  onEdit={handleEditTrans}
+                  onToggleStatus={onUpdateStatus}
+                />
              </div>
-             <TransactionList 
-                transactions={state.transactions} 
-                onDelete={onDeleteTransaction}
-                onEdit={handleEditTrans}
-                onToggleStatus={onUpdateStatus}
-             />
           </div>
 
-          {/* Side Panels: Accounts & Goals */}
+          {/* Right Column: Accounts & Goals */}
           <div className="space-y-6">
             {/* Accounts Panel */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -183,21 +205,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <Plus className="w-5 h-5" />
                 </button>
               </div>
-              
               <div className="space-y-3">
                 {state.accounts.map(acc => (
                   <div key={acc.id} className="group relative p-3 bg-gray-50 hover:bg-white border border-transparent hover:border-gray-200 rounded-xl transition-all shadow-sm">
                     <div className="flex justify-between items-center">
                       <div>
                         <p className="font-semibold text-gray-800">{acc.name}</p>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">{acc.type === 'WALLET' ? 'Carteira' : acc.type === 'BANK' ? 'Banco' : acc.type === 'CARD' ? 'Cartão' : 'Investimento'}</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{acc.type}</p>
                       </div>
                       <span className={`font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.balance)}
                       </span>
                     </div>
-                    {/* Action Buttons */}
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-md shadow-sm">
+                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-md shadow-sm">
                       <button 
                         onClick={() => handleEditAccount(acc)}
                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -213,10 +233,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
                 ))}
-                
-                {state.accounts.length === 0 && (
-                   <div className="text-center py-4 text-gray-400 text-sm">Nenhuma conta cadastrada.</div>
-                )}
               </div>
             </div>
 
@@ -239,10 +255,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                           className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
                           style={{ width: `${percent}%` }}
                         ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-400 mt-1">
-                         <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(goal.currentAmount)}</span>
-                         <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(goal.targetAmount)}</span>
                       </div>
                     </div>
                    );

@@ -7,8 +7,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Polyfill para permitir process.env.API_KEY no frontend
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // Polyfill para permitir process.env no frontend
+      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID)
     },
     build: {
       outDir: 'dist',

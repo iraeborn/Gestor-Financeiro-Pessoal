@@ -1,91 +1,124 @@
-import { AppState, AccountType, TransactionType, TransactionStatus } from '../types';
 
-const STORAGE_KEY = 'finance_manager_data_v1';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse } from '../types';
 
-const INITIAL_DATA: AppState = {
-  accounts: [
-    { id: '1', name: 'Carteira Física', type: AccountType.WALLET, balance: 150.00 },
-    { id: '2', name: 'Nubank', type: AccountType.BANK, balance: 3500.00 },
-    { id: '3', name: 'Investimentos XP', type: AccountType.INVESTMENT, balance: 15000.00 },
-    { id: '4', name: 'Cartão Black', type: AccountType.CARD, balance: -1200.00 }, 
-  ],
-  transactions: [
-    {
-      id: 't1',
-      description: 'Salário Mensal',
-      amount: 5000,
-      type: TransactionType.INCOME,
-      category: 'Salário',
-      date: new Date().toISOString().split('T')[0],
-      status: TransactionStatus.PAID,
-      accountId: '2',
-      isRecurring: true,
-      recurrenceFrequency: 'MONTHLY'
-    },
-    {
-      id: 't2',
-      description: 'Supermercado',
-      amount: 650,
-      type: TransactionType.EXPENSE,
-      category: 'Alimentação',
-      date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0], 
-      status: TransactionStatus.PAID,
-      accountId: '2',
-      isRecurring: false
-    },
-    {
-      id: 't3',
-      description: 'Aluguel',
-      amount: 1800,
-      type: TransactionType.EXPENSE,
-      category: 'Moradia',
-      date: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0], 
-      status: TransactionStatus.PENDING,
-      accountId: '2',
-      isRecurring: true,
-      recurrenceFrequency: 'MONTHLY',
-      recurrenceEndDate: '2025-12-31'
-    },
-    {
-      id: 't4',
-      description: 'Freelance Design',
-      amount: 1200,
-      type: TransactionType.INCOME,
-      category: 'Extra',
-      date: new Date(Date.now() + 86400000 * 10).toISOString().split('T')[0],
-      status: TransactionStatus.PENDING,
-      accountId: '2',
-      isRecurring: false
-    }
-  ],
-  goals: [
-    {
-      id: 'g1',
-      name: 'Reserva de Emergência',
-      targetAmount: 20000,
-      currentAmount: 15000,
-      deadline: '2024-12-31'
-    }
-  ]
+// API Base URL - relative because of Nginx proxy
+const API_URL = '/api';
+
+const INITIAL_EMPTY_STATE: AppState = {
+  accounts: [],
+  transactions: [],
+  goals: []
 };
 
-export const loadState = (): AppState => {
+// --- Auth Functions ---
+
+export const login = async (email: string, password: string): Promise<AuthResponse> => {
+  // Mock login implementation
+  const mockUser = {
+    id: '1',
+    name: 'Usuário Demo',
+    email: email
+  };
+  const response = {
+    token: 'demo-token-' + Date.now(),
+    user: mockUser
+  };
+  localStorage.setItem('token', response.token);
+  localStorage.setItem('user', JSON.stringify(response.user));
+  
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return response;
+};
+
+export const register = async (name: string, email: string, password: string): Promise<AuthResponse> => {
+  // Mock register implementation
+  const mockUser = {
+    id: crypto.randomUUID(),
+    name,
+    email
+  };
+  const response = {
+    token: 'demo-token-' + Date.now(),
+    user: mockUser
+  };
+  localStorage.setItem('token', response.token);
+  localStorage.setItem('user', JSON.stringify(response.user));
+  
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return response;
+};
+
+export const loginWithGoogle = async (credential: string): Promise<AuthResponse> => {
+  // Mock Google login implementation
+  const mockUser = {
+    id: 'google-user-' + Date.now(),
+    name: 'Google User',
+    email: 'user@gmail.com',
+    googleId: 'google-id-sample'
+  };
+  const response = {
+    token: 'google-token-' + Date.now(),
+    user: mockUser
+  };
+  localStorage.setItem('token', response.token);
+  localStorage.setItem('user', JSON.stringify(response.user));
+  
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return response;
+};
+
+// --- Fetch Functions ---
+
+export const loadInitialData = async (): Promise<AppState> => {
   try {
-    const serialized = localStorage.getItem(STORAGE_KEY);
-    if (!serialized) {
-      return INITIAL_DATA;
-    }
-    return JSON.parse(serialized);
-  } catch (e) {
-    console.error("Failed to load state", e);
-    return INITIAL_DATA;
+    const response = await fetch(`${API_URL}/initial-data`);
+    if (!response.ok) throw new Error('Network response was not ok');
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to load initial data from API:", error);
+    return INITIAL_EMPTY_STATE;
   }
 };
 
-export const saveState = (state: AppState) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error("Failed to save state", e);
+export const api = {
+  saveAccount: async (account: Account) => {
+    await fetch(`${API_URL}/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(account)
+    });
+  },
+
+  deleteAccount: async (id: string) => {
+    await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE' });
+  },
+
+  saveTransaction: async (transaction: Transaction) => {
+    await fetch(`${API_URL}/transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transaction)
+    });
+  },
+
+  deleteTransaction: async (id: string) => {
+    await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE' });
+  },
+
+  // Stub functions for future implementation if needed, or handled via full state reload
+  saveGoal: async (goal: FinancialGoal) => {
+     // TODO: Implement Goal endpoint
   }
 };
+
+export const logout = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+};
+
+// Deprecated synchronous functions to satisfy Typescript interfaces if any remaining, 
+// but App.tsx will be updated to remove usage.
+export const loadState = () => INITIAL_EMPTY_STATE;
+export const saveState = () => {};

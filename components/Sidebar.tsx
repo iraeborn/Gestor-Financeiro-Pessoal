@@ -1,6 +1,8 @@
+
 import React from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays } from 'lucide-react';
 import { ViewMode } from '../types';
+import { logout } from '../services/storageService';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -11,9 +13,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
   const menuItems = [
     { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
+    { id: 'CALENDAR', label: 'Calendário', icon: CalendarDays },
     { id: 'REPORTS', label: 'Relatórios', icon: PieChart },
     { id: 'ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
   ];
+
+  const handleLogout = () => {
+    logout();
+    window.location.reload();
+  };
 
   return (
     <div className="w-64 bg-white h-screen border-r border-gray-200 flex flex-col fixed left-0 top-0 hidden md:flex z-50">
@@ -44,7 +52,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
       </nav>
 
       <div className="p-4 border-t border-gray-100">
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+        >
           <LogOut className="w-5 h-5" />
           Sair
         </button>

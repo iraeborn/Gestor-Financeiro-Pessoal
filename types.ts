@@ -1,3 +1,4 @@
+
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE'
@@ -18,11 +19,24 @@ export enum AccountType {
 
 export type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  googleId?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
 export interface Account {
   id: string;
   name: string;
   type: AccountType;
   balance: number; // Current real balance
+  userId?: string;
 }
 
 export interface Transaction {
@@ -37,6 +51,7 @@ export interface Transaction {
   isRecurring: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string; // ISO Date string (optional)
+  userId?: string;
 }
 
 export interface FinancialGoal {
@@ -45,6 +60,7 @@ export interface FinancialGoal {
   targetAmount: number;
   currentAmount: number;
   deadline: string;
+  userId?: string;
 }
 
 export interface AppState {
@@ -53,4 +69,11 @@ export interface AppState {
   goals: FinancialGoal[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR';
+
+declare global {
+  interface Window {
+    google: any;
+    GOOGLE_CLIENT_ID?: string; // Injetado pelo servidor em tempo de execução
+  }
+}

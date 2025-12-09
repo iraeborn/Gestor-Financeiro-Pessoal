@@ -1,0 +1,36 @@
+
+services:
+  # 1. Banco de Dados PostgreSQL
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: financer
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 2. Application (Node.js Monolith)
+  # Acts as both API and Web Server
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://admin:password123@db:5432/financer
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      API_KEY: ${API_KEY}
+      PORT: 3000
+    ports:
+      - "80:3000"
+
+volumes:
+  pgdata:
