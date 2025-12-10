@@ -16,6 +16,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// 1. Logger Middleware (Para Debug no Cloud Run)
+app.use((req, res, next) => {
+    console.log(`[Request] ${req.method} ${req.path}`);
+    next();
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -47,7 +54,6 @@ pool.connect()
 
 // --- Configs ---
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
-// Fallback hardcoded ID to ensure frontend works even if ENV fails
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -66,7 +72,6 @@ const authenticateToken = (req, res, next) => {
       return res.sendStatus(401);
   }
 
-  // Regex básico para verificar formato JWT (3 partes separadas por ponto)
   if (!/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token)) {
       console.warn(`[Auth] Invalid Token Format on ${req.path}`);
       return res.sendStatus(401);
@@ -93,6 +98,7 @@ const ensureFamilyId = async (userId) => {
 };
 
 // --- Health Check Route (NO AUTH REQUIRED) ---
+// Definida explicitamente antes de qualquer outra coisa
 app.get('/api/health', async (req, res) => {
     try {
         const result = await pool.query('SELECT NOW() as now');
@@ -323,9 +329,15 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- API Fallback (IMPORTANTE) ---
+// Se alguma rota /api/ não for encontrada acima, retornar 404 JSON, e NÃO index.html
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
+});
+
 // --- Serve Frontend ---
 const distPath = path.join(__dirname, '../dist');
-// IMPORTANT: index: false prevents serving index.html automatically on /, allowing us to inject env vars below
+// index: false impede que o express sirva o index.html automaticamente
 app.use(express.static(distPath, { index: false }));
 
 app.get('*', (req, res) => {
