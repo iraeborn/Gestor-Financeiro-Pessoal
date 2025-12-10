@@ -24,7 +24,6 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
     host: `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`, // Caminho do Socket Unix
-    // Não precisa de porta para socket unix
   };
 } else {
   // Ambiente Local ou Conexão TCP padrão
@@ -43,10 +42,14 @@ pool.connect()
   .catch(err => console.error('Erro ao conectar ao Banco de Dados:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+// Fallback hardcoded para garantir funcionamento caso .env falhe no build
+const FALLBACK_CLIENT_ID = "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || FALLBACK_CLIENT_ID;
 
 if (!GOOGLE_CLIENT_ID) {
   console.warn("AVISO: GOOGLE_CLIENT_ID não está definido. O login com Google não funcionará.");
+} else {
+  console.log("Google Auth configurado com ID final:", GOOGLE_CLIENT_ID.substring(0, 15) + "...");
 }
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
