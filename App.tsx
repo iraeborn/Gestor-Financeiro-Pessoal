@@ -8,7 +8,7 @@ import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
-import { loadInitialData, api } from './services/storageService';
+import { loadInitialData, api, logout } from './services/storageService';
 import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
@@ -37,9 +37,16 @@ const App: React.FC = () => {
       setCurrentUser(JSON.parse(userStr));
       
       setIsLoading(true);
-      const data = await loadInitialData();
-      setState(data);
-      setIsLoading(false);
+      try {
+        const data = await loadInitialData();
+        setState(data);
+      } catch (error) {
+        console.error("Failed to load initial data or session expired:", error);
+        logout();
+        setCurrentUser(null);
+      } finally {
+        setIsLoading(false);
+      }
     };
     init();
   }, []);
@@ -47,8 +54,12 @@ const App: React.FC = () => {
   const handleLoginSuccess = async (user: User) => {
     setCurrentUser(user);
     setIsLoading(true);
-    const data = await loadInitialData();
-    setState(data);
+    try {
+        const data = await loadInitialData();
+        setState(data);
+    } catch (e) {
+        console.error(e);
+    }
     setIsLoading(false);
   };
 

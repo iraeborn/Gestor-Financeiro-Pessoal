@@ -1,0 +1,63 @@
+
+-- Criação da Tabela de Usuários
+-- Armazena dados de login e vínculo familiar (family_id)
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT,
+    google_id TEXT,
+    family_id TEXT, -- Usuários com o mesmo family_id compartilham a visualização
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Criação da Tabela de Convites
+-- Gerencia códigos temporários para unir usuários em famílias
+CREATE TABLE IF NOT EXISTS invites (
+    id SERIAL PRIMARY KEY,
+    code TEXT NOT NULL,
+    family_id TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Criação da Tabela de Contas
+-- Carteiras, Bancos, Cartões, Investimentos
+CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- WALLET, BANK, CARD, INVESTMENT
+    balance DECIMAL(15,2) DEFAULT 0,
+    user_id TEXT REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Criação da Tabela de Transações
+-- Receitas e Despesas
+CREATE TABLE IF NOT EXISTS transactions (
+    id TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    type TEXT NOT NULL, -- INCOME, EXPENSE
+    category TEXT NOT NULL,
+    date DATE NOT NULL,
+    status TEXT NOT NULL, -- PAID, PENDING, OVERDUE
+    account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    recurrence_frequency TEXT, -- WEEKLY, MONTHLY, YEARLY
+    recurrence_end_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Criação da Tabela de Metas Financeiras
+CREATE TABLE IF NOT EXISTS goals (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    target_amount DECIMAL(15,2) NOT NULL,
+    current_amount DECIMAL(15,2) NOT NULL,
+    deadline DATE,
+    user_id TEXT REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

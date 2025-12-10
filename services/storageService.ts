@@ -101,18 +101,15 @@ export const getFamilyMembers = async () => {
 // --- Data ---
 
 export const loadInitialData = async (): Promise<AppState> => {
-  try {
     const res = await fetch(`${API_URL}/initial-data`, { headers: getHeaders() });
+    
     if (res.status === 401 || res.status === 403) {
-        logout();
-        return INITIAL_EMPTY_STATE;
+        throw new Error("Unauthorized");
     }
-    if (!res.ok) throw new Error('Failed');
+    
+    if (!res.ok) throw new Error('Failed to load data');
+    
     return await res.json();
-  } catch (error) {
-    console.error(error);
-    return INITIAL_EMPTY_STATE;
-  }
 };
 
 export const api = {
