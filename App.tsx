@@ -347,11 +347,13 @@ const App: React.FC = () => {
       )}
 
       {/* Desktop Sidebar */}
-      <Sidebar 
-        currentView={currentView} 
-        onChangeView={setCurrentView} 
-        onOpenCollab={() => setIsCollabModalOpen(true)}
-      />
+      <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
+        <Sidebar 
+            currentView={currentView} 
+            onChangeView={setCurrentView} 
+            onOpenCollab={() => setIsCollabModalOpen(true)}
+        />
+      </div>
 
       {/* Main Content */}
       <main className="md:ml-64 p-4 md:p-8 max-w-7xl mx-auto">

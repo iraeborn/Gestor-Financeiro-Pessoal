@@ -25,13 +25,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onOpenColl
   };
 
   return (
-    <div className="w-64 bg-white h-screen border-r border-gray-200 flex flex-col fixed left-0 top-0 hidden md:flex z-50">
+    <div className="flex flex-col h-full bg-white border-r border-gray-200">
       <div className="p-6 flex items-center gap-2 border-b border-gray-100">
         <Wallet className="w-8 h-8 text-indigo-600" />
         <span className="text-xl font-bold text-gray-800">FinManager</span>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
@@ -62,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onOpenColl
         </div>
       </nav>
 
-      <div className="p-4 border-t border-gray-100">
+      <div className="p-4 border-t border-gray-100 mt-auto">
         <button 
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
