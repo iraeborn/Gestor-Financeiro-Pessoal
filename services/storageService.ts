@@ -17,6 +17,18 @@ const getHeaders = () => {
   };
 };
 
+const handleResponse = async (res: Response) => {
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro na requisição: ${res.status}`);
+    }
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+        return await res.json();
+    }
+    return null; 
+};
+
 // --- Auth ---
 
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
@@ -25,8 +37,7 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error);
+  const data = await handleResponse(res);
   
   localStorage.setItem('token', data.token);
   localStorage.setItem('user', JSON.stringify(data.user));
@@ -39,8 +50,7 @@ export const register = async (name: string, email: string, password: string): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, password })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error);
+  const data = await handleResponse(res);
   
   localStorage.setItem('token', data.token);
   localStorage.setItem('user', JSON.stringify(data.user));
@@ -53,8 +63,7 @@ export const loginWithGoogle = async (credential: string): Promise<AuthResponse>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ credential })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error);
+  const data = await handleResponse(res);
   
   localStorage.setItem('token', data.token);
   localStorage.setItem('user', JSON.stringify(data.user));
@@ -73,9 +82,7 @@ export const createInvite = async () => {
         method: 'POST',
         headers: getHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    return data; // { code, expiresAt }
+    return await handleResponse(res);
 };
 
 export const joinFamily = async (code: string) => {
@@ -84,8 +91,7 @@ export const joinFamily = async (code: string) => {
         headers: getHeaders(),
         body: JSON.stringify({ code })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const data = await handleResponse(res);
     // Token update needed because familyId changed
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
@@ -107,23 +113,25 @@ export const loadInitialData = async (): Promise<AppState> => {
         throw new Error("Unauthorized");
     }
     
-    if (!res.ok) throw new Error('Failed to load data');
-    
-    return await res.json();
+    return await handleResponse(res);
 };
 
 export const api = {
   saveAccount: async (account: Account) => {
-    await fetch(`${API_URL}/accounts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(account) });
+    const res = await fetch(`${API_URL}/accounts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(account) });
+    await handleResponse(res);
   },
   deleteAccount: async (id: string) => {
-    await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE', headers: getHeaders() });
+    const res = await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE', headers: getHeaders() });
+    await handleResponse(res);
   },
   saveTransaction: async (transaction: Transaction) => {
-    await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });
+    const res = await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });
+    await handleResponse(res);
   },
   deleteTransaction: async (id: string) => {
-    await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE', headers: getHeaders() });
+    const res = await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE', headers: getHeaders() });
+    await handleResponse(res);
   },
   saveGoal: async (goal: FinancialGoal) => {}
 };

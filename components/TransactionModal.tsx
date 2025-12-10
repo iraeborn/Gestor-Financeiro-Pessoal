@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency } from '../types';
 
 interface TransactionModalProps {
@@ -23,6 +24,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
     recurrenceEndDate: ''
   });
+
+  const hasAccounts = accounts && accounts.length > 0;
 
   useEffect(() => {
     if (initialData) {
@@ -59,6 +62,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.accountId) {
+        alert("Atenção: Você precisa selecionar uma conta (Banco, Carteira, etc.) para registrar uma transação. Se não houver contas, cadastre uma primeiro.");
+        return;
+    }
+
     onSave({
       description: formData.description,
       amount: parseFloat(formData.amount),
@@ -190,12 +199,24 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <select
                   value={formData.accountId}
                   onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-                  className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  className={`block w-full rounded-lg border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white appearance-none ${!hasAccounts ? 'border-red-300 text-red-500 bg-red-50' : 'border-gray-200'}`}
                 >
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>{acc.name}</option>
-                  ))}
+                  {hasAccounts ? (
+                    accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    ))
+                  ) : (
+                    <option value="">Nenhuma conta disponível</option>
+                  )}
                 </select>
+                {!hasAccounts && (
+                   <div className="absolute top-10 left-0 w-full">
+                       <p className="text-[10px] text-red-500 flex items-center gap-1">
+                           <AlertCircle className="w-3 h-3" />
+                           Cadastre uma conta primeiro
+                       </p>
+                   </div>
+                )}
               </div>
             </div>
             <div>
@@ -258,7 +279,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+              disabled={!hasAccounts}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Salvar Transação
             </button>
