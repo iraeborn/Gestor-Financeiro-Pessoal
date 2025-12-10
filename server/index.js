@@ -249,6 +249,7 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
 
 // --- Data Routes ---
 
+// Use for read-only queries where there is only one parameter ($1 = userId)
 const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
@@ -295,7 +296,11 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
 app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        await pool.query(`DELETE FROM accounts WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        // Fix: Explicitly use $2 for userId to avoid conflict with $1 (accountId)
+        await pool.query(
+            `DELETE FROM accounts WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`, 
+            [req.params.id, userId]
+        );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -322,7 +327,11 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        await pool.query(`DELETE FROM transactions WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        // Fix: Explicitly use $2 for userId to avoid conflict with $1 (transactionId)
+        await pool.query(
+            `DELETE FROM transactions WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`,
+            [req.params.id, userId]
+        );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
