@@ -1,7 +1,8 @@
 
 export enum TransactionType {
   INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE'
+  EXPENSE = 'EXPENSE',
+  TRANSFER = 'TRANSFER'
 }
 
 export enum TransactionStatus {
@@ -58,6 +59,8 @@ export interface Transaction {
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
   userId?: string;
+  // Campos auxiliares para transferência (não salvos no banco, usados na UI)
+  destinationAccountId?: string; 
 }
 
 export interface FinancialGoal {

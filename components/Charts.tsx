@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Transaction, TransactionType, Account } from '../types';
@@ -18,13 +19,16 @@ export const CashFlowChart: React.FC<ChartsProps> = ({ transactions = [] }) => {
   
   // Simple grouping by day (MM-DD)
   sorted.forEach(t => {
+    // Ignore Transfers for Cash Flow (Net 0)
+    if (t.type === TransactionType.TRANSFER) return;
+
     const date = t.date.substring(5); // MM-DD
     if (!dataMap.has(date)) {
       dataMap.set(date, { income: 0, expense: 0 });
     }
     const curr = dataMap.get(date)!;
     if (t.type === TransactionType.INCOME) curr.income += t.amount;
-    else curr.expense += t.amount;
+    else if (t.type === TransactionType.EXPENSE) curr.expense += t.amount;
   });
 
   // Take only last 7 days of activity for cleaner dashboard view

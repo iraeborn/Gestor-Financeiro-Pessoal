@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Transaction, TransactionType, TransactionStatus } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -66,8 +67,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelet
                   <div className="flex items-center gap-3">
                     {t.type === TransactionType.INCOME ? (
                       <ArrowUpCircle className="w-5 h-5 text-emerald-500" />
-                    ) : (
+                    ) : t.type === TransactionType.EXPENSE ? (
                       <ArrowDownCircle className="w-5 h-5 text-rose-500" />
+                    ) : (
+                      <ArrowRightLeft className="w-5 h-5 text-blue-500" />
                     )}
                     <div className="flex flex-col">
                       <span>{t.description}</span>
@@ -81,11 +84,14 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelet
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.type === TransactionType.TRANSFER ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-800'}`}>
                     {t.category}
                   </span>
                 </td>
-                <td className={`px-6 py-4 font-semibold ${t.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-gray-900'}`}>
+                <td className={`px-6 py-4 font-semibold ${
+                    t.type === TransactionType.INCOME ? 'text-emerald-600' : 
+                    t.type === TransactionType.EXPENSE ? 'text-gray-900' : 'text-blue-600'
+                }`}>
                   {t.type === TransactionType.EXPENSE && '- '}
                   {formatCurrency(t.amount)}
                 </td>

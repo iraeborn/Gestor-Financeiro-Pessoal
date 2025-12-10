@@ -67,6 +67,63 @@ const App: React.FC = () => {
 
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>) => {
     try {
+        // Lógica de Transferência (Cria duas transações: uma de saída e uma de entrada)
+        if (newTransaction.type === TransactionType.TRANSFER && newTransaction.destinationAccountId) {
+            const sourceAccount = state.accounts.find(a => a.id === newTransaction.accountId);
+            const destAccount = state.accounts.find(a => a.id === newTransaction.destinationAccountId);
+            
+            if (!sourceAccount || !destAccount) throw new Error("Contas inválidas para transferência");
+
+            // 1. Transação de Saída (Origem)
+            const tOut: Transaction = {
+                ...newTransaction,
+                id: crypto.randomUUID(),
+                description: `Transf. para ${destAccount.name} (${newTransaction.description})`,
+                destinationAccountId: undefined // Não salva no banco
+            };
+
+            // 2. Transação de Entrada (Destino)
+            const tIn: Transaction = {
+                ...newTransaction,
+                id: crypto.randomUUID(),
+                accountId: newTransaction.destinationAccountId,
+                description: `Transf. de ${sourceAccount.name} (${newTransaction.description})`,
+                destinationAccountId: undefined
+            };
+
+            await api.saveTransaction(tOut);
+            await api.saveTransaction(tIn);
+
+            setState(prevState => {
+                let updatedAccounts = [...prevState.accounts];
+
+                // Atualizar saldos se pago
+                if (newTransaction.status === TransactionStatus.PAID) {
+                    updatedAccounts = updatedAccounts.map(acc => {
+                        if (acc.id === tOut.accountId) {
+                            const newBal = acc.balance - tOut.amount; // Saída
+                            api.saveAccount({ ...acc, balance: newBal });
+                            return { ...acc, balance: newBal };
+                        }
+                        if (acc.id === tIn.accountId) {
+                            const newBal = acc.balance + tIn.amount; // Entrada
+                            api.saveAccount({ ...acc, balance: newBal });
+                            return { ...acc, balance: newBal };
+                        }
+                        return acc;
+                    });
+                }
+
+                return {
+                    ...prevState,
+                    accounts: updatedAccounts,
+                    transactions: [tOut, tIn, ...prevState.transactions]
+                };
+            });
+            return;
+        }
+
+        // Lógica Normal (Income/Expense)
         const transaction: Transaction = {
           ...newTransaction,
           id: crypto.randomUUID(),
@@ -83,14 +140,19 @@ const App: React.FC = () => {
           if (transaction.status === TransactionStatus.PAID) {
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === transaction.accountId) {
-                const newBalance = transaction.type === TransactionType.INCOME 
-                    ? acc.balance + transaction.amount 
-                    : acc.balance - transaction.amount;
+                // Se for Transferência simples (editada sem par) ou normal
+                // Mas aqui cai Income/Expense normal.
+                // Se TRANSFER caiu aqui sem destination, trata como saída simples (ajuste manual)
+                // Mas a lógica de TRANSFER completa está acima.
+                let newBalance = acc.balance;
+                if (transaction.type === TransactionType.INCOME) {
+                    newBalance += transaction.amount;
+                } else {
+                    // EXPENSE ou TRANSFER (visto como saída da conta selecionada)
+                    newBalance -= transaction.amount;
+                }
                 
-                // Sync account balance change to server (fire and forget inside setState logic is tricky, usually handled separately, but kept for simplicity of logic flow)
-                // Better approach: Call saveAccount separately. For now, we assume this works or next load fixes it.
                 api.saveAccount({ ...acc, balance: newBalance }); 
-                
                 return { ...acc, balance: newBalance };
               }
               return acc;
@@ -123,9 +185,46 @@ const App: React.FC = () => {
           if (target.status === TransactionStatus.PAID) {
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === target.accountId) {
-                 const newBalance = target.type === TransactionType.INCOME 
-                    ? acc.balance - target.amount 
-                    : acc.balance + target.amount;
+                 // Reverter saldo
+                 let newBalance = acc.balance;
+                 if (target.type === TransactionType.INCOME) {
+                     newBalance -= target.amount;
+                 } else {
+                     // Expense ou Transfer (Saída) -> Devolve o dinheiro
+                     // Nota: Se for Transfer de Entrada (criada manualmente ou pelo par), 
+                     // a lógica acima no AddTransaction cria como TRANSFER na conta destino.
+                     // Porém, a lógica de "sinal" do TRANSFER depende do contexto.
+                     // Simplificação: No nosso Add, TRANSFER sempre diminui o saldo da conta associada? 
+                     // Não. O par de entrada aumenta.
+                     // Precisamos saber se esse TRANSFER específico estava aumentando ou diminuindo.
+                     // Como não temos um campo "direção", assumimos pela lógica de criação:
+                     // O par de saída (De A) subtraiu. O par de entrada (Para B) somou.
+                     // Mas ambos têm type=TRANSFER.
+                     // SOLUÇÃO: Vamos assumir que TRANSFER visualmente na lista se comporta como?
+                     // Se eu excluir um TRANSFER da conta A, devo somar o valor.
+                     // Se eu excluir um TRANSFER da conta B (que foi entrada), devo subtrair.
+                     // Como distinguir?
+                     // Pela descrição? Frágil.
+                     // Pelo comportamento padrão: TRANSFER no sistema atual é tratado como SAÍDA no dashboard geral se não tiver par?
+                     // Vamos usar a convenção: Se type=TRANSFER, vamos verificar se aumentou ou diminuiu na criação?
+                     // Na criação do par:
+                     // T1 (Source): amount X. Subtraiu.
+                     // T2 (Dest): amount X. Somou.
+                     // Faltou um campo 'direction' no DB para ser robusto.
+                     // WORKAROUND: Para manter simples e sem alterar DB schema drasticamente:
+                     // Vamos tratar exclusão de TRANSFER como reversão de Despesa por padrão (devolve dinheiro), 
+                     // A MENOS QUE seja identificado como entrada. 
+                     // Mas como identificar? 
+                     // Vamos assumir que o usuário deve ajustar o saldo manualmente se a lógica falhar ou 
+                     // Melhor: Olhar se a descrição começa com "Transf. de".
+                     if (target.description.startsWith("Transf. de")) {
+                         // Era entrada -> Subtrai
+                         newBalance -= target.amount;
+                     } else {
+                         // Era saída ("Transf. para" ou genérico) -> Soma
+                         newBalance += target.amount;
+                     }
+                 }
                  
                  api.saveAccount({ ...acc, balance: newBalance });
 
@@ -162,9 +261,14 @@ const App: React.FC = () => {
             if (oldT.status === TransactionStatus.PAID) {
                 updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === oldT.accountId) {
-                        const revBalance = oldT.type === TransactionType.INCOME 
-                            ? acc.balance - oldT.amount 
-                            : acc.balance + oldT.amount;
+                        let revBalance = acc.balance;
+                        if (oldT.type === TransactionType.INCOME) {
+                            revBalance -= oldT.amount;
+                        } else if (oldT.type === TransactionType.TRANSFER && oldT.description.startsWith("Transf. de")) {
+                             revBalance -= oldT.amount;
+                        } else {
+                            revBalance += oldT.amount;
+                        }
                         return { ...acc, balance: revBalance };
                     }
                     return acc;
@@ -175,9 +279,14 @@ const App: React.FC = () => {
             if (updatedT.status === TransactionStatus.PAID) {
                  updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === updatedT.accountId) {
-                        const newBalance = updatedT.type === TransactionType.INCOME 
-                            ? acc.balance + updatedT.amount 
-                            : acc.balance - updatedT.amount;
+                        let newBalance = acc.balance;
+                        if (updatedT.type === TransactionType.INCOME) {
+                            newBalance += updatedT.amount;
+                        } else if (updatedT.type === TransactionType.TRANSFER && updatedT.description.startsWith("Transf. de")) {
+                            newBalance += updatedT.amount;
+                        } else {
+                            newBalance -= updatedT.amount;
+                        }
                         return { ...acc, balance: newBalance };
                     }
                     return acc;
@@ -187,10 +296,6 @@ const App: React.FC = () => {
             // Sync modified accounts
             updatedAccounts.forEach(acc => {
                 const original = prevState.accounts.find(a => a.id === acc.id);
-                // Simple check if reference or value changed.
-                // In a perfect world we map IDs. 
-                // Since we map inside the setState logic above, we can just save those that changed.
-                // However, updatedAccounts has the NEW balances.
                 if (original && original.balance !== acc.balance) {
                     api.saveAccount(acc);
                 }

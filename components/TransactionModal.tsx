@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency } from '../types';
 
 interface TransactionModalProps {
@@ -20,6 +20,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     date: new Date().toISOString().split('T')[0],
     status: TransactionStatus.PAID,
     accountId: '',
+    destinationAccountId: '', // Novo campo para transferência
     isRecurring: false,
     recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
     recurrenceEndDate: ''
@@ -37,6 +38,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         date: initialData.date,
         status: initialData.status,
         accountId: initialData.accountId,
+        destinationAccountId: '',
         isRecurring: initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
         recurrenceEndDate: initialData.recurrenceEndDate || ''
@@ -51,6 +53,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         date: new Date().toISOString().split('T')[0],
         status: TransactionStatus.PAID,
         accountId: accounts.length > 0 ? accounts[0].id : '',
+        destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
         isRecurring: false,
         recurrenceFrequency: 'MONTHLY',
         recurrenceEndDate: ''
@@ -64,18 +67,30 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     e.preventDefault();
     
     if (!formData.accountId) {
-        alert("Atenção: Você precisa selecionar uma conta (Banco, Carteira, etc.) para registrar uma transação. Se não houver contas, cadastre uma primeiro.");
+        alert("Atenção: Você precisa selecionar uma conta.");
         return;
+    }
+
+    if (formData.type === TransactionType.TRANSFER) {
+        if (!formData.destinationAccountId) {
+            alert("Selecione a conta de destino para a transferência.");
+            return;
+        }
+        if (formData.accountId === formData.destinationAccountId) {
+            alert("A conta de origem e destino não podem ser a mesma.");
+            return;
+        }
     }
 
     onSave({
       description: formData.description,
       amount: parseFloat(formData.amount),
       type: formData.type,
-      category: formData.category,
+      category: formData.type === TransactionType.TRANSFER ? 'Transferência' : formData.category,
       date: formData.date,
       status: formData.status,
       accountId: formData.accountId,
+      destinationAccountId: formData.type === TransactionType.TRANSFER ? formData.destinationAccountId : undefined,
       isRecurring: formData.isRecurring,
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined
@@ -100,7 +115,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
             <button
               type="button"
-              onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE })}
+              onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' })}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE
                   ? 'bg-white text-rose-600 shadow-sm'
@@ -111,7 +126,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </button>
             <button
               type="button"
-              onClick={() => setFormData({ ...formData, type: TransactionType.INCOME })}
+              onClick={() => setFormData({ ...formData, type: TransactionType.INCOME, category: 'Salário' })}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.INCOME
                   ? 'bg-white text-emerald-600 shadow-sm'
@@ -119,6 +134,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               }`}
             >
               Receita
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, type: TransactionType.TRANSFER, category: 'Transferência' })}
+              className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                formData.type === TransactionType.TRANSFER
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Transf.
             </button>
           </div>
 
@@ -147,7 +173,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Ex: Supermercado"
+              placeholder={formData.type === TransactionType.TRANSFER ? "Ex: Transf. para Poupança" : "Ex: Supermercado"}
             />
           </div>
 
@@ -160,9 +186,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <input
                   type="text"
                   list="categories"
+                  disabled={formData.type === TransactionType.TRANSFER}
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 />
                 <datalist id="categories">
                   <option value="Alimentação" />
@@ -190,48 +217,82 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </div>
           </div>
 
-          {/* Account & Status Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Conta</label>
-              <div className="relative">
-                <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <select
-                  value={formData.accountId}
-                  onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-                  className={`block w-full rounded-lg border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white appearance-none ${!hasAccounts ? 'border-red-300 text-red-500 bg-red-50' : 'border-gray-200'}`}
-                >
-                  {hasAccounts ? (
-                    accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>{acc.name}</option>
-                    ))
-                  ) : (
-                    <option value="">Nenhuma conta disponível</option>
-                  )}
-                </select>
-                {!hasAccounts && (
-                   <div className="absolute top-10 left-0 w-full">
-                       <p className="text-[10px] text-red-500 flex items-center gap-1">
-                           <AlertCircle className="w-3 h-3" />
-                           Cadastre uma conta primeiro
-                       </p>
-                   </div>
-                )}
+          {/* Account Selection Logic */}
+          {formData.type === TransactionType.TRANSFER ? (
+              <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <div className="col-span-2 flex items-center gap-2 text-blue-700 text-xs font-bold mb-1">
+                      <ArrowRightLeft className="w-3 h-3" />
+                      Dados da Transferência
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-blue-800 mb-1">De (Saída)</label>
+                    <select
+                        value={formData.accountId}
+                        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                        className="block w-full rounded-lg border border-blue-200 px-2 py-2 text-sm outline-none bg-white"
+                    >
+                         {accounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                         ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-blue-800 mb-1">Para (Entrada)</label>
+                    <select
+                        value={formData.destinationAccountId}
+                        onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })}
+                        className="block w-full rounded-lg border border-blue-200 px-2 py-2 text-sm outline-none bg-white"
+                    >
+                         <option value="">Selecione...</option>
+                         {accounts.filter(a => a.id !== formData.accountId).map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                         ))}
+                    </select>
+                  </div>
               </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Conta</label>
+                <div className="relative">
+                    <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    <select
+                    value={formData.accountId}
+                    onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                    className={`block w-full rounded-lg border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white appearance-none ${!hasAccounts ? 'border-red-300 text-red-500 bg-red-50' : 'border-gray-200'}`}
+                    >
+                    {hasAccounts ? (
+                        accounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))
+                    ) : (
+                        <option value="">Nenhuma conta disponível</option>
+                    )}
+                    </select>
+                    {!hasAccounts && (
+                    <div className="absolute top-10 left-0 w-full">
+                        <p className="text-[10px] text-red-500 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            Cadastre uma conta primeiro
+                        </p>
+                    </div>
+                    )}
+                </div>
+                </div>
+                <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
+                    className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                    <option value={TransactionStatus.PAID}>Pago / Recebido</option>
+                    <option value={TransactionStatus.PENDING}>Pendente</option>
+                    <option value={TransactionStatus.OVERDUE}>Atrasado</option>
+                </select>
+                </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
-                className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-              >
-                <option value={TransactionStatus.PAID}>Pago / Recebido</option>
-                <option value={TransactionStatus.PENDING}>Pendente</option>
-                <option value={TransactionStatus.OVERDUE}>Atrasado</option>
-              </select>
-            </div>
-          </div>
+          )}
 
           <div className="border-t border-gray-100 pt-3">
             <div className="flex items-center gap-2">
@@ -244,7 +305,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               />
               <label htmlFor="recurring" className="text-sm font-medium text-gray-700 flex items-center gap-1">
                 <Repeat className="w-3.5 h-3.5" />
-                Conta recorrente?
+                {formData.type === TransactionType.TRANSFER ? 'Transferência recorrente?' : 'Conta recorrente?'}
               </label>
             </div>
             
@@ -280,9 +341,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             <button
               type="submit"
               disabled={!hasAccounts}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`w-full text-white py-3 rounded-xl font-semibold transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+                  formData.type === TransactionType.TRANSFER 
+                  ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+              }`}
             >
-              Salvar Transação
+              {formData.type === TransactionType.TRANSFER ? 'Confirmar Transferência' : 'Salvar Transação'}
             </button>
           </div>
         </form>
