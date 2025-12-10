@@ -39,11 +39,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
     amount DECIMAL(15,2) NOT NULL,
-    type TEXT NOT NULL, -- INCOME, EXPENSE
+    type TEXT NOT NULL, -- INCOME, EXPENSE, TRANSFER
     category TEXT NOT NULL,
     date DATE NOT NULL,
     status TEXT NOT NULL, -- PAID, PENDING, OVERDUE
     account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+    destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL, -- Coluna para Transferências
     user_id TEXT REFERENCES users(id),
     is_recurring BOOLEAN DEFAULT FALSE,
     recurrence_frequency TEXT, -- WEEKLY, MONTHLY, YEARLY

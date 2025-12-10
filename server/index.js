@@ -49,7 +49,18 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
 const pool = new Pool(poolConfig);
 
 pool.connect()
-  .then(() => console.log('DB Connected Successfully'))
+  .then(async (client) => {
+    console.log('DB Connected Successfully');
+    // Migration Simples: Garantir que a coluna destination_account_id exista
+    try {
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL;`);
+        console.log('Migration: destination_account_id column verified.');
+    } catch (e) {
+        console.error('Migration Error:', e.message);
+    } finally {
+        client.release();
+    }
+  })
   .catch(err => console.error('DB Connection Error:', err));
 
 // --- Configs ---
@@ -264,7 +275,9 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
             transactions: trans.rows.map(r => ({
                 id: r.id, description: r.description, amount: parseFloat(r.amount), type: r.type, 
                 category: r.category, date: new Date(r.date).toISOString().split('T')[0], status: r.status, 
-                accountId: r.account_id, isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
+                accountId: r.account_id, 
+                destinationAccountId: r.destination_account_id, // Mapping from Snake Case
+                isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
                 recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined
             })),
             goals: goals.rows.map(r => ({ 
@@ -312,11 +325,11 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, is_recurring, recurrence_frequency, recurrence_end_date, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              ON CONFLICT (id) DO UPDATE SET 
-                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, is_recurring=$9, recurrence_frequency=$10, recurrence_end_date=$11`,
-            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, userId]
+                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12`,
+            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, userId]
         );
         res.json({ success: true });
     } catch (err) {
