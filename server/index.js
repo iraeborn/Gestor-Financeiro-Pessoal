@@ -1,13 +1,18 @@
+import 'dotenv/config';
+import express from 'express';
+import pg from 'pg';
+const { Pool } = pg;
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-require('dotenv').config();
-const express = require('express');
-const { Pool } = require('pg');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { OAuth2Client } = require('google-auth-library');
-const path = require('path');
-const fs = require('fs');
+// Configuração para __dirname em ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -42,14 +47,15 @@ pool.connect()
   .catch(err => console.error('Erro ao conectar ao Banco de Dados:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
+
 // Fallback hardcoded para garantir funcionamento caso .env falhe no build
 const FALLBACK_CLIENT_ID = "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || FALLBACK_CLIENT_ID;
 
-if (!GOOGLE_CLIENT_ID) {
-  console.warn("AVISO: GOOGLE_CLIENT_ID não está definido. O login com Google não funcionará.");
+if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === "YOUR_GOOGLE_CLIENT_ID") {
+  console.warn("AVISO: GOOGLE_CLIENT_ID não está definido corretamente.");
 } else {
-  console.log("Google Auth configurado com ID final:", GOOGLE_CLIENT_ID.substring(0, 15) + "...");
+  console.log("Google Auth configurado.");
 }
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -82,12 +88,12 @@ const mapTransaction = (row) => ({
     amount: parseFloat(row.amount),
     type: row.type,
     category: row.category,
-    date: row.date.toISOString().split('T')[0],
+    date: new Date(row.date).toISOString().split('T')[0],
     status: row.status,
     accountId: row.account_id,
     isRecurring: row.is_recurring,
     recurrenceFrequency: row.recurrence_frequency,
-    recurrenceEndDate: row.recurrence_end_date ? row.recurrence_end_date.toISOString().split('T')[0] : undefined
+    recurrenceEndDate: row.recurrence_end_date ? new Date(row.recurrence_end_date).toISOString().split('T')[0] : undefined
 });
 
 const mapGoal = (row) => ({
@@ -95,7 +101,7 @@ const mapGoal = (row) => ({
     name: row.name,
     targetAmount: parseFloat(row.target_amount),
     currentAmount: parseFloat(row.current_amount),
-    deadline: row.deadline ? row.deadline.toISOString().split('T')[0] : undefined
+    deadline: row.deadline ? new Date(row.deadline).toISOString().split('T')[0] : undefined
 });
 
 // --- Auth Routes ---
@@ -154,10 +160,6 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/google', async (req, res) => {
   const { credential } = req.body; // O token JWT retornado pelo Google
   try {
-    if (!GOOGLE_CLIENT_ID) {
-        throw new Error("GOOGLE_CLIENT_ID não configurado no servidor");
-    }
-
     // Verifica o token com o Google
     const ticket = await googleClient.verifyIdToken({
         idToken: credential,
@@ -300,11 +302,8 @@ app.get('*', (req, res) => {
         }
 
         // Inject GOOGLE_CLIENT_ID into window object
-        const envScript = `
-          <script>
-            window.GOOGLE_CLIENT_ID = "${GOOGLE_CLIENT_ID || ''}";
-          </script>
-        `;
+        // Use a simplified script injection to ensure it works
+        const envScript = `<script>window.GOOGLE_CLIENT_ID = "${GOOGLE_CLIENT_ID}";</script>`;
         
         // Inject right before </head>
         const finalHtml = htmlData.replace('</head>', `${envScript}</head>`);
