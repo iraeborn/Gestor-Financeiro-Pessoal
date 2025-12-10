@@ -3,22 +3,27 @@
 # ============================
 FROM node:18 AS build
 
-# Diretório do app
 WORKDIR /app
 
-# Copia apenas o package.json para aproveitar cache
+# Copia package.json para aproveitar cache
 COPY package*.json ./
 
-# Instala dependências (com todas devDependencies)
+# Instala dependências declaradas
 RUN npm install
 
-# Copia o resto do projeto
+# 👉 Corrige o erro instalando react-markdown diretamente no build
+RUN npm install react-markdown
+
+# (Opcional para TypeScript – mas seguro)
+RUN npm install -D @types/react-markdown || true
+
+# Copia os demais arquivos
 COPY . .
 
-# Build do backend (TypeScript)
+# Build backend (TS)
 RUN npm run build
 
-# Build do frontend (Vite)
+# Build frontend (Vite)
 RUN npm run build --workspace-frontend || npm run build
 
 # ============================
@@ -28,20 +33,17 @@ FROM node:18-slim AS production
 
 WORKDIR /app
 
-# Apenas dependências de produção
 COPY package*.json ./
+
+# Instala somente as deps de produção
 RUN npm install --omit=dev
 
-# Copia artefatos buildados do stage anterior
+# Copia artefatos buildados
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/node_modules ./node_modules
 
-# Porta padrão do Cloud Run
 ENV PORT=8080
-
-# Variável usada pelo Express para servir o Vite
 ENV NODE_ENV=production
 
-# Comando de entrada
 CMD ["node", "server/index.js"]
