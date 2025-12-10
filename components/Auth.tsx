@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, LogIn, UserPlus, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, UserPlus, AlertCircle, Info } from 'lucide-react';
 import { login, register, loginWithGoogle } from '../services/storageService';
 import { User } from '../types';
 
@@ -15,18 +15,19 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [currentOrigin, setCurrentOrigin] = useState('');
 
   // Inicializa o botão do Google
   useEffect(() => {
+    // Captura a origem atual para mostrar ao usuário caso precise configurar
+    setCurrentOrigin(window.location.origin);
+
     // Tenta pegar do Window (Produção/Docker/Cloud Run) ou do process.env (Desenvolvimento Vite Local)
-    // Nota: O Vite substitui process.env.GOOGLE_CLIENT_ID em tempo de build se estiver no .env
     const clientId = window.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
  
     if (!clientId) {
-      console.error("GOOGLE_CLIENT_ID não encontrado. Verifique o arquivo .env (Local) ou as Variáveis de Ambiente (Cloud Run).");
-      // Não retornamos aqui para permitir que o login tradicional funcione mesmo sem o Google
+      console.error("GOOGLE_CLIENT_ID não encontrado.");
     } else if (window.google) {
-      // Apenas inicializa se o SDK do Google estiver carregado e tivermos um Client ID
       try {
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -171,13 +172,28 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                     <span className="px-2 bg-white text-gray-500">Ou continue com</span>
                 </div>
              </div>
+             
              <div className="mt-6 min-h-[48px]" id="googleSignInDiv">
-               {/* O botão do Google será renderizado aqui se a chave estiver configurada */}
                {(!window.GOOGLE_CLIENT_ID && !process.env.GOOGLE_CLIENT_ID) && (
                  <div className="text-xs text-center text-red-400 bg-red-50 p-2 rounded">
                    Google Login Indisponível (Client ID ausente)
                  </div>
                )}
+             </div>
+
+             {/* Helper text for Google Auth Errors */}
+             <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 border border-blue-100 flex gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                   <p className="font-semibold mb-1">Problemas com Google?</p>
+                   <p>Certifique-se de que a URL abaixo está nas <strong>Origens Autorizadas</strong> do seu Cloud Console:</p>
+                   <code className="block mt-1 bg-white px-1 py-0.5 rounded border border-blue-200 break-all select-all cursor-pointer" onClick={(e) => {
+                      navigator.clipboard.writeText(e.currentTarget.innerText);
+                      alert('Copiado!');
+                   }}>
+                     {currentOrigin}
+                   </code>
+                </div>
              </div>
           </div>
 
