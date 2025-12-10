@@ -24,6 +24,7 @@ export interface User {
   name: string;
   email: string;
   googleId?: string;
+  familyId?: string; // ID do Grupo Familiar
 }
 
 export interface AuthResponse {
@@ -31,11 +32,16 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface Invite {
+  code: string;
+  expiresAt: string;
+}
+
 export interface Account {
   id: string;
   name: string;
   type: AccountType;
-  balance: number; // Current real balance
+  balance: number;
   userId?: string;
 }
 
@@ -45,12 +51,12 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   category: string;
-  date: string; // ISO Date string
+  date: string;
   status: TransactionStatus;
   accountId: string;
   isRecurring: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
-  recurrenceEndDate?: string; // ISO Date string (optional)
+  recurrenceEndDate?: string;
   userId?: string;
 }
 
@@ -74,6 +80,6 @@ export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'C
 declare global {
   interface Window {
     google: any;
-    GOOGLE_CLIENT_ID?: string; // Injetado pelo servidor em tempo de execução
+    GOOGLE_CLIENT_ID?: string;
   }
 }

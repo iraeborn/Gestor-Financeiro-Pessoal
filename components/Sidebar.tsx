@@ -1,15 +1,16 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Users } from 'lucide-react';
 import { ViewMode } from '../types';
 import { logout } from '../services/storageService';
 
 interface SidebarProps {
   currentView: ViewMode;
   onChangeView: (view: ViewMode) => void;
+  onOpenCollab: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onOpenCollab }) => {
   const menuItems = [
     { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
@@ -49,6 +50,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
             </button>
           );
         })}
+        
+        <div className="pt-4 mt-4 border-t border-gray-100">
+            <button
+                onClick={onOpenCollab}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 transition-colors font-medium"
+            >
+                <Users className="w-5 h-5" />
+                Família
+            </button>
+        </div>
       </nav>
 
       <div className="p-4 border-t border-gray-100">

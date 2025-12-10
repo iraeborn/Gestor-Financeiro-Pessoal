@@ -7,6 +7,7 @@ import Reports from './components/Reports';
 import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
 import Auth from './components/Auth';
+import CollaborationModal from './components/CollaborationModal';
 import { loadInitialData, api } from './services/storageService';
 import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User } from './types';
 import { Menu, Loader2 } from 'lucide-react';
@@ -17,6 +18,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Modal States
+  const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
   // Initial Load
   useEffect(() => {
@@ -290,21 +294,39 @@ const App: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-gray-800/50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-xl" onClick={e => e.stopPropagation()}>
-            <Sidebar currentView={currentView} onChangeView={(view) => {
-              setCurrentView(view);
-              setIsMobileMenuOpen(false);
-            }} />
+            <Sidebar 
+                currentView={currentView} 
+                onChangeView={(view) => {
+                    setCurrentView(view);
+                    setIsMobileMenuOpen(false);
+                }} 
+                onOpenCollab={() => {
+                    setIsCollabModalOpen(true);
+                    setIsMobileMenuOpen(false);
+                }}
+            />
           </div>
         </div>
       )}
 
       {/* Desktop Sidebar */}
-      <Sidebar currentView={currentView} onChangeView={setCurrentView} />
+      <Sidebar 
+        currentView={currentView} 
+        onChangeView={setCurrentView} 
+        onOpenCollab={() => setIsCollabModalOpen(true)}
+      />
 
       {/* Main Content */}
       <main className="md:ml-64 p-4 md:p-8 max-w-7xl mx-auto">
         {renderContent()}
       </main>
+
+      <CollaborationModal 
+        isOpen={isCollabModalOpen}
+        onClose={() => setIsCollabModalOpen(false)}
+        currentUser={currentUser}
+        onUserUpdate={setCurrentUser}
+      />
     </div>
   );
 };
