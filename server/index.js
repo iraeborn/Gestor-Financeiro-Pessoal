@@ -66,6 +66,12 @@ const authenticateToken = (req, res, next) => {
       return res.sendStatus(401);
   }
 
+  // Regex básico para verificar formato JWT (3 partes separadas por ponto)
+  if (!/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token)) {
+      console.warn(`[Auth] Invalid Token Format on ${req.path}`);
+      return res.sendStatus(401);
+  }
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
         console.warn(`[Auth] Token Invalid/Expired: ${err.message}`);
@@ -85,6 +91,26 @@ const ensureFamilyId = async (userId) => {
     }
     return res.rows[0]?.family_id || userId;
 };
+
+// --- Health Check Route (NO AUTH REQUIRED) ---
+app.get('/api/health', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW() as now');
+        res.json({ 
+            status: 'OK', 
+            database: 'Connected', 
+            timestamp: result.rows[0].now,
+            mode: process.env.INSTANCE_CONNECTION_NAME ? 'Cloud SQL' : 'Local TCP'
+        });
+    } catch (err) {
+        console.error('Health Check Failed:', err);
+        res.status(500).json({ 
+            status: 'ERROR', 
+            database: 'Disconnected', 
+            error: err.message 
+        });
+    }
+});
 
 // --- Auth Routes ---
 
