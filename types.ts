@@ -15,7 +15,8 @@ export enum AccountType {
   WALLET = 'WALLET',
   BANK = 'BANK',
   CARD = 'CARD',
-  INVESTMENT = 'INVESTMENT'
+  INVESTMENT = 'INVESTMENT',
+  MEAL_VOUCHER = 'MEAL_VOUCHER'
 }
 
 export type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY';

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Wallet, Building, CreditCard, TrendingUp, DollarSign, Calendar, AlertCircle, Info } from 'lucide-react';
+import { X, Wallet, Building, CreditCard, TrendingUp, DollarSign, Calendar, AlertCircle, Info, Utensils } from 'lucide-react';
 import { Account, AccountType } from '../types';
 
 interface AccountModalProps {
@@ -79,7 +79,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Ex: Nubank, Carteira..."
+              placeholder="Ex: Nubank, Carteira, VR..."
             />
           </div>
 
@@ -95,12 +95,14 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
                 <option value={AccountType.BANK}>Conta Bancária</option>
                 <option value={AccountType.CARD}>Cartão de Crédito</option>
                 <option value={AccountType.INVESTMENT}>Investimento</option>
+                <option value={AccountType.MEAL_VOUCHER}>Vale Alimentação / Refeição</option>
               </select>
               <div className="absolute right-3 top-2.5 pointer-events-none text-gray-400">
                 {formData.type === AccountType.WALLET && <Wallet className="w-4 h-4" />}
                 {formData.type === AccountType.BANK && <Building className="w-4 h-4" />}
                 {formData.type === AccountType.CARD && <CreditCard className="w-4 h-4" />}
                 {formData.type === AccountType.INVESTMENT && <TrendingUp className="w-4 h-4" />}
+                {formData.type === AccountType.MEAL_VOUCHER && <Utensils className="w-4 h-4" />}
               </div>
             </div>
           </div>
