@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account } from '../types';
 import TransactionList from './TransactionList';
@@ -24,6 +25,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | TransactionType>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TransactionStatus>('ALL');
+  const [accountFilter, setAccountFilter] = useState<string>('ALL');
   const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   
   // Modal State
@@ -46,11 +48,29 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
       // Filter by Status
       if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
 
+      // Filter by Account
+      if (accountFilter !== 'ALL') {
+        const matchesSource = t.accountId === accountFilter;
+        // Para transferências, queremos ver se a conta selecionada é a origem OU o destino
+        const matchesDest = t.type === TransactionType.TRANSFER && t.destinationAccountId === accountFilter;
+        
+        if (!matchesSource && !matchesDest) return false;
+      }
+
       return true;
     });
-  }, [transactions, searchTerm, typeFilter, statusFilter, monthFilter]);
+  }, [transactions, searchTerm, typeFilter, statusFilter, accountFilter, monthFilter]);
 
   const totalFiltered = filteredTransactions.reduce((acc, t) => {
+    // Se estivermos filtrando por uma conta específica e for uma transferência:
+    if (accountFilter !== 'ALL' && t.type === TransactionType.TRANSFER) {
+        // Se a conta selecionada for a de origem, é uma saída (subtrai)
+        if (t.accountId === accountFilter) return acc - t.amount;
+        // Se a conta selecionada for a de destino, é uma entrada (soma)
+        if (t.destinationAccountId === accountFilter) return acc + t.amount;
+    }
+
+    // Lógica padrão
     return t.type === TransactionType.INCOME ? acc + t.amount : acc - t.amount;
   }, 0);
 
@@ -114,6 +134,17 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           />
 
           <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none max-w-[150px]"
+          >
+            <option value="ALL">Todas as Contas</option>
+            {accounts.map(acc => (
+                <option key={acc.id} value={acc.id}>{acc.name}</option>
+            ))}
+          </select>
+
+          <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as any)}
             className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -121,6 +152,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
             <option value="ALL">Todos os Tipos</option>
             <option value={TransactionType.INCOME}>Receitas</option>
             <option value={TransactionType.EXPENSE}>Despesas</option>
+            <option value={TransactionType.TRANSFER}>Transferências</option>
           </select>
 
           <select

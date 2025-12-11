@@ -59,8 +59,7 @@ export interface Transaction {
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
   userId?: string;
-  // Campos auxiliares para transferência (não salvos no banco, usados na UI)
-  destinationAccountId?: string; 
+  destinationAccountId?: string; // ID da conta de destino (para Transferências)
 }
 
 export interface FinancialGoal {
