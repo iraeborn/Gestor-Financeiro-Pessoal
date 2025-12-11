@@ -3,7 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
-import { Search, Filter, Download, Plus } from 'lucide-react';
+import StatCard from './StatCard';
+import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface TransactionsViewProps {
   transactions: Transaction[];
@@ -32,6 +33,38 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
+  // --- Calculations for StatCards ---
+  const currentRealBalance = accounts.reduce((acc, curr) => acc + curr.balance, 0);
+
+  const pendingIncome = transactions
+    .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const pendingExpenses = transactions
+    .filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID)
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
+
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+
+  const incomeMonth = transactions
+    .filter(t => {
+        const d = new Date(t.date);
+        return t.type === TransactionType.INCOME && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const expenseMonth = transactions
+    .filter(t => {
+        const d = new Date(t.date);
+        return t.type === TransactionType.EXPENSE && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  // --- Filtering Logic ---
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       // Filter by Month
@@ -107,6 +140,36 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           <Plus className="w-5 h-5" />
           Novo Lançamento
         </button>
+      </div>
+
+      {/* Stats Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Saldo Real" 
+          amount={currentRealBalance} 
+          type="neutral" 
+          icon={<Wallet className="w-5 h-5 text-indigo-600"/>}
+          subtitle="Disponível agora"
+        />
+        <StatCard 
+          title="Saldo Projetado" 
+          amount={projectedBalance} 
+          type={projectedBalance >= 0 ? 'info' : 'negative'} 
+          icon={<CalendarClock className="w-5 h-5 text-blue-600"/>}
+          subtitle="Após pendências"
+        />
+        <StatCard 
+          title="Receitas (Mês)" 
+          amount={incomeMonth} 
+          type="positive" 
+          icon={<TrendingUp className="w-5 h-5 text-emerald-600"/>}
+        />
+        <StatCard 
+          title="Despesas (Mês)" 
+          amount={expenseMonth} 
+          type="negative" 
+          icon={<TrendingDown className="w-5 h-5 text-rose-600"/>}
+        />
       </div>
 
       {/* Toolbar de Filtros */}
