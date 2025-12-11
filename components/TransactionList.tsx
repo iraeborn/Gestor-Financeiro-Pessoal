@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, User } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -65,8 +65,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
           <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
             <tr>
               <th className="px-6 py-4 font-medium">Data</th>
-              <th className="px-6 py-4 font-medium">Descrição / Contato</th>
-              <th className="px-6 py-4 font-medium">Categoria</th>
+              <th className="px-6 py-4 font-medium">Descrição</th>
+              <th className="px-6 py-4 font-medium">Contato</th>
               <th className="px-6 py-4 font-medium">Conta</th>
               <th className="px-6 py-4 font-medium">Valor</th>
               <th className="px-6 py-4 font-medium text-center">Status</th>
@@ -74,39 +74,45 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {transactions.map((t) => (
+            {transactions.map((t) => {
+                const contactName = getContactName(t.contactId);
+                return (
               <tr key={t.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
                 <td className="px-6 py-4 font-medium text-gray-800">
                   <div className="flex items-center gap-3">
                     {t.type === TransactionType.INCOME ? (
-                      <ArrowUpCircle className="w-5 h-5 text-emerald-500" />
+                      <ArrowUpCircle className="w-5 h-5 text-emerald-500 shrink-0" />
                     ) : t.type === TransactionType.EXPENSE ? (
-                      <ArrowDownCircle className="w-5 h-5 text-rose-500" />
+                      <ArrowDownCircle className="w-5 h-5 text-rose-500 shrink-0" />
                     ) : (
-                      <ArrowRightLeft className="w-5 h-5 text-blue-500" />
+                      <ArrowRightLeft className="w-5 h-5 text-blue-500 shrink-0" />
                     )}
                     <div className="flex flex-col">
-                      <span className="font-semibold">{getContactName(t.contactId) || t.description}</span>
-                      {getContactName(t.contactId) && t.description !== getContactName(t.contactId) && (
-                           <span className="text-xs text-gray-400 font-normal">{t.description}</span>
-                      )}
-                      
+                      <span className="font-semibold">{t.description}</span>
                       {t.isRecurring && (
                         <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full mt-1" title={getRecurrenceLabel(t) || ''}>
                           <Repeat className="w-3 h-3" />
                           {t.recurrenceFrequency === 'WEEKLY' ? 'Semanal' : t.recurrenceFrequency === 'YEARLY' ? 'Anual' : 'Mensal'}
                         </span>
                       )}
+                      <span className="text-[10px] text-gray-400 mt-0.5">{t.category}</span>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.type === TransactionType.TRANSFER ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-800'}`}>
-                    {t.category}
-                  </span>
+                
+                {/* Coluna Contato - Separada */}
+                <td className="px-6 py-4 text-gray-600">
+                    {contactName ? (
+                        <div className="flex items-center gap-1.5">
+                            <User className="w-3 h-3 text-gray-400" />
+                            <span>{contactName}</span>
+                        </div>
+                    ) : (
+                        <span className="text-gray-300 text-xs italic">-</span>
+                    )}
                 </td>
-                {/* Coluna: Conta */}
+
                 <td className="px-6 py-4 text-gray-600">
                     {t.type === TransactionType.TRANSFER ? (
                          <div className="flex flex-col text-xs">
@@ -145,7 +151,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                   </div>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>

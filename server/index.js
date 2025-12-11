@@ -135,7 +135,6 @@ app.get('/api/health', async (req, res) => {
 });
 
 // --- Auth Routes ---
-// (Mantidos iguais - omitindo para brevidade na resposta do prompt, mas essenciais no arquivo final)
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
   try {
@@ -292,7 +291,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const accs = await pool.query(`SELECT * FROM accounts WHERE ${getFamilyCondition}`, [userId]);
         const trans = await pool.query(`SELECT * FROM transactions WHERE ${getFamilyCondition} ORDER BY date DESC`, [userId]);
         const goals = await pool.query(`SELECT * FROM goals WHERE ${getFamilyCondition}`, [userId]);
-        const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition}`, [userId]);
+        const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
 
         res.json({
             accounts: accs.rows.map(r => ({ id: r.id, name: r.name, type: r.type, balance: parseFloat(r.balance) })),
@@ -353,6 +352,21 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
         await pool.query(
             `INSERT INTO contacts (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2`,
             [id, name, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        // Primeiro, desvincula transações deste contato para não dar erro de FK (ou deixa o ON DELETE SET NULL cuidar disso)
+        // Como definimos ON DELETE SET NULL no schema, só deletar o contato é seguro.
+        await pool.query(
+            `DELETE FROM contacts WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`,
+            [req.params.id, userId]
         );
         res.json({ success: true });
     } catch (err) {

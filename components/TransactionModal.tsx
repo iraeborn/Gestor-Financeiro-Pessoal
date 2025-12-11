@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact } from '../types';
 
 interface TransactionModalProps {
@@ -54,8 +54,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         interestRate: initialData.interestRate ? initialData.interestRate.toString() : '0',
         contactId: initialData.contactId || ''
       });
-      // Set initial search value to contact name if exists, else description
-      setContactSearch(contact ? contact.name : initialData.description);
+      // Pre-fill contact search if exists
+      setContactSearch(contact ? contact.name : '');
     } else {
       setFormData({
         description: '',
@@ -110,14 +110,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
     // Determine final contact
     let finalContactId = formData.contactId;
-    let finalDescription = formData.description;
     let newContactObj: Contact | undefined;
 
     // Se usuário digitou algo no campo de contato mas não selecionou ID
-    // Assumimos que quer criar um novo contato OU usar como descrição simples (se for transfer)
-    // Para Expense/Income, vamos criar o contato se ele não existe.
+    // Assumimos que quer criar um novo contato
     if (!finalContactId && contactSearch && formData.type !== TransactionType.TRANSFER) {
-         // Verifica se já existe pelo nome
+         // Verifica se já existe pelo nome exato
          const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
          if (existing) {
              finalContactId = existing.id;
@@ -127,18 +125,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
              newContactObj = { id: newId, name: contactSearch };
              finalContactId = newId;
          }
-         finalDescription = contactSearch; // Description mirrors contact name usually
-    } else if (formData.type === TransactionType.TRANSFER) {
-        // Para transferências, usamos o campo como descrição simples
-        finalDescription = contactSearch;
-    } else if (finalContactId) {
-        // Se já tem ID selecionado, garante que descrição está atualizada com nome
-        const c = contacts.find(co => co.id === finalContactId);
-        if (c) finalDescription = c.name;
     }
 
     onSave({
-      description: finalDescription,
+      description: formData.description, // Agora descrição é sempre o que está no input description
       amount: parseFloat(formData.amount),
       type: formData.type,
       category: formData.type === TransactionType.TRANSFER ? 'Transferência' : formData.category,
@@ -166,12 +156,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         case TransactionType.EXPENSE:
             return {
                 accountLabel: 'Pagar com (Conta)',
-                contactLabel: 'Destino (Favorecido / Local)'
+                contactLabel: 'Destino (Favorecido)'
             };
         default:
             return {
                 accountLabel: 'Conta de Saída',
-                contactLabel: 'Descrição'
+                contactLabel: 'Beneficiário'
             };
     }
   };
@@ -202,7 +192,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               type="button"
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' });
-                  setContactSearch(''); // Limpa ao mudar contexto
+                  // Não limpamos contactSearch aqui necessariamente, talvez o usuário mudou de ideia do tipo mas o contato é o mesmo
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE
@@ -216,7 +206,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               type="button"
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.INCOME, category: 'Salário' });
-                  setContactSearch('');
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.INCOME
@@ -230,7 +219,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               type="button"
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.TRANSFER, category: 'Transferência' });
-                  setContactSearch('Transferência');
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.TRANSFER
@@ -258,58 +246,75 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             />
           </div>
 
-          {/* Contact Autocomplete */}
-          <div className="relative" ref={dropdownRef}>
-            <label className="block text-xs font-medium text-gray-700 mb-1">{labels.contactLabel}</label>
-            <div className="relative">
-                <div className="absolute left-3 top-2.5 pointer-events-none">
-                    {formData.type === TransactionType.TRANSFER ? <Tag className="w-4 h-4 text-gray-400"/> : <User className="w-4 h-4 text-gray-400" />}
+          {/* Contact Autocomplete - SEPARADO */}
+          {formData.type !== TransactionType.TRANSFER && (
+            <div className="relative" ref={dropdownRef}>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{labels.contactLabel}</label>
+                <div className="relative">
+                    <div className="absolute left-3 top-2.5 pointer-events-none">
+                        <User className="w-4 h-4 text-gray-400" />
+                    </div>
+                    <input
+                        type="text"
+                        value={contactSearch}
+                        onFocus={() => setShowContactDropdown(true)}
+                        onChange={(e) => {
+                            setContactSearch(e.target.value);
+                            setFormData({...formData, contactId: ''}); // Limpa ID se o usuário digitar
+                            setShowContactDropdown(true);
+                        }}
+                        className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        placeholder="Buscar ou criar novo contato..."
+                    />
                 </div>
+                
+                {/* Dropdown Results */}
+                {showContactDropdown && contactSearch && (
+                    <div className="absolute z-10 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredContacts.map(c => (
+                            <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                    setContactSearch(c.name);
+                                    setFormData({...formData, contactId: c.id});
+                                    setShowContactDropdown(false);
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm text-gray-700 flex items-center justify-between group"
+                            >
+                                <span>{c.name}</span>
+                                <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100">Selecionar</span>
+                            </button>
+                        ))}
+                        {filteredContacts.length === 0 && contactSearch.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setShowContactDropdown(false)} // Fecha, o submit criará
+                                className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm text-emerald-700 flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Criar novo: "{contactSearch}"
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+          )}
+
+          {/* Description - SEPARADO */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Descrição (O que é?)</label>
+            <div className="relative">
+                <FileText className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                 <input
-                    type="text"
-                    required
-                    value={contactSearch}
-                    onFocus={() => setShowContactDropdown(true)}
-                    onChange={(e) => {
-                        setContactSearch(e.target.value);
-                        setFormData({...formData, contactId: ''}); // Reset ID if user types manually
-                        setShowContactDropdown(true);
-                    }}
-                    className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder={formData.type === TransactionType.TRANSFER ? "Motivo da transferência" : "Busque ou digite novo nome..."}
+                type="text"
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder={formData.type === TransactionType.TRANSFER ? "Motivo da transferência" : "Ex: Compras do Mês, Jantar..."}
                 />
             </div>
-            
-            {/* Dropdown Results */}
-            {showContactDropdown && formData.type !== TransactionType.TRANSFER && contactSearch && (
-                <div className="absolute z-10 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {filteredContacts.map(c => (
-                        <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                                setContactSearch(c.name);
-                                setFormData({...formData, contactId: c.id});
-                                setShowContactDropdown(false);
-                            }}
-                            className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm text-gray-700 flex items-center justify-between group"
-                        >
-                            <span>{c.name}</span>
-                            <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100">Selecionar</span>
-                        </button>
-                    ))}
-                    {filteredContacts.length === 0 && contactSearch.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => setShowContactDropdown(false)} // Just closes, logic in submit handles creation
-                            className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm text-emerald-700 flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Criar "{contactSearch}"
-                        </button>
-                    )}
-                </div>
-            )}
           </div>
 
           {/* Category & Date Row */}

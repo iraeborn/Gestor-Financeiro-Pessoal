@@ -59,7 +59,7 @@ export interface Contact {
 
 export interface Transaction {
   id: string;
-  description: string; // Mantemos como fallback ou nota extra
+  description: string; // O QUE (Ex: Compras da semana)
   amount: number;
   type: TransactionType;
   category: string;
@@ -72,7 +72,7 @@ export interface Transaction {
   userId?: string;
   destinationAccountId?: string;
   interestRate?: number;
-  contactId?: string; // Novo relacionamento
+  contactId?: string; // QUEM (Ex: Supermercado da Deusa)
 }
 
 export interface FinancialGoal {
@@ -88,10 +88,10 @@ export interface AppState {
   accounts: Account[];
   transactions: Transaction[];
   goals: FinancialGoal[];
-  contacts: Contact[]; // Nova lista no estado global
+  contacts: Contact[]; 
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS';
 
 declare global {
   interface Window {

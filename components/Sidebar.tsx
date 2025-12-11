@@ -1,13 +1,13 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users } from 'lucide-react';
 import { ViewMode } from '../types';
 import { logout } from '../services/storageService';
 
 interface SidebarProps {
   currentView: ViewMode;
   onChangeView: (view: ViewMode) => void;
-  onOpenCollab?: () => void; // Mantendo opcional para compatibilidade, mas não será usado diretamente aqui
+  onOpenCollab?: () => void; 
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
@@ -16,6 +16,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
     { id: 'TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
     { id: 'CALENDAR', label: 'Calendário', icon: CalendarDays },
     { id: 'REPORTS', label: 'Relatórios', icon: PieChart },
+    { id: 'CONTACTS', label: 'Contatos', icon: Users },
     { id: 'ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
   ];
 

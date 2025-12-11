@@ -7,6 +7,7 @@ import Reports from './components/Reports';
 import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
 import SettingsView from './components/SettingsView';
+import ContactsView from './components/ContactsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
 import { loadInitialData, api, logout } from './services/storageService';
@@ -310,6 +311,40 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Contacts Logic ---
+  const handleSaveContact = async (contact: Contact) => {
+      try {
+          await api.saveContact(contact);
+          setState(prevState => {
+              const exists = prevState.contacts.find(c => c.id === contact.id);
+              if (exists) {
+                  return {
+                      ...prevState,
+                      contacts: prevState.contacts.map(c => c.id === contact.id ? contact : c)
+                  };
+              }
+              return {
+                  ...prevState,
+                  contacts: [...prevState.contacts, contact].sort((a,b) => a.name.localeCompare(b.name))
+              };
+          });
+      } catch (e: any) {
+          alert("Erro ao salvar contato: " + e.message);
+      }
+  };
+
+  const handleDeleteContact = async (id: string) => {
+      try {
+          await api.deleteContact(id);
+          setState(prevState => ({
+              ...prevState,
+              contacts: prevState.contacts.filter(c => c.id !== id)
+          }));
+      } catch (e: any) {
+          alert("Erro ao excluir contato: " + e.message);
+      }
+  };
+
   if (!currentUser) {
     return <Auth onLoginSuccess={handleLoginSuccess} />;
   }
@@ -364,6 +399,15 @@ const App: React.FC = () => {
             onAdd={handleAddTransaction}
             onEdit={handleEditTransaction}
           />
+        );
+      case 'CONTACTS':
+        return (
+            <ContactsView 
+                contacts={state.contacts}
+                onAddContact={handleSaveContact}
+                onEditContact={handleSaveContact}
+                onDeleteContact={handleDeleteContact}
+            />
         );
       case 'REPORTS':
         return <Reports transactions={state.transactions} />;

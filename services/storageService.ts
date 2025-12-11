@@ -146,6 +146,10 @@ export const api = {
       const res = await fetch(`${API_URL}/contacts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(contact) });
       await handleResponse(res);
   },
+  deleteContact: async (id: string) => {
+    const res = await fetch(`${API_URL}/contacts/${id}`, { method: 'DELETE', headers: getHeaders() });
+    await handleResponse(res);
+  },
   saveTransaction: async (transaction: Transaction) => {
     const res = await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });
     await handleResponse(res);
