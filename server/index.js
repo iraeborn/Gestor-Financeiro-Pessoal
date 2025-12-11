@@ -120,6 +120,13 @@ const ensureFamilyId = async (userId) => {
     return res.rows[0]?.family_id || userId;
 };
 
+// Helper para sanitizar valores de FK (evita erro de string vazia em FK)
+const sanitizeValue = (val) => {
+    if (val === undefined || val === null) return null;
+    if (typeof val === 'string' && val.trim() === '') return null;
+    return val;
+};
+
 // --- Health Check Route (NO AUTH REQUIRED) ---
 app.get('/api/health', async (req, res) => {
     try {
@@ -396,7 +403,23 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              ON CONFLICT (id) DO UPDATE SET 
                 description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14`,
-            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate || 0, t.contactId, userId]
+            [
+                t.id, 
+                t.description, 
+                t.amount, 
+                t.type, 
+                t.category, 
+                t.date, 
+                t.status, 
+                t.accountId, 
+                sanitizeValue(t.destinationAccountId), // Garante que string vazia vire NULL
+                t.isRecurring, 
+                t.recurrenceFrequency, 
+                t.recurrenceEndDate, 
+                t.interestRate || 0, 
+                sanitizeValue(t.contactId), // Garante que string vazia vire NULL
+                userId
+            ]
         );
         res.json({ success: true });
     } catch (err) {

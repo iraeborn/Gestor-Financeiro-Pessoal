@@ -128,19 +128,22 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     }
 
     onSave({
-      description: formData.description, // Agora descrição é sempre o que está no input description
+      description: formData.description, 
       amount: parseFloat(formData.amount),
       type: formData.type,
       category: formData.type === TransactionType.TRANSFER ? 'Transferência' : formData.category,
       date: formData.date,
       status: formData.status,
       accountId: formData.accountId,
-      destinationAccountId: formData.type === TransactionType.TRANSFER ? formData.destinationAccountId : undefined,
+      destinationAccountId: (formData.type === TransactionType.TRANSFER && formData.destinationAccountId) ? formData.destinationAccountId : undefined,
       isRecurring: formData.isRecurring,
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
       interestRate: parseFloat(formData.interestRate) || 0,
-      contactId: finalContactId
+      // Se finalContactId for string vazia ou undefined, enviamos NULL explicitamente ou undefined.
+      // O backend sanitiza, mas enviar undefined pode remover a chave do JSON.
+      // Vamos enviar undefined se não houver, para compatibilidade padrão, mas garantindo que string vazia não vá.
+      contactId: finalContactId || undefined
     }, newContactObj);
     
     onClose();
@@ -192,7 +195,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               type="button"
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' });
-                  // Não limpamos contactSearch aqui necessariamente, talvez o usuário mudou de ideia do tipo mas o contato é o mesmo
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE

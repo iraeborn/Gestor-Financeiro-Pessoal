@@ -1,19 +1,33 @@
 
 import React, { useState } from 'react';
-import { Account, AccountType, Transaction, TransactionType, TransactionStatus } from '../types';
+import { Account, AccountType, Transaction, TransactionType, TransactionStatus, Contact } from '../types';
 import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import AccountModal from './AccountModal';
+import TransactionModal from './TransactionModal';
 
 interface CreditCardsViewProps {
   accounts: Account[];
   transactions: Transaction[];
+  contacts: Contact[];
   onSaveAccount: (a: Account) => void;
   onDeleteAccount: (id: string) => void;
+  onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact) => void;
 }
 
-const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transactions, onSaveAccount, onDeleteAccount }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+const CreditCardsView: React.FC<CreditCardsViewProps> = ({ 
+    accounts, 
+    transactions, 
+    contacts, 
+    onSaveAccount, 
+    onDeleteAccount,
+    onAddTransaction 
+}) => {
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isTransModalOpen, setIsTransModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  
+  // Estado para preencher o TransactionModal automaticamente
+  const [prefilledTransaction, setPrefilledTransaction] = useState<Partial<Transaction> | null>(null);
 
   const cards = accounts.filter(a => a.type === AccountType.CARD);
 
@@ -22,12 +36,29 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
 
   const handleEdit = (card: Account) => {
     setEditingAccount(card);
-    setIsModalOpen(true);
+    setIsAccountModalOpen(true);
   };
 
-  const handleClose = () => {
-    setIsModalOpen(false);
+  const handleCloseAccountModal = () => {
+    setIsAccountModalOpen(false);
     setEditingAccount(null);
+  };
+
+  const handleAddExpense = (card: Account) => {
+      setPrefilledTransaction({
+          accountId: card.id,
+          type: TransactionType.EXPENSE,
+          date: new Date().toISOString().split('T')[0],
+          status: TransactionStatus.PENDING,
+          description: 'Nova Despesa (Fatura)'
+      });
+      setIsTransModalOpen(true);
+  };
+
+  const handleSaveTransaction = (t: Omit<Transaction, 'id'>, newContact?: Contact) => {
+      onAddTransaction(t, newContact);
+      setIsTransModalOpen(false);
+      setPrefilledTransaction(null);
   };
 
   // Calcula a data de início da fatura atual
@@ -51,17 +82,12 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
   };
 
   const calculateCardMetrics = (card: Account) => {
-      // 1. Saldo Total (Dívida Acumulada no Banco de Dados)
-      // Representa tudo o que foi usado do limite: Parcelas Futuras + Fatura Atual + Atrasados + Saldo Inicial Manual
       const totalUsedLimit = card.balance < 0 ? Math.abs(card.balance) : 0; 
       
-      // 2. Fatura Atual (Gastos Novos do Ciclo)
       let currentInvoice = 0;
       let overdueAmount = 0;
       let status = "Indefinido";
 
-      // Calcular Fatura em Atraso (Status = OVERDUE ou PENDING com data antiga)
-      // Para simplificar, assumimos que o usuário marca como OVERDUE explicitamente ou data < hoje
       overdueAmount = transactions
         .filter(t => 
             t.accountId === card.id && 
@@ -73,7 +99,6 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
       if (card.closingDay) {
           const startDate = getBillingCycleStart(card.closingDay);
           
-          // Somar DESPESAS deste ciclo (que não estão pagas nem atrasadas)
           currentInvoice = transactions
             .filter(t => 
                 t.accountId === card.id && 
@@ -85,19 +110,15 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
 
           const today = new Date().getDate();
           if (today < card.closingDay) status = "Aberta";
-          else if (card.dueDay && today > card.dueDay) status = "Fechada";
+          else if (card.dueDay && today > card.dueDay) status = "Vencida";
           else status = "Fechada";
       }
 
-      // 3. Saldo Residual / Parcelado Futuro / Legado
-      // É a diferença entre o que sabemos (Fatura Atual + Atrasada) e o que o banco diz (Total Usado)
-      // Se o usuário cadastrou um saldo inicial de -4000 e só tem 500 de fatura atual, os 3500 são "Outros/Parcelado"
       const knownExpenses = currentInvoice + overdueAmount;
       const residualDebt = Math.max(0, totalUsedLimit - knownExpenses);
 
-      // 4. Limite Disponível
       const limit = card.creditLimit || 0;
-      const available = limit - totalUsedLimit; // Simples: Limite - Tudo que tá devendo
+      const available = limit - totalUsedLimit;
 
       const usagePercent = limit > 0 ? Math.min(100, (totalUsedLimit / limit) * 100) : 0;
 
@@ -121,7 +142,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
           <p className="text-gray-500">Gerencie limites, faturas e datas importantes.</p>
         </div>
         <button 
-          onClick={() => { setEditingAccount({ type: AccountType.CARD } as Account); setIsModalOpen(true); }}
+          onClick={() => { setEditingAccount({ type: AccountType.CARD } as Account); setIsAccountModalOpen(true); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
         >
           <Plus className="w-5 h-5" />
@@ -154,13 +175,11 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
                                 <CreditCard className="w-8 h-8 text-slate-400 opacity-50" />
                             </div>
                             
-                            {/* Grande destaque para o Disponível */}
                             <div className="mt-6">
                                 <p className="text-xs text-slate-400 mb-1">Limite Disponível</p>
                                 <span className="text-3xl font-bold text-emerald-400">{formatCurrency(available)}</span>
                             </div>
 
-                            {/* Action Buttons Overlay */}
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => handleEdit(card)} className="p-1.5 bg-white/20 hover:bg-white/30 rounded backdrop-blur-sm">
                                     <Edit2 className="w-4 h-4" />
@@ -194,12 +213,21 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
 
                             {/* Resumo da Dívida */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 relative group/invoice">
                                     <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Fatura Atual</p>
                                     <p className="text-base font-bold text-gray-800">{formatCurrency(currentInvoice)}</p>
                                     <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${status === 'Aberta' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                         {status}
                                     </span>
+                                    
+                                    {/* Botão Rápido para Adicionar na Fatura */}
+                                    <button 
+                                        onClick={() => handleAddExpense(card)}
+                                        className="absolute top-2 right-2 p-1.5 bg-white shadow-sm border border-gray-200 rounded-full hover:bg-indigo-50 text-indigo-600 opacity-0 group-hover/invoice:opacity-100 transition-opacity"
+                                        title="Lançar Despesa"
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                    </button>
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                                     <p className="text-[10px] text-gray-500 uppercase font-bold mb-1" title="Parcelas futuras ou saldo inicial não detalhado">Outros / Parc.</p>
@@ -207,7 +235,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
                                 </div>
                             </div>
 
-                            {/* Progress Bar - Total Limit Usage */}
+                            {/* Progress Bar */}
                             <div className="mt-auto pt-2">
                                 <div className="flex justify-between text-xs mb-1.5">
                                     <span className="text-gray-500">Comprometimento Total</span>
@@ -249,10 +277,19 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
       )}
 
       <AccountModal 
-        isOpen={isModalOpen}
-        onClose={handleClose}
+        isOpen={isAccountModalOpen}
+        onClose={handleCloseAccountModal}
         onSave={onSaveAccount}
         initialData={editingAccount}
+      />
+
+      <TransactionModal 
+        isOpen={isTransModalOpen}
+        onClose={() => setIsTransModalOpen(false)}
+        onSave={handleSaveTransaction}
+        accounts={accounts}
+        contacts={contacts}
+        initialData={prefilledTransaction as any}
       />
     </div>
   );
