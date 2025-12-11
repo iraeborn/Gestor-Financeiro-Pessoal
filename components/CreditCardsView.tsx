@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
-import { Account, AccountType } from '../types';
-import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2 } from 'lucide-react';
+import { Account, AccountType, Transaction, TransactionType } from '../types';
+import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft } from 'lucide-react';
 import AccountModal from './AccountModal';
 
 interface CreditCardsViewProps {
   accounts: Account[];
+  transactions: Transaction[];
   onSaveAccount: (a: Account) => void;
   onDeleteAccount: (id: string) => void;
 }
 
-const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccount, onDeleteAccount }) => {
+const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transactions, onSaveAccount, onDeleteAccount }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
@@ -29,14 +30,76 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccou
     setEditingAccount(null);
   };
 
-  const calculateStatus = (card: Account) => {
-      if (!card.closingDay) return "Indefinido";
-      const today = new Date().getDate();
-      // Lógica simples: Se hoje é antes do fechamento, está aberta.
-      // Se hoje é entre fechamento e vencimento, está fechada.
-      if (today < card.closingDay) return "Aberta";
-      if (card.dueDay && today > card.dueDay) return "Vencida"; // Simplificação
-      return "Fechada";
+  // Calcula a data de início da fatura atual (dia após o fechamento do mês anterior ou atual)
+  const getBillingCycleStart = (closingDay: number): Date => {
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+      
+      // Se hoje é antes do dia de fechamento, a fatura atual começou no fechamento do mês anterior
+      if (today.getDate() < closingDay) {
+          // Mês passado
+          let lastMonth = currentMonth - 1;
+          let year = currentYear;
+          if (lastMonth < 0) {
+              lastMonth = 11;
+              year = currentYear - 1;
+          }
+          return new Date(year, lastMonth, closingDay);
+      } else {
+          // Se hoje já passou do dia de fechamento, o ciclo começou neste mês
+          return new Date(currentYear, currentMonth, closingDay);
+      }
+  };
+
+  const calculateCardMetrics = (card: Account) => {
+      // 1. Saldo Total (Dívida Acumulada no Banco de Dados)
+      // Se o usuário faz tudo certo, isso deve ser negativo.
+      const totalDebt = card.balance < 0 ? Math.abs(card.balance) : 0; 
+      
+      // 2. Fatura Atual (Gastos do Ciclo)
+      let currentInvoice = 0;
+      let status = "Indefinido";
+
+      if (card.closingDay) {
+          const startDate = getBillingCycleStart(card.closingDay);
+          
+          // Somar todas as DESPESAS feitas neste cartão após a data de início do ciclo
+          currentInvoice = transactions
+            .filter(t => 
+                t.accountId === card.id && 
+                t.type === TransactionType.EXPENSE &&
+                new Date(t.date) >= startDate
+            )
+            .reduce((acc, t) => acc + t.amount, 0);
+
+          const today = new Date().getDate();
+          if (today < card.closingDay) status = "Aberta";
+          else if (card.dueDay && today > card.dueDay) status = "Vencida";
+          else status = "Fechada";
+      } else {
+          // Fallback se não tiver dia configurado
+          currentInvoice = totalDebt;
+      }
+
+      // 3. Limite Disponível
+      // O limite disponível é baseado na Dívida Total Real, não apenas na fatura do mês.
+      // Ex: Limite 5000. Dívida Total 2000 (1000 parcelado + 1000 mês atual). Disponível 3000.
+      const limit = card.creditLimit || 0;
+      // Balance positivo no cartão significa crédito extra, negativo significa dívida.
+      // Disponível = Limite + Saldo (se saldo for -200, Limite - 200).
+      const available = limit + card.balance;
+
+      const usagePercent = limit > 0 ? Math.min(100, (totalDebt / limit) * 100) : 0;
+
+      return {
+          currentInvoice,
+          totalDebt,
+          available,
+          usagePercent,
+          status,
+          limit
+      };
   };
 
   return (
@@ -66,13 +129,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccou
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {cards.map(card => {
-                const limit = card.creditLimit || 0;
-                // Balance is usually negative for debt. Positive balance on card means credit.
-                // Invoice amount is the absolute value of negative balance.
-                const currentInvoice = card.balance < 0 ? Math.abs(card.balance) : 0;
-                const available = limit - currentInvoice + (card.balance > 0 ? card.balance : 0);
-                const usagePercent = limit > 0 ? Math.min(100, (currentInvoice / limit) * 100) : 0;
-                const status = calculateStatus(card);
+                const { currentInvoice, totalDebt, available, usagePercent, status, limit } = calculateCardMetrics(card);
 
                 return (
                     <div key={card.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-shadow">
@@ -87,7 +144,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccou
                             </div>
                             <div className="mt-6 flex justify-between items-end">
                                 <div>
-                                    <p className="text-xs text-slate-400 mb-1">Fatura Atual</p>
+                                    <p className="text-xs text-slate-400 mb-1">Fatura Atual (Ciclo)</p>
                                     <span className="text-2xl font-bold">{formatCurrency(currentInvoice)}</span>
                                 </div>
                                 <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${status === 'Aberta' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
@@ -115,7 +172,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccou
                             {/* Progress Bar */}
                             <div>
                                 <div className="flex justify-between text-xs mb-1.5">
-                                    <span className="text-gray-500">Limite Utilizado</span>
+                                    <span className="text-gray-500">Limite Utilizado (Total)</span>
                                     <span className="font-medium text-gray-700">{Math.round(usagePercent)}%</span>
                                 </div>
                                 <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
@@ -128,6 +185,14 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, onSaveAccou
                                     <span className="text-gray-400">Disp: {formatCurrency(available)}</span>
                                     <span className="text-gray-400">Total: {formatCurrency(limit)}</span>
                                 </div>
+                            </div>
+
+                            {/* Help Text for Payment */}
+                            <div className="bg-blue-50 p-2 rounded-lg flex gap-2 items-start">
+                                <ArrowRightLeft className="w-4 h-4 text-blue-500 mt-0.5" />
+                                <p className="text-[10px] text-blue-700 leading-tight">
+                                    Para pagar a fatura, realize uma <strong>Transferência</strong> da sua conta bancária para este cartão. Isso reduzirá a dívida total.
+                                </p>
                             </div>
 
                             {/* Dates */}

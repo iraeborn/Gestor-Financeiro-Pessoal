@@ -414,6 +414,7 @@ const App: React.FC = () => {
         return (
             <CreditCardsView 
                 accounts={state.accounts}
+                transactions={state.transactions} // PASSANDO TRANSAÇÕES
                 onSaveAccount={handleSaveAccount}
                 onDeleteAccount={handleDeleteAccount}
             />
