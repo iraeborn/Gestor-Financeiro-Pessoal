@@ -35,6 +35,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isAccModalOpen, setAccModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [recentLimit, setRecentLimit] = useState(5); // State para controlar limite da lista
 
   const includeCards = settings?.includeCreditCardsInTotal ?? true;
 
@@ -180,16 +181,28 @@ const Dashboard: React.FC<DashboardProps> = ({
              <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-gray-800">Últimas Movimentações</h3>
-                  <button 
-                    onClick={() => onChangeView('TRANSACTIONS')}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                  >
-                    Ver todas <ArrowRight className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={recentLimit}
+                      onChange={(e) => setRecentLimit(Number(e.target.value))}
+                      className="text-sm bg-white border border-gray-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600"
+                    >
+                      <option value={5}>5 itens</option>
+                      <option value={10}>10 itens</option>
+                      <option value={15}>15 itens</option>
+                      <option value={20}>20 itens</option>
+                    </select>
+                    <button 
+                      onClick={() => onChangeView('TRANSACTIONS')}
+                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    >
+                      Ver todas <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                {/* Limit to 5 for Dashboard */}
+                {/* Dynamic limit based on user selection */}
                 <TransactionList 
-                  transactions={state.transactions.slice(0, 5)} 
+                  transactions={state.transactions.slice(0, recentLimit)} 
                   onDelete={onDeleteTransaction}
                   onEdit={handleEditTrans}
                   onToggleStatus={onUpdateStatus}
@@ -291,3 +304,4 @@ const Dashboard: React.FC<DashboardProps> = ({
 };
 
 export default Dashboard;
+    
