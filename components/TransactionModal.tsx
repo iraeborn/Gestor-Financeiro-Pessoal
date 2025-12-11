@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency } from '../types';
 
 interface TransactionModalProps {
@@ -23,7 +23,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     destinationAccountId: '', // Novo campo para transferência
     isRecurring: false,
     recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
-    recurrenceEndDate: ''
+    recurrenceEndDate: '',
+    interestRate: '0'
   });
 
   const hasAccounts = accounts && accounts.length > 0;
@@ -38,10 +39,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         date: initialData.date,
         status: initialData.status,
         accountId: initialData.accountId,
-        destinationAccountId: '',
+        destinationAccountId: initialData.destinationAccountId || '',
         isRecurring: initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
-        recurrenceEndDate: initialData.recurrenceEndDate || ''
+        recurrenceEndDate: initialData.recurrenceEndDate || '',
+        interestRate: initialData.interestRate ? initialData.interestRate.toString() : '0'
       });
     } else {
       // Reset defaults
@@ -56,7 +58,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
         isRecurring: false,
         recurrenceFrequency: 'MONTHLY',
-        recurrenceEndDate: ''
+        recurrenceEndDate: '',
+        interestRate: '0'
       });
     }
   }, [initialData, isOpen, accounts]);
@@ -93,7 +96,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       destinationAccountId: formData.type === TransactionType.TRANSFER ? formData.destinationAccountId : undefined,
       isRecurring: formData.isRecurring,
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
-      recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined
+      recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
+      interestRate: parseFloat(formData.interestRate) || 0
     });
     onClose();
   };
@@ -216,6 +220,26 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </div>
             </div>
           </div>
+
+           {/* Interest Rate Field (Only for Expense/Income) */}
+           {formData.type !== TransactionType.TRANSFER && (
+              <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Taxa de Juros (Mensal %)</label>
+                  <div className="relative">
+                    <Percent className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={formData.interestRate}
+                      onChange={(e) => setFormData({ ...formData, interestRate: e.target.value })}
+                      className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="0"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Usado para calcular valor final em caso de atraso.</p>
+                  </div>
+              </div>
+           )}
 
           {/* Account Selection Logic */}
           {formData.type === TransactionType.TRANSFER ? (

@@ -5,6 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import AccountModal from './AccountModal';
+import PaymentConfirmationModal from './PaymentConfirmationModal';
 import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart } from './Charts';
 import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, ArrowRight, PieChart, BarChart3, Coins } from 'lucide-react';
 
@@ -33,9 +34,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
   const [isAccModalOpen, setAccModalOpen] = useState(false);
+  
+  // Payment Confirmation Modal State
+  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [transactionToPay, setTransactionToPay] = useState<Transaction | null>(null);
+
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [recentLimit, setRecentLimit] = useState(5); // State para controlar limite da lista
+  const [recentLimit, setRecentLimit] = useState(5); 
 
   const includeCards = settings?.includeCreditCardsInTotal ?? true;
 
@@ -97,6 +103,28 @@ const Dashboard: React.FC<DashboardProps> = ({
   const closeAccModal = () => {
     setAccModalOpen(false);
     setEditingAccount(null);
+  };
+
+  // Intercept the status toggle to show payment modal if needed
+  const handleStatusToggle = (t: Transaction) => {
+    // If it's NOT paid, we are about to pay it. Open modal.
+    if (t.status !== TransactionStatus.PAID) {
+        setTransactionToPay(t);
+        setPaymentModalOpen(true);
+    } else {
+        // If unmarking as paid, just proceed with normal toggle
+        onUpdateStatus(t);
+    }
+  };
+
+  const handleConfirmPayment = (t: Transaction, finalAmount: number) => {
+     // We need to update both status and amount
+     const updatedTransaction = {
+         ...t,
+         status: TransactionStatus.PAID,
+         amount: finalAmount
+     };
+     onEditTransaction(updatedTransaction);
   };
 
   return (
@@ -205,7 +233,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   transactions={state.transactions.slice(0, recentLimit)} 
                   onDelete={onDeleteTransaction}
                   onEdit={handleEditTrans}
-                  onToggleStatus={onUpdateStatus}
+                  onToggleStatus={handleStatusToggle}
                 />
              </div>
           </div>
@@ -299,9 +327,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         onSave={handleSaveAcc}
         initialData={editingAccount}
       />
+
+      <PaymentConfirmationModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        transaction={transactionToPay}
+        onConfirm={handleConfirmPayment}
+      />
     </div>
   );
 };
 
 export default Dashboard;
-    

@@ -58,6 +58,9 @@ pool.connect()
         
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
         console.log('Migration: settings column verified.');
+
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_rate DECIMAL(10,2) DEFAULT 0;`);
+        console.log('Migration: interest_rate column verified.');
     } catch (e) {
         console.error('Migration Error:', e.message);
     } finally {
@@ -317,7 +320,8 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 accountId: r.account_id, 
                 destinationAccountId: r.destination_account_id,
                 isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
-                recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined
+                recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined,
+                interestRate: r.interest_rate ? parseFloat(r.interest_rate) : 0
             })),
             goals: goals.rows.map(r => ({ 
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
@@ -363,11 +367,11 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              ON CONFLICT (id) DO UPDATE SET 
-                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12`,
-            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, userId]
+                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13`,
+            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate || 0, userId]
         );
         res.json({ success: true });
     } catch (err) {

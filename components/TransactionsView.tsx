@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
+import PaymentConfirmationModal from './PaymentConfirmationModal';
 import StatCard from './StatCard';
 import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, TrendingDown } from 'lucide-react';
 
@@ -34,6 +35,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  
+  // Payment Modal
+  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [transactionToPay, setTransactionToPay] = useState<Transaction | null>(null);
 
   const includeCards = settings?.includeCreditCardsInTotal ?? true;
 
@@ -131,6 +136,24 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingTransaction(null);
+  };
+
+  const handleStatusToggle = (t: Transaction) => {
+    if (t.status !== TransactionStatus.PAID) {
+        setTransactionToPay(t);
+        setPaymentModalOpen(true);
+    } else {
+        onToggleStatus(t);
+    }
+  };
+
+  const handleConfirmPayment = (t: Transaction, finalAmount: number) => {
+     const updatedTransaction = {
+         ...t,
+         status: TransactionStatus.PAID,
+         amount: finalAmount
+     };
+     onEdit(updatedTransaction);
   };
 
   return (
@@ -250,7 +273,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         transactions={filteredTransactions} 
         onDelete={onDelete}
         onEdit={handleOpenEdit}
-        onToggleStatus={onToggleStatus}
+        onToggleStatus={handleStatusToggle}
       />
 
       <TransactionModal 
@@ -259,6 +282,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         onSave={handleSave}
         accounts={accounts}
         initialData={editingTransaction}
+      />
+
+      <PaymentConfirmationModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        transaction={transactionToPay}
+        onConfirm={handleConfirmPayment}
       />
     </div>
   );

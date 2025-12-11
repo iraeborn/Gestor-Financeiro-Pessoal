@@ -65,6 +65,7 @@ export interface Transaction {
   recurrenceEndDate?: string;
   userId?: string;
   destinationAccountId?: string;
+  interestRate?: number; // Taxa de juros mensal (%)
 }
 
 export interface FinancialGoal {
