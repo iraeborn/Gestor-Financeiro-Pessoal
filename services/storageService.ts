@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan } from '../types';
 
 const API_URL = '/api';
 
@@ -7,7 +7,8 @@ const INITIAL_EMPTY_STATE: AppState = {
   accounts: [],
   transactions: [],
   goals: [],
-  contacts: []
+  contacts: [],
+  categories: []
 };
 
 const getHeaders = () => {
@@ -45,11 +46,11 @@ export const login = async (email: string, password: string): Promise<AuthRespon
   return data;
 };
 
-export const register = async (name: string, email: string, password: string): Promise<AuthResponse> => {
+export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan): Promise<AuthResponse> => {
   const res = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password })
+    body: JSON.stringify({ name, email, password, entityType, plan })
   });
   const data = await handleResponse(res);
   
@@ -90,6 +91,17 @@ export const updateSettings = async (settings: AppSettings) => {
         user.settings = settings;
         localStorage.setItem('user', JSON.stringify(user));
     }
+};
+
+// --- Admin ---
+export const getAdminStats = async () => {
+    const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+export const getAdminUsers = async () => {
+    const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
+    return await handleResponse(res);
 };
 
 // --- Collab (Family) ---
@@ -149,6 +161,14 @@ export const api = {
   deleteContact: async (id: string) => {
     const res = await fetch(`${API_URL}/contacts/${id}`, { method: 'DELETE', headers: getHeaders() });
     await handleResponse(res);
+  },
+  saveCategory: async (category: Category) => {
+      const res = await fetch(`${API_URL}/categories`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(category) });
+      await handleResponse(res);
+  },
+  deleteCategory: async (id: string) => {
+      const res = await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
   },
   saveTransaction: async (transaction: Transaction) => {
     const res = await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });

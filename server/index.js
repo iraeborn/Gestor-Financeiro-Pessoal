@@ -53,20 +53,29 @@ pool.connect()
     console.log('DB Connected Successfully');
     // Migrations Automáticas
     try {
+        // Core Tables
         await client.query(`CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-        console.log('Migration: contacts table verified.');
-
+        await client.query(`CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+        
+        // Updates to Users Table for SaaS
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'USER';`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS entity_type TEXT DEFAULT 'PF';`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'TRIAL';`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'TRIALING';`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP;`);
+        
+        // Updates to Transactions
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL;`);
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_rate DECIMAL(10,2) DEFAULT 0;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL;`);
         
-        // Novas colunas para Cartão de Crédito
+        // Updates to Accounts
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2);`);
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS closing_day INTEGER;`);
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS due_day INTEGER;`);
         
-        console.log('Migration: transactions and accounts columns verified.');
+        console.log('Migrations verified.');
     } catch (e) {
         console.error('Migration Error:', e.message);
     } finally {
@@ -83,31 +92,23 @@ const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 // --- Middleware ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  
-  if (!authHeader) {
-      console.warn(`[Auth] Missing Authorization Header on ${req.path}`);
-      return res.sendStatus(401);
-  }
-
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) {
-      console.warn(`[Auth] Malformed Header on ${req.path}`);
-      return res.sendStatus(401);
-  }
-
-  if (!/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token)) {
-      console.warn(`[Auth] Invalid Token Format on ${req.path}`);
-      return res.sendStatus(401);
-  }
+  if (!authHeader) return res.sendStatus(401);
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-        console.warn(`[Auth] Token Invalid/Expired: ${err.message}`);
-        return res.sendStatus(403);
-    }
+    if (err) return res.sendStatus(403);
     req.user = user;
     next();
   });
+};
+
+const requireAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'ADMIN') {
+        next();
+    } else {
+        res.status(403).json({ error: 'Acesso negado: Requer privilégios de Administrador' });
+    }
 };
 
 // --- Helpers ---
@@ -120,47 +121,53 @@ const ensureFamilyId = async (userId) => {
     return res.rows[0]?.family_id || userId;
 };
 
-// Helper para sanitizar valores de FK (evita erro de string vazia em FK)
 const sanitizeValue = (val) => {
     if (val === undefined || val === null) return null;
     if (typeof val === 'string' && val.trim() === '') return null;
     return val;
 };
 
-// --- Health Check Route (NO AUTH REQUIRED) ---
+// --- Routes ---
+
 app.get('/api/health', async (req, res) => {
     try {
         const result = await pool.query('SELECT NOW() as now');
-        res.json({ 
-            status: 'OK', 
-            database: 'Connected', 
-            timestamp: result.rows[0].now,
-            mode: process.env.INSTANCE_CONNECTION_NAME ? 'Cloud SQL' : 'Local TCP'
-        });
+        res.json({ status: 'OK', database: 'Connected', timestamp: result.rows[0].now });
     } catch (err) {
-        console.error('Health Check Failed:', err);
-        res.status(500).json({ 
-            status: 'ERROR', 
-            database: 'Disconnected', 
-            error: err.message 
-        });
+        res.status(500).json({ status: 'ERROR', error: err.message });
     }
 });
 
 // --- Auth Routes ---
 app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, entityType, plan } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = crypto.randomUUID();
+    
+    // Check existing
     const check = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (check.rows.length > 0) return res.status(400).json({ error: 'Email já cadastrado' });
+    
+    // Trial Logic (15 dias)
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 15);
+    
     const defaultSettings = { includeCreditCardsInTotal: true };
+    const role = 'USER'; // Default is USER. Admin must be set manually in DB for now.
+    const status = 'TRIALING';
+
     await pool.query(
-      'INSERT INTO users (id, name, email, password_hash, family_id, settings) VALUES ($1, $2, $3, $4, $1, $5)',
-      [id, name, email, hashedPassword, defaultSettings]
+      `INSERT INTO users 
+       (id, name, email, password_hash, family_id, settings, role, entity_type, plan, status, trial_ends_at) 
+       VALUES ($1, $2, $3, $4, $1, $5, $6, $7, $8, $9, $10)`,
+      [id, name, email, hashedPassword, defaultSettings, role, entityType || 'PF', plan || 'TRIAL', status, trialEndsAt]
     );
-    const user = { id, name, email, familyId: id, settings: defaultSettings };
+
+    const user = { 
+        id, name, email, familyId: id, settings: defaultSettings,
+        role, entityType: entityType || 'PF', plan: plan || 'TRIAL', status, trialEndsAt 
+    };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
@@ -174,19 +181,29 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const userRow = result.rows[0];
     if (!userRow || !userRow.password_hash) return res.status(400).json({ error: 'Login inválido' });
+    
     const valid = await bcrypt.compare(password, userRow.password_hash);
     if (!valid) return res.status(400).json({ error: 'Senha incorreta' });
+    
+    // Ensure family ID
     let familyId = userRow.family_id;
     if (!familyId) {
         familyId = userRow.id;
         await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [familyId, userRow.id]);
     }
+
     const user = { 
         id: userRow.id, 
         name: userRow.name, 
         email: userRow.email, 
         familyId,
-        settings: userRow.settings || { includeCreditCardsInTotal: true }
+        settings: userRow.settings || { includeCreditCardsInTotal: true },
+        role: userRow.role || 'USER',
+        entityType: userRow.entity_type,
+        plan: userRow.plan,
+        status: userRow.status,
+        trialEndsAt: userRow.trial_ends_at,
+        createdAt: userRow.created_at
     };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
@@ -201,16 +218,25 @@ app.post('/api/auth/google', async (req, res) => {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const { sub: googleId, email, name } = payload;
+    
     let result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     let userRow = result.rows[0];
     const defaultSettings = { includeCreditCardsInTotal: true };
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 15);
+
     if (!userRow) {
        const id = crypto.randomUUID();
+       // Default Google Registration assumes PF
        await pool.query(
-        'INSERT INTO users (id, name, email, google_id, family_id, settings) VALUES ($1, $2, $3, $4, $1, $5)', 
-        [id, name, email, googleId, defaultSettings]
+        `INSERT INTO users (id, name, email, google_id, family_id, settings, role, entity_type, plan, status, trial_ends_at) 
+         VALUES ($1, $2, $3, $4, $1, $5, 'USER', 'PF', 'TRIAL', 'TRIALING', $6)`, 
+        [id, name, email, googleId, defaultSettings, trialEndsAt]
        );
-       userRow = { id, name, email, family_id: id, settings: defaultSettings };
+       userRow = { 
+           id, name, email, family_id: id, settings: defaultSettings,
+           role: 'USER', entity_type: 'PF', plan: 'TRIAL', status: 'TRIALING', trial_ends_at: trialEndsAt
+        };
     } else {
        if (!userRow.google_id) await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, userRow.id]);
        if (!userRow.family_id) {
@@ -223,15 +249,60 @@ app.post('/api/auth/google', async (req, res) => {
         name: userRow.name, 
         email: userRow.email, 
         familyId: userRow.family_id,
-        settings: userRow.settings || defaultSettings
+        settings: userRow.settings || defaultSettings,
+        role: userRow.role || 'USER',
+        entityType: userRow.entity_type,
+        plan: userRow.plan,
+        status: userRow.status,
+        trialEndsAt: userRow.trial_ends_at
     };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
-    console.error('Google Auth Error:', err);
     res.status(400).json({ error: 'Google Auth Error: ' + err.message });
   }
 });
+
+// --- Admin Routes ---
+app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
+        const activeUsers = await pool.query("SELECT COUNT(*) FROM users WHERE status = 'ACTIVE'");
+        const trialUsers = await pool.query("SELECT COUNT(*) FROM users WHERE status = 'TRIALING'");
+        const pfUsers = await pool.query("SELECT COUNT(*) FROM users WHERE entity_type = 'PF'");
+        const pjUsers = await pool.query("SELECT COUNT(*) FROM users WHERE entity_type = 'PJ'");
+        
+        // Mock Revenue Calculation based on plans
+        const yearlyPlans = await pool.query("SELECT COUNT(*) FROM users WHERE plan = 'YEARLY'");
+        const monthlyPlans = await pool.query("SELECT COUNT(*) FROM users WHERE plan = 'MONTHLY'");
+        
+        // Assuming R$29/mo and R$290/yr
+        const revenue = (parseInt(monthlyPlans.rows[0].count) * 29) + (parseInt(yearlyPlans.rows[0].count) * 290);
+
+        res.json({
+            totalUsers: parseInt(usersCount.rows[0].count),
+            active: parseInt(activeUsers.rows[0].count),
+            trial: parseInt(trialUsers.rows[0].count),
+            pf: parseInt(pfUsers.rows[0].count),
+            pj: parseInt(pjUsers.rows[0].count),
+            revenue: revenue
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const users = await pool.query('SELECT id, name, email, role, entity_type, plan, status, created_at FROM users ORDER BY created_at DESC LIMIT 50');
+        res.json(users.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- Standard App Routes (Same as before) ---
+// ... keeping existing app logic ...
 
 app.post('/api/settings', authenticateToken, async (req, res) => {
     const { settings } = req.body;
@@ -267,6 +338,8 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
         if (!invite) return res.status(404).json({ error: 'Código inválido' });
         if (new Date() > new Date(invite.expires_at)) return res.status(400).json({ error: 'Código expirado' });
         await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
+        
+        // Re-fetch user to update token
         const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
         const userRow = userRes.rows[0];
         const user = { 
@@ -274,7 +347,11 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
             name: userRow.name, 
             email: userRow.email, 
             familyId: userRow.family_id,
-            settings: userRow.settings || { includeCreditCardsInTotal: true }
+            settings: userRow.settings,
+            role: userRow.role,
+            entityType: userRow.entity_type,
+            plan: userRow.plan,
+            status: userRow.status
         };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
         res.json({ success: true, user, token });
@@ -294,8 +371,6 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
     }
 });
 
-// --- Data Routes ---
-
 const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
@@ -305,22 +380,39 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const trans = await pool.query(`SELECT * FROM transactions WHERE ${getFamilyCondition} ORDER BY date DESC`, [userId]);
         const goals = await pool.query(`SELECT * FROM goals WHERE ${getFamilyCondition}`, [userId]);
         const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+        let categories = await pool.query(`SELECT * FROM categories WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+
+        if (categories.rows.length === 0) {
+            const defaults = [
+                { name: 'Alimentação', type: 'EXPENSE' },
+                { name: 'Moradia', type: 'EXPENSE' },
+                { name: 'Transporte', type: 'EXPENSE' },
+                { name: 'Saúde', type: 'EXPENSE' },
+                { name: 'Lazer', type: 'EXPENSE' },
+                { name: 'Salário', type: 'INCOME' },
+                { name: 'Investimentos', type: 'EXPENSE' },
+                { name: 'Educação', type: 'EXPENSE' }
+            ];
+            for (const c of defaults) {
+                const newId = crypto.randomUUID();
+                await pool.query(
+                    'INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4)', 
+                    [newId, c.name, c.type, userId]
+                );
+            }
+            categories = await pool.query(`SELECT * FROM categories WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+        }
 
         res.json({
             accounts: accs.rows.map(r => ({ 
-                id: r.id, 
-                name: r.name, 
-                type: r.type, 
-                balance: parseFloat(r.balance),
+                id: r.id, name: r.name, type: r.type, balance: parseFloat(r.balance),
                 creditLimit: r.credit_limit ? parseFloat(r.credit_limit) : undefined,
-                closingDay: r.closing_day,
-                dueDay: r.due_day
+                closingDay: r.closing_day, dueDay: r.due_day
             })),
             transactions: trans.rows.map(r => ({
                 id: r.id, description: r.description, amount: parseFloat(r.amount), type: r.type, 
                 category: r.category, date: new Date(r.date).toISOString().split('T')[0], status: r.status, 
-                accountId: r.account_id, 
-                destinationAccountId: r.destination_account_id,
+                accountId: r.account_id, destinationAccountId: r.destination_account_id,
                 isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
                 recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined,
                 interestRate: r.interest_rate ? parseFloat(r.interest_rate) : 0,
@@ -330,10 +422,10 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
                 currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined 
             })),
-            contacts: contacts.rows.map(r => ({ id: r.id, name: r.name }))
+            contacts: contacts.rows.map(r => ({ id: r.id, name: r.name })),
+            categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type }))
         });
     } catch (err) {
-        console.error('Initial Data Error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -394,9 +486,35 @@ app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/categories', authenticateToken, async (req, res) => {
+    const { id, name, type } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3`,
+            [id, name, type || null, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `DELETE FROM categories WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`,
+            [req.params.id, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;
-    console.log('Transaction Payload:', JSON.stringify(t));
     const userId = req.user.id;
     try {
         await pool.query(
@@ -405,21 +523,9 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
              ON CONFLICT (id) DO UPDATE SET 
                 description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14`,
             [
-                t.id, 
-                t.description, 
-                t.amount, 
-                t.type, 
-                t.category, 
-                t.date, 
-                t.status, 
-                t.accountId, 
-                sanitizeValue(t.destinationAccountId), // Garante que string vazia vire NULL
-                t.isRecurring, 
-                t.recurrenceFrequency, 
-                t.recurrenceEndDate, 
-                t.interestRate || 0, 
-                sanitizeValue(t.contactId), // Garante que string vazia vire NULL
-                userId
+                t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, 
+                sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, 
+                t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId
             ]
         );
         res.json({ success: true });

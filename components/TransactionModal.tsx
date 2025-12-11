@@ -1,23 +1,26 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText } from 'lucide-react';
-import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category } from '../types';
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact) => void;
+  onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
   accounts: Account[];
   contacts: Contact[];
+  categories?: Category[];
   initialData?: Partial<Transaction> | null;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, accounts, contacts, initialData }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ 
+    isOpen, onClose, onSave, accounts, contacts, categories = [], initialData 
+}) => {
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
     type: TransactionType.EXPENSE,
-    category: 'Geral',
+    category: '', // Armazena o nome da categoria
     date: new Date().toISOString().split('T')[0],
     status: TransactionStatus.PAID,
     accountId: '',
@@ -29,10 +32,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     contactId: ''
   });
 
-  // Autocomplete State
+  // Autocomplete Contact State
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const contactDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Autocomplete Category State
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   const hasAccounts = accounts && accounts.length > 0;
 
@@ -43,7 +51,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         description: initialData.description || '',
         amount: initialData.amount !== undefined ? initialData.amount.toString() : '',
         type: initialData.type || TransactionType.EXPENSE,
-        category: initialData.category || 'Geral',
+        category: initialData.category || '',
         date: initialData.date || new Date().toISOString().split('T')[0],
         status: initialData.status || TransactionStatus.PAID,
         accountId: initialData.accountId || '',
@@ -54,14 +62,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         interestRate: initialData.interestRate !== undefined ? initialData.interestRate.toString() : '0',
         contactId: initialData.contactId || ''
       });
-      // Pre-fill contact search if exists
       setContactSearch(contact ? contact.name : '');
+      setCategorySearch(initialData.category || '');
     } else {
       setFormData({
         description: '',
         amount: '',
         type: TransactionType.EXPENSE,
-        category: 'Geral',
+        category: '',
         date: new Date().toISOString().split('T')[0],
         status: TransactionStatus.PAID,
         accountId: accounts.length > 0 ? accounts[0].id : '',
@@ -73,14 +81,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         contactId: ''
       });
       setContactSearch('');
+      setCategorySearch('');
     }
   }, [initialData, isOpen, accounts, contacts]);
 
-  // Click outside to close dropdown
+  // Click outside listener
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
               setShowContactDropdown(false);
+          }
+          if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+              setShowCategoryDropdown(false);
           }
       };
       document.addEventListener("mousedown", handleClickOutside);
@@ -108,30 +120,43 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         }
     }
 
-    // Determine final contact
+    // --- Contact Logic ---
     let finalContactId = formData.contactId;
     let newContactObj: Contact | undefined;
 
-    // Se usuário digitou algo no campo de contato mas não selecionou ID
-    // Assumimos que quer criar um novo contato
     if (!finalContactId && contactSearch && formData.type !== TransactionType.TRANSFER) {
-         // Verifica se já existe pelo nome exato
          const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
          if (existing) {
              finalContactId = existing.id;
          } else {
-             // Create New Contact Logic
              const newId = crypto.randomUUID();
              newContactObj = { id: newId, name: contactSearch };
              finalContactId = newId;
          }
     }
 
+    // --- Category Logic ---
+    let finalCategory = categorySearch;
+    let newCategoryObj: Category | undefined;
+    
+    // Se digitou algo na busca que não bate com nada existente, cria nova categoria
+    if (categorySearch && formData.type !== TransactionType.TRANSFER) {
+        const existingCat = categories.find(c => c.name.toLowerCase() === categorySearch.toLowerCase() && c.type === formData.type);
+        if (!existingCat) {
+             // Create New Category
+             newCategoryObj = { 
+                 id: crypto.randomUUID(), 
+                 name: categorySearch,
+                 type: formData.type
+             };
+        }
+    }
+
     onSave({
       description: formData.description, 
       amount: parseFloat(formData.amount),
       type: formData.type,
-      category: formData.type === TransactionType.TRANSFER ? 'Transferência' : formData.category,
+      category: formData.type === TransactionType.TRANSFER ? 'Transferência' : finalCategory,
       date: formData.date,
       status: formData.status,
       accountId: formData.accountId,
@@ -140,11 +165,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
       interestRate: parseFloat(formData.interestRate) || 0,
-      // Se finalContactId for string vazia ou undefined, enviamos NULL explicitamente ou undefined.
-      // O backend sanitiza, mas enviar undefined pode remover a chave do JSON.
-      // Vamos enviar undefined se não houver, para compatibilidade padrão, mas garantindo que string vazia não vá.
       contactId: finalContactId || undefined
-    }, newContactObj);
+    }, newContactObj, newCategoryObj);
     
     onClose();
   };
@@ -171,9 +193,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const labels = getDynamicLabels();
 
-  // Filter contacts based on search
+  // Filter contacts
   const filteredContacts = contacts.filter(c => 
       c.name.toLowerCase().includes(contactSearch.toLowerCase())
+  );
+
+  // Filter categories by Type and Search
+  const filteredCategories = categories.filter(c => 
+      c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())
   );
 
   return (
@@ -194,7 +221,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             <button
               type="button"
               onClick={() => {
-                  setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' });
+                  setFormData({ ...formData, type: TransactionType.EXPENSE });
+                  setCategorySearch(''); // Reset category when type changes
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE
@@ -207,7 +235,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             <button
               type="button"
               onClick={() => {
-                  setFormData({ ...formData, type: TransactionType.INCOME, category: 'Salário' });
+                  setFormData({ ...formData, type: TransactionType.INCOME });
+                  setCategorySearch('');
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.INCOME
@@ -220,7 +249,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             <button
               type="button"
               onClick={() => {
-                  setFormData({ ...formData, type: TransactionType.TRANSFER, category: 'Transferência' });
+                  setFormData({ ...formData, type: TransactionType.TRANSFER });
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.TRANSFER
@@ -248,9 +277,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             />
           </div>
 
-          {/* Contact Autocomplete - SEPARADO */}
+          {/* Contact Autocomplete */}
           {formData.type !== TransactionType.TRANSFER && (
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative" ref={contactDropdownRef}>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{labels.contactLabel}</label>
                 <div className="relative">
                     <div className="absolute left-3 top-2.5 pointer-events-none">
@@ -262,15 +291,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         onFocus={() => setShowContactDropdown(true)}
                         onChange={(e) => {
                             setContactSearch(e.target.value);
-                            setFormData({...formData, contactId: ''}); // Limpa ID se o usuário digitar
+                            setFormData({...formData, contactId: ''});
                             setShowContactDropdown(true);
                         }}
                         className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="Buscar ou criar novo contato..."
+                        placeholder="Buscar ou criar novo..."
                     />
                 </div>
                 
-                {/* Dropdown Results */}
                 {showContactDropdown && contactSearch && (
                     <div className="absolute z-10 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {filteredContacts.map(c => (
@@ -291,7 +319,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         {filteredContacts.length === 0 && contactSearch.length > 0 && (
                             <button
                                 type="button"
-                                onClick={() => setShowContactDropdown(false)} // Fecha, o submit criará
+                                onClick={() => setShowContactDropdown(false)}
                                 className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm text-emerald-700 flex items-center gap-2"
                             >
                                 <Plus className="w-4 h-4" />
@@ -303,9 +331,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </div>
           )}
 
-          {/* Description - SEPARADO */}
+          {/* Description */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Descrição (O que é?)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
             <div className="relative">
                 <FileText className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                 <input
@@ -314,34 +342,57 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder={formData.type === TransactionType.TRANSFER ? "Motivo da transferência" : "Ex: Compras do Mês, Jantar..."}
+                placeholder="Ex: Compras do Mês"
                 />
             </div>
           </div>
 
-          {/* Category & Date Row */}
+          {/* Category (Autocomplete) & Date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Categoria</label>
-              <div className="relative">
-                <Tag className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <div className="relative" ref={categoryDropdownRef}>
+                <Tag className="w-4 h-4 text-gray-400 absolute left-3 top-2.5 z-10" />
                 <input
                   type="text"
-                  list="categories"
+                  value={categorySearch}
                   disabled={formData.type === TransactionType.TRANSFER}
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onFocus={() => setShowCategoryDropdown(true)}
+                  onChange={(e) => {
+                      setCategorySearch(e.target.value);
+                      setShowCategoryDropdown(true);
+                  }}
                   className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="Selecione..."
                 />
-                <datalist id="categories">
-                  <option value="Alimentação" />
-                  <option value="Moradia" />
-                  <option value="Transporte" />
-                  <option value="Saúde" />
-                  <option value="Lazer" />
-                  <option value="Salário" />
-                  <option value="Investimentos" />
-                </datalist>
+                 {/* Category Dropdown */}
+                 {showCategoryDropdown && formData.type !== TransactionType.TRANSFER && (
+                    <div className="absolute z-20 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-48 overflow-y-auto left-0">
+                        {filteredCategories.map(c => (
+                            <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                    setCategorySearch(c.name);
+                                    setShowCategoryDropdown(false);
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm text-gray-700"
+                            >
+                                {c.name}
+                            </button>
+                        ))}
+                        {filteredCategories.length === 0 && categorySearch.length > 0 && (
+                             <button
+                                type="button"
+                                onClick={() => setShowCategoryDropdown(false)}
+                                className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm text-emerald-700 flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Criar: "{categorySearch}"
+                            </button>
+                        )}
+                    </div>
+                 )}
               </div>
             </div>
             <div>

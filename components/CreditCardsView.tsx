@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Account, AccountType, Transaction, TransactionType, TransactionStatus, Contact } from '../types';
+import { Account, AccountType, Transaction, TransactionType, TransactionStatus, Contact, Category } from '../types';
 import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle, CheckCircle, ShoppingCart } from 'lucide-react';
 import AccountModal from './AccountModal';
 import TransactionModal from './TransactionModal';
@@ -9,15 +9,17 @@ interface CreditCardsViewProps {
   accounts: Account[];
   transactions: Transaction[];
   contacts: Contact[];
+  categories: Category[];
   onSaveAccount: (a: Account) => void;
   onDeleteAccount: (id: string) => void;
-  onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact) => void;
+  onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
 }
 
 const CreditCardsView: React.FC<CreditCardsViewProps> = ({ 
     accounts, 
     transactions, 
     contacts, 
+    categories,
     onSaveAccount, 
     onDeleteAccount,
     onAddTransaction 
@@ -71,8 +73,8 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       setIsTransModalOpen(true);
   };
 
-  const handleSaveTransaction = (t: Omit<Transaction, 'id'>, newContact?: Contact) => {
-      onAddTransaction(t, newContact);
+  const handleSaveTransaction = (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
+      onAddTransaction(t, newContact, newCategory);
       setIsTransModalOpen(false);
       setPrefilledTransaction(null);
   };
@@ -329,6 +331,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         onSave={handleSaveTransaction}
         accounts={accounts}
         contacts={contacts}
+        categories={categories}
         initialData={prefilledTransaction}
       />
     </div>

@@ -11,16 +11,25 @@ import ContactsView from './components/ContactsView';
 import CreditCardsView from './components/CreditCardsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
+import LandingPage from './components/LandingPage';
+import AdminDashboard from './components/AdminDashboard';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({ accounts: [], transactions: [], goals: [], contacts: [] });
+  // Auth & Routing States
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
+  const [registerEntityType, setRegisterEntityType] = useState<EntityType>(EntityType.PERSONAL);
+  const [registerPlan, setRegisterPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
+
+  // App Data States
+  const [state, setState] = useState<AppState>({ accounts: [], transactions: [], goals: [], contacts: [], categories: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   // Modal States
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
@@ -28,17 +37,22 @@ const App: React.FC = () => {
   // Initial Load
   useEffect(() => {
     const init = async () => {
-      // Check auth token
       const token = localStorage.getItem('token');
       const userStr = localStorage.getItem('user');
       
       if (!token || !userStr) {
         setIsLoading(false);
-        return; // Stay in Auth screen
+        return; 
       }
 
-      setCurrentUser(JSON.parse(userStr));
+      const user = JSON.parse(userStr);
+      setCurrentUser(user);
       
+      if (user.role === UserRole.ADMIN) {
+          setIsLoading(false);
+          return;
+      }
+
       setIsLoading(true);
       try {
         const data = await loadInitialData();
@@ -56,6 +70,12 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = async (user: User) => {
     setCurrentUser(user);
+    setShowAuth(false);
+    
+    if (user.role === UserRole.ADMIN) {
+        return;
+    }
+
     setIsLoading(true);
     try {
         const data = await loadInitialData();
@@ -66,6 +86,13 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
+  const handleGetStarted = (type: EntityType, plan: SubscriptionPlan) => {
+      setRegisterEntityType(type);
+      setRegisterPlan(plan);
+      setAuthMode('REGISTER');
+      setShowAuth(true);
+  };
+
   const handleUpdateSettings = (settings: AppSettings) => {
     if (currentUser) {
         setCurrentUser({ ...currentUser, settings });
@@ -74,19 +101,28 @@ const App: React.FC = () => {
 
   // --- Transactions Logic ---
 
-  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact) => {
+  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
     try {
         const transaction: Transaction = {
           ...newTransaction,
           id: crypto.randomUUID(),
         };
 
-        // 0. Handle New Contact Creation (if any)
+        // 0. Handle New Contact Creation
         if (newContact) {
             await api.saveContact(newContact);
             setState(prev => ({
                 ...prev,
                 contacts: [...prev.contacts, newContact]
+            }));
+        }
+
+        // 0.1 Handle New Category Creation
+        if (newCategory) {
+            await api.saveCategory(newCategory);
+            setState(prev => ({
+                ...prev,
+                categories: [...prev.categories, newCategory]
             }));
         }
 
@@ -185,17 +221,26 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact) => {
+  const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact, newCategory?: Category) => {
     try {
         const oldT = state.transactions.find(t => t.id === updatedT.id);
         if (!oldT) return;
 
-        // 0. Handle New Contact Creation (if any)
+        // 0. Handle New Contact
         if (newContact) {
             await api.saveContact(newContact);
             setState(prev => ({
                 ...prev,
                 contacts: [...prev.contacts, newContact]
+            }));
+        }
+
+        // 0.1 Handle New Category
+        if (newCategory) {
+            await api.saveCategory(newCategory);
+            setState(prev => ({
+                ...prev,
+                categories: [...prev.categories, newCategory]
             }));
         }
 
@@ -346,10 +391,62 @@ const App: React.FC = () => {
       }
   };
 
+  // --- Categories Logic ---
+  const handleSaveCategory = async (category: Category) => {
+      try {
+          await api.saveCategory(category);
+          setState(prev => {
+              const exists = prev.categories.find(c => c.id === category.id);
+              if (exists) {
+                  return {
+                      ...prev,
+                      categories: prev.categories.map(c => c.id === category.id ? category : c)
+                  }
+              }
+              return {
+                  ...prev,
+                  categories: [...prev.categories, category].sort((a,b) => a.name.localeCompare(b.name))
+              }
+          });
+      } catch (e: any) {
+          alert("Erro ao salvar categoria: " + e.message);
+      }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+      try {
+          await api.deleteCategory(id);
+          setState(prev => ({
+              ...prev,
+              categories: prev.categories.filter(c => c.id !== id)
+          }));
+      } catch (e: any) {
+          alert("Erro ao excluir categoria: " + e.message);
+      }
+  };
+
+  // --- VIEW RENDERING ---
+
   if (!currentUser) {
-    return <Auth onLoginSuccess={handleLoginSuccess} />;
+      if (showAuth) {
+          return (
+            <Auth 
+                onLoginSuccess={handleLoginSuccess} 
+                initialMode={authMode} 
+                initialEntityType={registerEntityType}
+                initialPlan={registerPlan}
+            />
+          );
+      }
+      return <LandingPage onGetStarted={handleGetStarted} onLogin={() => { setAuthMode('LOGIN'); setShowAuth(true); }} />;
   }
 
+  // Admin View
+  if (currentUser.role === UserRole.ADMIN) {
+      return <AdminDashboard />;
+  }
+
+  // User App Loading
   if (isLoading) {
       return (
           <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
@@ -361,7 +458,7 @@ const App: React.FC = () => {
       );
   }
 
-  // --- Router Logic ---
+  // --- Standard User Router Logic ---
   const renderContent = () => {
     switch (currentView) {
       case 'DASHBOARD':
@@ -384,6 +481,7 @@ const App: React.FC = () => {
             transactions={state.transactions} 
             accounts={state.accounts}
             contacts={state.contacts}
+            categories={state.categories}
             settings={currentUser.settings}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
@@ -397,6 +495,7 @@ const App: React.FC = () => {
             transactions={state.transactions}
             accounts={state.accounts}
             contacts={state.contacts}
+            categories={state.categories}
             onAdd={handleAddTransaction}
             onEdit={handleEditTransaction}
           />
@@ -414,11 +513,12 @@ const App: React.FC = () => {
         return (
             <CreditCardsView 
                 accounts={state.accounts}
-                contacts={state.contacts} // NOVO: Passando contatos
+                contacts={state.contacts}
+                categories={state.categories}
                 transactions={state.transactions}
                 onSaveAccount={handleSaveAccount}
                 onDeleteAccount={handleDeleteAccount}
-                onAddTransaction={handleAddTransaction} // NOVO: Passando função de adicionar
+                onAddTransaction={handleAddTransaction}
             />
         );
       case 'REPORTS':
@@ -429,8 +529,11 @@ const App: React.FC = () => {
         return (
             <SettingsView 
                 user={currentUser} 
+                categories={state.categories}
                 onUpdateSettings={handleUpdateSettings}
                 onOpenCollab={() => setIsCollabModalOpen(true)}
+                onSaveCategory={handleSaveCategory}
+                onDeleteCategory={handleDeleteCategory}
             />
         );
       default:

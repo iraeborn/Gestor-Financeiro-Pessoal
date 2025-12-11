@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType, Contact } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType, Contact, Category } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
@@ -11,17 +11,19 @@ interface TransactionsViewProps {
   transactions: Transaction[];
   accounts: Account[];
   contacts: Contact[];
+  categories: Category[]; // Nova Prop
   settings?: AppSettings;
   onDelete: (id: string) => void;
-  onEdit: (t: Transaction) => void;
+  onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
-  onAdd: (t: Omit<Transaction, 'id'>) => void;
+  onAdd: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
 }
 
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
   transactions, 
   accounts,
   contacts,
+  categories,
   settings,
   onDelete, 
   onEdit, 
@@ -126,11 +128,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = (t: Omit<Transaction, 'id'>) => {
+  const handleSave = (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
     if (editingTransaction) {
-        onEdit({ ...t, id: editingTransaction.id });
+        onEdit({ ...t, id: editingTransaction.id }, newContact, newCategory);
     } else {
-        onAdd(t);
+        onAdd(t, newContact, newCategory);
     }
     setEditingTransaction(null);
   };
@@ -286,6 +288,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         onSave={handleSave}
         accounts={accounts}
         contacts={contacts}
+        categories={categories}
         initialData={editingTransaction}
       />
 

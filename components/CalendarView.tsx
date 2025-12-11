@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, Account, TransactionStatus, Contact } from '../types';
+import { Transaction, TransactionType, Account, TransactionStatus, Contact, Category } from '../types';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import TransactionModal from './TransactionModal';
 
@@ -8,8 +8,9 @@ interface CalendarViewProps {
   transactions: Transaction[];
   accounts: Account[];
   contacts: Contact[];
-  onAdd: (t: Omit<Transaction, 'id'>) => void;
-  onEdit: (t: Transaction) => void;
+  categories: Category[];
+  onAdd: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
+  onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
 }
 
 interface CalendarItem {
@@ -26,7 +27,7 @@ interface CalendarEvent {
   items: CalendarItem[];
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, contacts, onAdd, onEdit }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, contacts, categories, onAdd, onEdit }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDateForNew, setSelectedDateForNew] = useState<string>('');
@@ -141,12 +142,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, con
     setIsModalOpen(true);
   };
 
-  const handleSave = (t: Omit<Transaction, 'id'>) => {
+  const handleSave = (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
     if (editingTransaction) {
-        onEdit({ ...t, id: editingTransaction.id });
+        onEdit({ ...t, id: editingTransaction.id }, newContact, newCategory);
     } else {
         // Ensure date is respected if it came from the calendar click
-        onAdd(t);
+        onAdd(t, newContact, newCategory);
     }
     setIsModalOpen(false);
     setEditingTransaction(null);
@@ -288,6 +289,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, con
             onSave={handleSave}
             accounts={accounts}
             contacts={contacts}
+            categories={categories}
             initialData={editingTransaction ? editingTransaction : (selectedDateForNew ? { date: selectedDateForNew } as any : null)}
         />
     </div>

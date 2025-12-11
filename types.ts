@@ -25,6 +25,29 @@ export interface AppSettings {
   includeCreditCardsInTotal: boolean;
 }
 
+export enum UserRole {
+  USER = 'USER',
+  ADMIN = 'ADMIN'
+}
+
+export enum EntityType {
+  PERSONAL = 'PF', // Pessoa Física
+  BUSINESS = 'PJ'  // Pessoa Jurídica
+}
+
+export enum SubscriptionPlan {
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+  TRIAL = 'TRIAL'
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = 'ACTIVE',
+  TRIALING = 'TRIALING',
+  CANCELED = 'CANCELED',
+  EXPIRED = 'EXPIRED'
+}
+
 export interface User {
   id: string;
   name: string;
@@ -32,6 +55,13 @@ export interface User {
   googleId?: string;
   familyId?: string;
   settings?: AppSettings;
+  // SaaS Fields
+  role?: UserRole;
+  entityType?: EntityType;
+  plan?: SubscriptionPlan;
+  status?: SubscriptionStatus;
+  trialEndsAt?: string;
+  createdAt?: string;
 }
 
 export interface AuthResponse {
@@ -59,6 +89,13 @@ export interface Account {
 export interface Contact {
   id: string;
   name: string;
+  userId?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  type?: TransactionType; // Opcional, para sugerir apenas em receitas ou despesas
   userId?: string;
 }
 
@@ -94,6 +131,7 @@ export interface AppState {
   transactions: Transaction[];
   goals: FinancialGoal[];
   contacts: Contact[]; 
+  categories: Category[];
 }
 
 export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS';
