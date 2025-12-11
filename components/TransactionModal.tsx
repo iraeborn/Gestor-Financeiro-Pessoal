@@ -9,7 +9,7 @@ interface TransactionModalProps {
   onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact) => void;
   accounts: Account[];
   contacts: Contact[];
-  initialData?: Transaction | null;
+  initialData?: Partial<Transaction> | null;
 }
 
 const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, accounts, contacts, initialData }) => {
@@ -40,18 +40,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     if (initialData) {
       const contact = contacts.find(c => c.id === initialData.contactId);
       setFormData({
-        description: initialData.description,
-        amount: initialData.amount.toString(),
-        type: initialData.type,
-        category: initialData.category,
-        date: initialData.date,
-        status: initialData.status,
-        accountId: initialData.accountId,
+        description: initialData.description || '',
+        amount: initialData.amount !== undefined ? initialData.amount.toString() : '',
+        type: initialData.type || TransactionType.EXPENSE,
+        category: initialData.category || 'Geral',
+        date: initialData.date || new Date().toISOString().split('T')[0],
+        status: initialData.status || TransactionStatus.PAID,
+        accountId: initialData.accountId || '',
         destinationAccountId: initialData.destinationAccountId || '',
-        isRecurring: initialData.isRecurring,
+        isRecurring: !!initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
         recurrenceEndDate: initialData.recurrenceEndDate || '',
-        interestRate: initialData.interestRate ? initialData.interestRate.toString() : '0',
+        interestRate: initialData.interestRate !== undefined ? initialData.interestRate.toString() : '0',
         contactId: initialData.contactId || ''
       });
       // Pre-fill contact search if exists
@@ -181,7 +181,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h2 className="text-lg font-bold text-gray-800">
-            {initialData ? 'Editar Transação' : 'Nova Transação'}
+            {initialData && initialData.id ? 'Editar Transação' : 'Nova Transação'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-6 h-6" />

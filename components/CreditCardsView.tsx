@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Account, AccountType, Transaction, TransactionType, TransactionStatus, Contact } from '../types';
-import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle } from 'lucide-react';
+import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle, CheckCircle, ShoppingCart } from 'lucide-react';
 import AccountModal from './AccountModal';
 import TransactionModal from './TransactionModal';
 
@@ -44,13 +44,29 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     setEditingAccount(null);
   };
 
-  const handleAddExpense = (card: Account) => {
+  // Ação 1: Nova Compra (Aumenta a dívida)
+  const handleAddPurchase = (card: Account) => {
       setPrefilledTransaction({
           accountId: card.id,
           type: TransactionType.EXPENSE,
           date: new Date().toISOString().split('T')[0],
-          status: TransactionStatus.PENDING,
-          description: 'Nova Despesa (Fatura)'
+          status: TransactionStatus.PENDING, // Compras no crédito geralmente são pendentes na fatura
+          description: '',
+          category: 'Geral'
+      });
+      setIsTransModalOpen(true);
+  };
+
+  // Ação 2: Pagar Fatura (Reduz a dívida via Transferência)
+  const handlePayInvoice = (card: Account, amountToPay: number, label: string) => {
+      setPrefilledTransaction({
+          type: TransactionType.TRANSFER, // Transferência: Banco -> Cartão
+          destinationAccountId: card.id,  // O dinheiro entra no cartão para abater a dívida
+          accountId: '', // O usuário deve selecionar de qual banco sai o dinheiro
+          amount: amountToPay > 0 ? parseFloat(amountToPay.toFixed(2)) : 0,
+          date: new Date().toISOString().split('T')[0],
+          status: TransactionStatus.PAID,
+          description: `Pagamento de Fatura (${label}) - ${card.name}`
       });
       setIsTransModalOpen(true);
   };
@@ -88,6 +104,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       let overdueAmount = 0;
       let status = "Indefinido";
 
+      // Soma atrasados
       overdueAmount = transactions
         .filter(t => 
             t.accountId === card.id && 
@@ -99,6 +116,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       if (card.closingDay) {
           const startDate = getBillingCycleStart(card.closingDay);
           
+          // Soma fatura atual (pendentes do ciclo atual)
           currentInvoice = transactions
             .filter(t => 
                 t.accountId === card.id && 
@@ -114,6 +132,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           else status = "Fechada";
       }
 
+      // O que sobra do limite utilizado que não está na fatura atual nem atrasado é "Parcelado Futuro" ou saldo antigo
       const knownExpenses = currentInvoice + overdueAmount;
       const residualDebt = Math.max(0, totalUsedLimit - knownExpenses);
 
@@ -172,12 +191,17 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                     <h3 className="font-bold text-lg tracking-wide">{card.name}</h3>
                                     <p className="text-slate-400 text-xs uppercase tracking-wider mt-1">Crédito</p>
                                 </div>
-                                <CreditCard className="w-8 h-8 text-slate-400 opacity-50" />
+                                <div className="flex flex-col items-end">
+                                    <CreditCard className="w-6 h-6 text-slate-400 opacity-50 mb-2" />
+                                </div>
                             </div>
                             
-                            <div className="mt-6">
+                            <div className="mt-4">
                                 <p className="text-xs text-slate-400 mb-1">Limite Disponível</p>
-                                <span className="text-3xl font-bold text-emerald-400">{formatCurrency(available)}</span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-3xl font-bold text-emerald-400">{formatCurrency(available)}</span>
+                                    {limit > 0 && <span className="text-xs text-slate-500">de {formatCurrency(limit)}</span>}
+                                </div>
                             </div>
 
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -197,17 +221,45 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
                         {/* Card Details */}
                         <div className="p-6 space-y-5 flex-1 flex flex-col">
+                            
+                            {/* Actions Bar */}
+                            <div className="flex gap-2 mb-2">
+                                <button 
+                                    onClick={() => handleAddPurchase(card)}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                                    title="Adicionar nova compra na fatura"
+                                >
+                                    <ShoppingCart className="w-3.5 h-3.5" />
+                                    Nova Compra
+                                </button>
+                                {totalUsedLimit > 0 && (
+                                    <button 
+                                        onClick={() => handlePayInvoice(card, currentInvoice > 0 ? currentInvoice : totalUsedLimit, 'Saldo Total')}
+                                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors"
+                                        title="Registrar pagamento de fatura (Transferência)"
+                                    >
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                        Pagar Fatura
+                                    </button>
+                                )}
+                            </div>
+
                             {/* Alerta de Atraso */}
                             {overdueAmount > 0 && (
-                                <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 flex items-start gap-3">
-                                    <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
-                                    <div>
-                                        <p className="text-xs font-bold text-rose-700 uppercase">Fatura em Atraso</p>
-                                        <p className="text-lg font-bold text-rose-600">{formatCurrency(overdueAmount)}</p>
-                                        <p className="text-[10px] text-rose-500 leading-tight mt-1">
-                                            Regularize para evitar juros.
-                                        </p>
+                                <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 flex flex-col gap-2">
+                                    <div className="flex items-start gap-3">
+                                        <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                                        <div>
+                                            <p className="text-xs font-bold text-rose-700 uppercase">Fatura em Atraso</p>
+                                            <p className="text-lg font-bold text-rose-600">{formatCurrency(overdueAmount)}</p>
+                                        </div>
                                     </div>
+                                    <button 
+                                        onClick={() => handlePayInvoice(card, overdueAmount, 'Atrasada')}
+                                        className="w-full py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors shadow-sm"
+                                    >
+                                        Pagar Atrasados Agora
+                                    </button>
                                 </div>
                             )}
 
@@ -219,18 +271,9 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                     <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${status === 'Aberta' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                         {status}
                                     </span>
-                                    
-                                    {/* Botão Rápido para Adicionar na Fatura */}
-                                    <button 
-                                        onClick={() => handleAddExpense(card)}
-                                        className="absolute top-2 right-2 p-1.5 bg-white shadow-sm border border-gray-200 rounded-full hover:bg-indigo-50 text-indigo-600 opacity-0 group-hover/invoice:opacity-100 transition-opacity"
-                                        title="Lançar Despesa"
-                                    >
-                                        <Plus className="w-3 h-3" />
-                                    </button>
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1" title="Parcelas futuras ou saldo inicial não detalhado">Outros / Parc.</p>
+                                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1" title="Compras parceladas a vencer ou saldo não detalhado">Outros / Parc.</p>
                                     <p className="text-base font-bold text-gray-600">{formatCurrency(residualDebt)}</p>
                                 </div>
                             </div>
@@ -238,7 +281,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                             {/* Progress Bar */}
                             <div className="mt-auto pt-2">
                                 <div className="flex justify-between text-xs mb-1.5">
-                                    <span className="text-gray-500">Comprometimento Total</span>
+                                    <span className="text-gray-500">Limite Utilizado</span>
                                     <span className="font-medium text-gray-700">{Math.round(usagePercent)}%</span>
                                 </div>
                                 <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1">
@@ -246,9 +289,6 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                         className={`h-full rounded-full transition-all duration-500 ${usagePercent > 90 ? 'bg-rose-500' : usagePercent > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
                                         style={{ width: `${usagePercent}%` }}
                                     ></div>
-                                </div>
-                                <div className="text-right">
-                                    <span className="text-[10px] text-gray-400">Total: {formatCurrency(limit)}</span>
                                 </div>
                             </div>
 
@@ -289,7 +329,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         onSave={handleSaveTransaction}
         accounts={accounts}
         contacts={contacts}
-        initialData={prefilledTransaction as any}
+        initialData={prefilledTransaction}
       />
     </div>
   );
