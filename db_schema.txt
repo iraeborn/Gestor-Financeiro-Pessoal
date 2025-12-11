@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     is_recurring BOOLEAN DEFAULT FALSE,
     recurrence_frequency TEXT, -- WEEKLY, MONTHLY, YEARLY
     recurrence_end_date DATE,
+    interest_rate DECIMAL(10,2) DEFAULT 0, -- Taxa de juros mensal (%)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

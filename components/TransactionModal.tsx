@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency } from '../types';
 
 interface TransactionModalProps {
@@ -102,6 +102,32 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     onClose();
   };
 
+  // Helper para textos dinâmicos
+  const getDynamicLabels = () => {
+    switch (formData.type) {
+        case TransactionType.INCOME:
+            return {
+                accountLabel: 'Receber em (Destino)',
+                descLabel: 'Descrição (De quem / Motivo)',
+                descPlaceholder: 'Ex: Salário, Cliente X, Reembolso...'
+            };
+        case TransactionType.EXPENSE:
+            return {
+                accountLabel: 'Pagar com (Origem)',
+                descLabel: 'Descrição (Para quem / O que)',
+                descPlaceholder: 'Ex: Supermercado, Aluguel, Posto Y...'
+            };
+        default:
+            return {
+                accountLabel: 'Conta de Saída',
+                descLabel: 'Descrição',
+                descPlaceholder: 'Ex: Transf. para Poupança'
+            };
+    }
+  };
+
+  const labels = getDynamicLabels();
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
@@ -170,15 +196,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
-            <input
-              type="text"
-              required
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder={formData.type === TransactionType.TRANSFER ? "Ex: Transf. para Poupança" : "Ex: Supermercado"}
-            />
+            <label className="block text-xs font-medium text-gray-700 mb-1">{labels.descLabel}</label>
+            <div className="relative">
+                <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                type="text"
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder={labels.descPlaceholder}
+                />
+            </div>
           </div>
 
           {/* Category & Date Row */}
@@ -277,7 +306,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           ) : (
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Conta</label>
+                <label className="block text-xs font-bold text-indigo-700 mb-1">{labels.accountLabel}</label>
                 <div className="relative">
                     <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                     <select

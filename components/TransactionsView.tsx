@@ -271,6 +271,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       <TransactionList 
         transactions={filteredTransactions} 
+        accounts={accounts} // Passando contas
         onDelete={onDelete}
         onEdit={handleOpenEdit}
         onToggleStatus={handleStatusToggle}

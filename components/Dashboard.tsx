@@ -231,6 +231,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {/* Dynamic limit based on user selection */}
                 <TransactionList 
                   transactions={state.transactions.slice(0, recentLimit)} 
+                  accounts={state.accounts} // Passando contas
                   onDelete={onDeleteTransaction}
                   onEdit={handleEditTrans}
                   onToggleStatus={handleStatusToggle}

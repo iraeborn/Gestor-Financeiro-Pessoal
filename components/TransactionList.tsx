@@ -1,16 +1,17 @@
 
 import React from 'react';
-import { Transaction, TransactionType, TransactionStatus } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account } from '../types';
 import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  accounts?: Account[]; // Adicionado para lookup de nomes
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   onToggleStatus: (t: Transaction) => void;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelete, onEdit, onToggleStatus }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, accounts = [], onDelete, onEdit, onToggleStatus }) => {
   
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -18,6 +19,11 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelet
   const formatDate = (dateStr: string) => {
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}`;
+  };
+
+  const getAccountName = (id: string) => {
+      const acc = accounts.find(a => a.id === id);
+      return acc ? acc.name : 'Desconhecida';
   };
 
   const getStatusIcon = (status: TransactionStatus) => {
@@ -54,6 +60,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelet
               <th className="px-6 py-4 font-medium">Data</th>
               <th className="px-6 py-4 font-medium">Descrição</th>
               <th className="px-6 py-4 font-medium">Categoria</th>
+              <th className="px-6 py-4 font-medium">Conta</th>
               <th className="px-6 py-4 font-medium">Valor</th>
               <th className="px-6 py-4 font-medium text-center">Status</th>
               <th className="px-6 py-4 font-medium text-right">Ações</th>
@@ -87,6 +94,19 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, onDelet
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.type === TransactionType.TRANSFER ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-800'}`}>
                     {t.category}
                   </span>
+                </td>
+                {/* Nova Coluna: Conta */}
+                <td className="px-6 py-4 text-gray-600">
+                    {t.type === TransactionType.TRANSFER ? (
+                         <div className="flex flex-col text-xs">
+                             <span className="text-gray-500">De: {getAccountName(t.accountId)}</span>
+                             <span className="text-gray-900 font-medium">Para: {getAccountName(t.destinationAccountId || '')}</span>
+                         </div>
+                    ) : (
+                        <span className="bg-gray-50 border border-gray-200 px-2 py-1 rounded-md text-xs">
+                            {getAccountName(t.accountId)}
+                        </span>
+                    )}
                 </td>
                 <td className={`px-6 py-4 font-semibold ${
                     t.type === TransactionType.INCOME ? 'text-emerald-600' : 
