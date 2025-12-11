@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// 1. Logger Middleware (Para Debug no Cloud Run)
+// 1. Logger Middleware
 app.use((req, res, next) => {
     console.log(`[Request] ${req.method} ${req.path}`);
     next();
@@ -396,6 +396,7 @@ app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;
+    console.log('Transaction Payload:', JSON.stringify(t));
     const userId = req.user.id;
     try {
         await pool.query(
@@ -423,6 +424,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) {
+        console.error('Error inserting transaction:', err);
         res.status(500).json({ error: err.message });
     }
 });

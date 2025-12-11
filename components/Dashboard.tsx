@@ -7,7 +7,7 @@ import TransactionModal from './TransactionModal';
 import AccountModal from './AccountModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
 import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, ArrowRight, PieChart, BarChart3, Coins } from 'lucide-react';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, ArrowRight, PieChart, BarChart3, Coins, Building, CreditCard, Utensils } from 'lucide-react';
 
 interface DashboardProps {
   state: AppState;
@@ -28,7 +28,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onDeleteTransaction, 
   onEditTransaction, 
   onUpdateStatus, 
-  onSaveAccount,
+  onSaveAccount, 
   onDeleteAccount,
   onChangeView
 }) => {
@@ -105,26 +105,45 @@ const Dashboard: React.FC<DashboardProps> = ({
     setEditingAccount(null);
   };
 
-  // Intercept the status toggle to show payment modal if needed
   const handleStatusToggle = (t: Transaction) => {
-    // If it's NOT paid, we are about to pay it. Open modal.
     if (t.status !== TransactionStatus.PAID) {
         setTransactionToPay(t);
         setPaymentModalOpen(true);
     } else {
-        // If unmarking as paid, just proceed with normal toggle
         onUpdateStatus(t);
     }
   };
 
   const handleConfirmPayment = (t: Transaction, finalAmount: number) => {
-     // We need to update both status and amount
      const updatedTransaction = {
          ...t,
          status: TransactionStatus.PAID,
          amount: finalAmount
      };
      onEditTransaction(updatedTransaction);
+  };
+
+  // Helper para ícones de conta
+  const getAccountIcon = (type: AccountType) => {
+    switch (type) {
+      case AccountType.WALLET: return <Wallet className="w-5 h-5 text-indigo-500" />;
+      case AccountType.BANK: return <Building className="w-5 h-5 text-blue-500" />;
+      case AccountType.CARD: return <CreditCard className="w-5 h-5 text-rose-500" />;
+      case AccountType.INVESTMENT: return <TrendingUp className="w-5 h-5 text-emerald-500" />;
+      case AccountType.MEAL_VOUCHER: return <Utensils className="w-5 h-5 text-orange-500" />;
+      default: return <Wallet className="w-5 h-5 text-gray-400" />;
+    }
+  };
+
+  const getAccountLabel = (type: AccountType) => {
+      switch(type) {
+          case AccountType.MEAL_VOUCHER: return 'Vale Alimentação';
+          case AccountType.WALLET: return 'Carteira';
+          case AccountType.BANK: return 'Conta Bancária';
+          case AccountType.CARD: return 'Cartão de Crédito';
+          case AccountType.INVESTMENT: return 'Investimento';
+          default: return type;
+      }
   };
 
   return (
@@ -177,7 +196,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Fluxo de Caixa */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
           <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-indigo-500"/> Fluxo Recente
@@ -185,7 +203,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           <CashFlowChart transactions={state.transactions} />
         </div>
 
-        {/* Despesas por Categoria */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
            <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
             <PieChart className="w-4 h-4 text-rose-500"/> Top Despesas
@@ -193,7 +210,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           <ExpensesByCategory transactions={state.transactions} />
         </div>
 
-         {/* Distribuição de Saldo */}
          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 col-span-1 lg:col-span-1">
            <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
             <Coins className="w-4 h-4 text-emerald-500"/> Composição de Saldo
@@ -205,7 +221,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           {/* Left Column: Recent Activity */}
           <div className="xl:col-span-2 space-y-6">
-             {/* Recent Transactions Feed */}
              <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-gray-800">Últimas Movimentações</h3>
@@ -228,11 +243,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </button>
                   </div>
                 </div>
-                {/* Dynamic limit based on user selection */}
                 <TransactionList 
                   transactions={state.transactions.slice(0, recentLimit)} 
-                  accounts={state.accounts} // Passando contas
-                  contacts={state.contacts} // Passando contatos
+                  accounts={state.accounts} 
+                  contacts={state.contacts} 
                   onDelete={onDeleteTransaction}
                   onEdit={handleEditTrans}
                   onToggleStatus={handleStatusToggle}
@@ -260,9 +274,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {state.accounts.map(acc => (
                   <div key={acc.id} className="group relative p-3 bg-gray-50 hover:bg-white border border-transparent hover:border-gray-200 rounded-xl transition-all shadow-sm">
                     <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-gray-800">{acc.name}</p>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">{acc.type}</p>
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
+                            {getAccountIcon(acc.type)}
+                         </div>
+                         <div>
+                            <p className="font-semibold text-gray-800">{acc.name}</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">{getAccountLabel(acc.type)}</p>
+                         </div>
                       </div>
                       <span className={`font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.balance)}
