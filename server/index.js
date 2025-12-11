@@ -60,7 +60,13 @@ pool.connect()
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_rate DECIMAL(10,2) DEFAULT 0;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL;`);
-        console.log('Migration: transactions columns verified.');
+        
+        // Novas colunas para Cartão de Crédito
+        await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2);`);
+        await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS closing_day INTEGER;`);
+        await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS due_day INTEGER;`);
+        
+        console.log('Migration: transactions and accounts columns verified.');
     } catch (e) {
         console.error('Migration Error:', e.message);
     } finally {
@@ -294,7 +300,15 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
 
         res.json({
-            accounts: accs.rows.map(r => ({ id: r.id, name: r.name, type: r.type, balance: parseFloat(r.balance) })),
+            accounts: accs.rows.map(r => ({ 
+                id: r.id, 
+                name: r.name, 
+                type: r.type, 
+                balance: parseFloat(r.balance),
+                creditLimit: r.credit_limit ? parseFloat(r.credit_limit) : undefined,
+                closingDay: r.closing_day,
+                dueDay: r.due_day
+            })),
             transactions: trans.rows.map(r => ({
                 id: r.id, description: r.description, amount: parseFloat(r.amount), type: r.type, 
                 category: r.category, date: new Date(r.date).toISOString().split('T')[0], status: r.status, 
@@ -318,13 +332,14 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/accounts', authenticateToken, async (req, res) => {
-    const { id, name, type, balance } = req.body;
+    const { id, name, type, balance, creditLimit, closingDay, dueDay } = req.body;
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO accounts (id, name, type, balance, user_id) VALUES ($1, $2, $3, $4, $5) 
-             ON CONFLICT (id) DO UPDATE SET name = $2, type = $3, balance = $4`,
-            [id, name, type, balance, userId]
+            `INSERT INTO accounts (id, name, type, balance, user_id, credit_limit, closing_day, due_day) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+             ON CONFLICT (id) DO UPDATE SET name = $2, type = $3, balance = $4, credit_limit = $6, closing_day = $7, due_day = $8`,
+            [id, name, type, balance, userId, creditLimit || null, closingDay || null, dueDay || null]
         );
         res.json({ success: true });
     } catch (err) {
@@ -362,8 +377,6 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
 app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Primeiro, desvincula transações deste contato para não dar erro de FK (ou deixa o ON DELETE SET NULL cuidar disso)
-        // Como definimos ON DELETE SET NULL no schema, só deletar o contato é seguro.
         await pool.query(
             `DELETE FROM contacts WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`,
             [req.params.id, userId]

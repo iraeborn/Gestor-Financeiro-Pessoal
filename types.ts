@@ -49,6 +49,10 @@ export interface Account {
   type: AccountType;
   balance: number;
   userId?: string;
+  // Campos específicos para Cartão de Crédito
+  creditLimit?: number;
+  closingDay?: number; // Melhor dia de compra
+  dueDay?: number;     // Dia do vencimento
 }
 
 export interface Contact {
@@ -59,7 +63,7 @@ export interface Contact {
 
 export interface Transaction {
   id: string;
-  description: string; // O QUE (Ex: Compras da semana)
+  description: string;
   amount: number;
   type: TransactionType;
   category: string;
@@ -72,7 +76,7 @@ export interface Transaction {
   userId?: string;
   destinationAccountId?: string;
   interestRate?: number;
-  contactId?: string; // QUEM (Ex: Supermercado da Deusa)
+  contactId?: string;
 }
 
 export interface FinancialGoal {
@@ -91,7 +95,7 @@ export interface AppState {
   contacts: Contact[]; 
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS';
 
 declare global {
   interface Window {

@@ -8,6 +8,7 @@ import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
 import SettingsView from './components/SettingsView';
 import ContactsView from './components/ContactsView';
+import CreditCardsView from './components/CreditCardsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
 import { loadInitialData, api, logout } from './services/storageService';
@@ -407,6 +408,14 @@ const App: React.FC = () => {
                 onAddContact={handleSaveContact}
                 onEditContact={handleSaveContact}
                 onDeleteContact={handleDeleteContact}
+            />
+        );
+      case 'CARDS':
+        return (
+            <CreditCardsView 
+                accounts={state.accounts}
+                onSaveAccount={handleSaveAccount}
+                onDeleteAccount={handleDeleteAccount}
             />
         );
       case 'REPORTS':

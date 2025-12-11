@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     type TEXT NOT NULL, -- WALLET, BANK, CARD, INVESTMENT
     balance DECIMAL(15,2) DEFAULT 0,
     user_id TEXT REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    credit_limit DECIMAL(15,2), -- Novo: Limite do Cartão
+    closing_day INTEGER,        -- Novo: Dia de Fechamento da Fatura
+    due_day INTEGER             -- Novo: Dia de Vencimento da Fatura
 );
 
 -- Criação da Tabela de Contatos (Favorecidos / Pagadores)
