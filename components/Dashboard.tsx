@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode } from '../types';
+import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode, AppSettings, AccountType } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
@@ -9,6 +10,7 @@ import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, 
 
 interface DashboardProps {
   state: AppState;
+  settings?: AppSettings;
   onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (t: Transaction) => void;
@@ -20,6 +22,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ 
   state, 
+  settings,
   onAddTransaction, 
   onDeleteTransaction, 
   onEditTransaction, 
@@ -33,8 +36,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
+  const includeCards = settings?.includeCreditCardsInTotal ?? true;
+
   // --- Calculations ---
-  const currentRealBalance = state.accounts.reduce((acc, curr) => acc + curr.balance, 0);
+  const currentRealBalance = state.accounts.reduce((acc, curr) => {
+    if (!includeCards && curr.type === AccountType.CARD) return acc;
+    return acc + curr.balance;
+  }, 0);
 
   const pendingIncome = state.transactions
     .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
@@ -115,7 +123,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           amount={currentRealBalance} 
           type="neutral" 
           icon={<Wallet className="w-6 h-6 text-indigo-600"/>}
-          subtitle="Disponível agora"
+          subtitle={includeCards ? "Disponível agora" : "Sem Cartões de Crédito"}
         />
         <StatCard 
           title="Saldo Projetado" 

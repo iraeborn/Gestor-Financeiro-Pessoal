@@ -51,10 +51,13 @@ const pool = new Pool(poolConfig);
 pool.connect()
   .then(async (client) => {
     console.log('DB Connected Successfully');
-    // Migration Simples: Garantir que a coluna destination_account_id exista
+    // Migrations Automáticas
     try {
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL;`);
         console.log('Migration: destination_account_id column verified.');
+        
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
+        console.log('Migration: settings column verified.');
     } catch (e) {
         console.error('Migration Error:', e.message);
     } finally {
@@ -109,7 +112,6 @@ const ensureFamilyId = async (userId) => {
 };
 
 // --- Health Check Route (NO AUTH REQUIRED) ---
-// Definida explicitamente antes de qualquer outra coisa
 app.get('/api/health', async (req, res) => {
     try {
         const result = await pool.query('SELECT NOW() as now');
@@ -139,12 +141,14 @@ app.post('/api/auth/register', async (req, res) => {
     const check = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (check.rows.length > 0) return res.status(400).json({ error: 'Email já cadastrado' });
 
+    const defaultSettings = { includeCreditCardsInTotal: true };
+
     await pool.query(
-      'INSERT INTO users (id, name, email, password_hash, family_id) VALUES ($1, $2, $3, $4, $1)',
-      [id, name, email, hashedPassword]
+      'INSERT INTO users (id, name, email, password_hash, family_id, settings) VALUES ($1, $2, $3, $4, $1, $5)',
+      [id, name, email, hashedPassword, defaultSettings]
     );
 
-    const user = { id, name, email, familyId: id };
+    const user = { id, name, email, familyId: id, settings: defaultSettings };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
@@ -168,7 +172,13 @@ app.post('/api/auth/login', async (req, res) => {
         await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [familyId, userRow.id]);
     }
 
-    const user = { id: userRow.id, name: userRow.name, email: userRow.email, familyId };
+    const user = { 
+        id: userRow.id, 
+        name: userRow.name, 
+        email: userRow.email, 
+        familyId,
+        settings: userRow.settings || { includeCreditCardsInTotal: true }
+    };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
@@ -186,10 +196,15 @@ app.post('/api/auth/google', async (req, res) => {
     let result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     let userRow = result.rows[0];
 
+    const defaultSettings = { includeCreditCardsInTotal: true };
+
     if (!userRow) {
        const id = crypto.randomUUID();
-       await pool.query('INSERT INTO users (id, name, email, google_id, family_id) VALUES ($1, $2, $3, $4, $1)', [id, name, email, googleId]);
-       userRow = { id, name, email, family_id: id };
+       await pool.query(
+        'INSERT INTO users (id, name, email, google_id, family_id, settings) VALUES ($1, $2, $3, $4, $1, $5)', 
+        [id, name, email, googleId, defaultSettings]
+       );
+       userRow = { id, name, email, family_id: id, settings: defaultSettings };
     } else {
        if (!userRow.google_id) await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, userRow.id]);
        if (!userRow.family_id) {
@@ -198,13 +213,31 @@ app.post('/api/auth/google', async (req, res) => {
        }
     }
 
-    const user = { id: userRow.id, name: userRow.name, email: userRow.email, familyId: userRow.family_id };
+    const user = { 
+        id: userRow.id, 
+        name: userRow.name, 
+        email: userRow.email, 
+        familyId: userRow.family_id,
+        settings: userRow.settings || defaultSettings
+    };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
     console.error('Google Auth Error:', err);
     res.status(400).json({ error: 'Google Auth Error: ' + err.message });
   }
+});
+
+// --- Settings Route ---
+app.post('/api/settings', authenticateToken, async (req, res) => {
+    const { settings } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query('UPDATE users SET settings = $1 WHERE id = $2', [settings, userId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- Invite Routes ---
@@ -238,7 +271,13 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
         const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
         const userRow = userRes.rows[0];
         
-        const user = { id: userRow.id, name: userRow.name, email: userRow.email, familyId: userRow.family_id };
+        const user = { 
+            id: userRow.id, 
+            name: userRow.name, 
+            email: userRow.email, 
+            familyId: userRow.family_id,
+            settings: userRow.settings || { includeCreditCardsInTotal: true }
+        };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
 
         res.json({ success: true, user, token });
@@ -276,7 +315,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 id: r.id, description: r.description, amount: parseFloat(r.amount), type: r.type, 
                 category: r.category, date: new Date(r.date).toISOString().split('T')[0], status: r.status, 
                 accountId: r.account_id, 
-                destinationAccountId: r.destination_account_id, // Mapping from Snake Case
+                destinationAccountId: r.destination_account_id,
                 isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
                 recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined
             })),
@@ -309,7 +348,6 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
 app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Fix: Explicitly use $2 for userId to avoid conflict with $1 (accountId)
         await pool.query(
             `DELETE FROM accounts WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`, 
             [req.params.id, userId]
@@ -340,7 +378,6 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Fix: Explicitly use $2 for userId to avoid conflict with $1 (transactionId)
         await pool.query(
             `DELETE FROM transactions WHERE id = $1 AND user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`,
             [req.params.id, userId]
@@ -351,15 +388,13 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// --- API Fallback (IMPORTANTE) ---
-// Se alguma rota /api/ não for encontrada acima, retornar 404 JSON, e NÃO index.html
+// --- API Fallback ---
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });
 
 // --- Serve Frontend ---
 const distPath = path.join(__dirname, '../dist');
-// index: false impede que o express sirva o index.html automaticamente
 app.use(express.static(distPath, { index: false }));
 
 app.get('*', (req, res) => {
@@ -371,7 +406,6 @@ app.get('*', (req, res) => {
             console.error('Error reading index.html', err);
             return res.status(500).send('Error');
         }
-        // Inject Google Client ID at Runtime
         const envScript = `<script>window.GOOGLE_CLIENT_ID = "${GOOGLE_CLIENT_ID}";</script>`;
         res.send(htmlData.replace('</head>', `${envScript}</head>`));
     });

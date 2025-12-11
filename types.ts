@@ -20,12 +20,17 @@ export enum AccountType {
 
 export type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
+export interface AppSettings {
+  includeCreditCardsInTotal: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   googleId?: string;
-  familyId?: string; // ID do Grupo Familiar
+  familyId?: string;
+  settings?: AppSettings;
 }
 
 export interface AuthResponse {
@@ -59,7 +64,7 @@ export interface Transaction {
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
   userId?: string;
-  destinationAccountId?: string; // ID da conta de destino (para Transferências)
+  destinationAccountId?: string;
 }
 
 export interface FinancialGoal {
@@ -77,7 +82,7 @@ export interface AppState {
   goals: FinancialGoal[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS';
 
 declare global {
   interface Window {

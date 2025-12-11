@@ -1,16 +1,16 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Users } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings } from 'lucide-react';
 import { ViewMode } from '../types';
 import { logout } from '../services/storageService';
 
 interface SidebarProps {
   currentView: ViewMode;
   onChangeView: (view: ViewMode) => void;
-  onOpenCollab: () => void;
+  onOpenCollab?: () => void; // Mantendo opcional para compatibilidade, mas não será usado diretamente aqui
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onOpenCollab }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
   const menuItems = [
     { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
@@ -53,11 +53,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onOpenColl
         
         <div className="pt-4 mt-4 border-t border-gray-100">
             <button
-                onClick={onOpenCollab}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 transition-colors font-medium"
+                onClick={() => onChangeView('SETTINGS')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
+                    currentView === 'SETTINGS'
+                      ? 'bg-indigo-50 text-indigo-600 shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
             >
-                <Users className="w-5 h-5" />
-                Família
+                <Settings className="w-5 h-5" />
+                Configurações
             </button>
         </div>
       </nav>

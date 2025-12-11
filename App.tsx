@@ -6,10 +6,11 @@ import TransactionsView from './components/TransactionsView';
 import Reports from './components/Reports';
 import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
+import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -61,6 +62,12 @@ const App: React.FC = () => {
         console.error(e);
     }
     setIsLoading(false);
+  };
+
+  const handleUpdateSettings = (settings: AppSettings) => {
+    if (currentUser) {
+        setCurrentUser({ ...currentUser, settings });
+    }
   };
 
   // --- Transactions Logic ---
@@ -307,6 +314,7 @@ const App: React.FC = () => {
         return (
           <Dashboard 
             state={state}
+            settings={currentUser.settings}
             onAddTransaction={handleAddTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onEditTransaction={handleEditTransaction}
@@ -321,6 +329,7 @@ const App: React.FC = () => {
           <TransactionsView 
             transactions={state.transactions} 
             accounts={state.accounts}
+            settings={currentUser.settings}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
             onToggleStatus={handleUpdateStatus}
@@ -340,6 +349,14 @@ const App: React.FC = () => {
         return <Reports transactions={state.transactions} />;
       case 'ADVISOR':
         return <SmartAdvisor data={state} />;
+      case 'SETTINGS':
+        return (
+            <SettingsView 
+                user={currentUser} 
+                onUpdateSettings={handleUpdateSettings}
+                onOpenCollab={() => setIsCollabModalOpen(true)}
+            />
+        );
       default:
         return <div>Página não encontrada</div>;
     }
@@ -365,10 +382,6 @@ const App: React.FC = () => {
                     setCurrentView(view);
                     setIsMobileMenuOpen(false);
                 }} 
-                onOpenCollab={() => {
-                    setIsCollabModalOpen(true);
-                    setIsMobileMenuOpen(false);
-                }}
             />
           </div>
         </div>
@@ -379,7 +392,6 @@ const App: React.FC = () => {
         <Sidebar 
             currentView={currentView} 
             onChangeView={setCurrentView} 
-            onOpenCollab={() => setIsCollabModalOpen(true)}
         />
       </div>
 

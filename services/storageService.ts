@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings } from '../types';
 
 const API_URL = '/api';
 
@@ -73,6 +73,22 @@ export const loginWithGoogle = async (credential: string): Promise<AuthResponse>
 export const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+};
+
+export const updateSettings = async (settings: AppSettings) => {
+    const res = await fetch(`${API_URL}/settings`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ settings })
+    });
+    await handleResponse(res);
+    // Update local user object
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        const user = JSON.parse(userStr);
+        user.settings = settings;
+        localStorage.setItem('user', JSON.stringify(user));
+    }
 };
 
 // --- Collab (Family) ---

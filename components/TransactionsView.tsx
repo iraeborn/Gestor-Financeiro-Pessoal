@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import StatCard from './StatCard';
@@ -9,6 +9,7 @@ import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, Tren
 interface TransactionsViewProps {
   transactions: Transaction[];
   accounts: Account[];
+  settings?: AppSettings;
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   onToggleStatus: (t: Transaction) => void;
@@ -18,6 +19,7 @@ interface TransactionsViewProps {
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
   transactions, 
   accounts,
+  settings,
   onDelete, 
   onEdit, 
   onToggleStatus,
@@ -33,8 +35,13 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
+  const includeCards = settings?.includeCreditCardsInTotal ?? true;
+
   // --- Calculations for StatCards ---
-  const currentRealBalance = accounts.reduce((acc, curr) => acc + curr.balance, 0);
+  const currentRealBalance = accounts.reduce((acc, curr) => {
+    if (!includeCards && curr.type === AccountType.CARD) return acc;
+    return acc + curr.balance;
+  }, 0);
 
   const pendingIncome = transactions
     .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
@@ -149,7 +156,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           amount={currentRealBalance} 
           type="neutral" 
           icon={<Wallet className="w-5 h-5 text-indigo-600"/>}
-          subtitle="Disponível agora"
+          subtitle={includeCards ? "Disponível agora" : "Sem Cartões de Crédito"}
         />
         <StatCard 
           title="Saldo Projetado" 
