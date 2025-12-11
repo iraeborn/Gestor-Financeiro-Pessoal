@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, Account, TransactionStatus } from '../types';
+import { Transaction, TransactionType, Account, TransactionStatus, Contact } from '../types';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import TransactionModal from './TransactionModal';
 
 interface CalendarViewProps {
   transactions: Transaction[];
   accounts: Account[];
+  contacts: Contact[];
   onAdd: (t: Omit<Transaction, 'id'>) => void;
   onEdit: (t: Transaction) => void;
 }
@@ -25,7 +26,7 @@ interface CalendarEvent {
   items: CalendarItem[];
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, onAdd, onEdit }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, contacts, onAdd, onEdit }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDateForNew, setSelectedDateForNew] = useState<string>('');
@@ -286,6 +287,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ transactions, accounts, onA
             onClose={() => setIsModalOpen(false)}
             onSave={handleSave}
             accounts={accounts}
+            contacts={contacts}
             initialData={editingTransaction ? editingTransaction : (selectedDateForNew ? { date: selectedDateForNew } as any : null)}
         />
     </div>

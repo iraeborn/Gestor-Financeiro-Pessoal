@@ -1,17 +1,18 @@
 
 import React from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
 import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
-  accounts?: Account[]; // Adicionado para lookup de nomes
+  accounts?: Account[];
+  contacts?: Contact[]; // Injected to resolve names
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   onToggleStatus: (t: Transaction) => void;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, accounts = [], onDelete, onEdit, onToggleStatus }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, accounts = [], contacts = [], onDelete, onEdit, onToggleStatus }) => {
   
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -24,6 +25,12 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
   const getAccountName = (id: string) => {
       const acc = accounts.find(a => a.id === id);
       return acc ? acc.name : 'Desconhecida';
+  };
+
+  const getContactName = (id?: string) => {
+      if (!id) return null;
+      const c = contacts.find(co => co.id === id);
+      return c ? c.name : null;
   };
 
   const getStatusIcon = (status: TransactionStatus) => {
@@ -58,7 +65,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
           <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
             <tr>
               <th className="px-6 py-4 font-medium">Data</th>
-              <th className="px-6 py-4 font-medium">Descrição</th>
+              <th className="px-6 py-4 font-medium">Descrição / Contato</th>
               <th className="px-6 py-4 font-medium">Categoria</th>
               <th className="px-6 py-4 font-medium">Conta</th>
               <th className="px-6 py-4 font-medium">Valor</th>
@@ -80,9 +87,13 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                       <ArrowRightLeft className="w-5 h-5 text-blue-500" />
                     )}
                     <div className="flex flex-col">
-                      <span>{t.description}</span>
+                      <span className="font-semibold">{getContactName(t.contactId) || t.description}</span>
+                      {getContactName(t.contactId) && t.description !== getContactName(t.contactId) && (
+                           <span className="text-xs text-gray-400 font-normal">{t.description}</span>
+                      )}
+                      
                       {t.isRecurring && (
-                        <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full" title={getRecurrenceLabel(t) || ''}>
+                        <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full mt-1" title={getRecurrenceLabel(t) || ''}>
                           <Repeat className="w-3 h-3" />
                           {t.recurrenceFrequency === 'WEEKLY' ? 'Semanal' : t.recurrenceFrequency === 'YEARLY' ? 'Anual' : 'Mensal'}
                         </span>
@@ -95,7 +106,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                     {t.category}
                   </span>
                 </td>
-                {/* Nova Coluna: Conta */}
+                {/* Coluna: Conta */}
                 <td className="px-6 py-4 text-gray-600">
                     {t.type === TransactionType.TRANSFER ? (
                          <div className="flex flex-col text-xs">

@@ -51,9 +51,15 @@ export interface Account {
   userId?: string;
 }
 
+export interface Contact {
+  id: string;
+  name: string;
+  userId?: string;
+}
+
 export interface Transaction {
   id: string;
-  description: string;
+  description: string; // Mantemos como fallback ou nota extra
   amount: number;
   type: TransactionType;
   category: string;
@@ -65,7 +71,8 @@ export interface Transaction {
   recurrenceEndDate?: string;
   userId?: string;
   destinationAccountId?: string;
-  interestRate?: number; // Taxa de juros mensal (%)
+  interestRate?: number;
+  contactId?: string; // Novo relacionamento
 }
 
 export interface FinancialGoal {
@@ -81,6 +88,7 @@ export interface AppState {
   accounts: Account[];
   transactions: Transaction[];
   goals: FinancialGoal[];
+  contacts: Contact[]; // Nova lista no estado global
 }
 
 export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS';

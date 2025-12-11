@@ -1,17 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User } from 'lucide-react';
-import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search } from 'lucide-react';
+import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact } from '../types';
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (transaction: Omit<Transaction, 'id'>) => void;
+  onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact) => void;
   accounts: Account[];
+  contacts: Contact[];
   initialData?: Transaction | null;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, accounts, initialData }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, accounts, contacts, initialData }) => {
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -20,17 +21,24 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     date: new Date().toISOString().split('T')[0],
     status: TransactionStatus.PAID,
     accountId: '',
-    destinationAccountId: '', // Novo campo para transferência
+    destinationAccountId: '',
     isRecurring: false,
     recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
     recurrenceEndDate: '',
-    interestRate: '0'
+    interestRate: '0',
+    contactId: ''
   });
+
+  // Autocomplete State
+  const [contactSearch, setContactSearch] = useState('');
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const hasAccounts = accounts && accounts.length > 0;
 
   useEffect(() => {
     if (initialData) {
+      const contact = contacts.find(c => c.id === initialData.contactId);
       setFormData({
         description: initialData.description,
         amount: initialData.amount.toString(),
@@ -43,10 +51,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         isRecurring: initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
         recurrenceEndDate: initialData.recurrenceEndDate || '',
-        interestRate: initialData.interestRate ? initialData.interestRate.toString() : '0'
+        interestRate: initialData.interestRate ? initialData.interestRate.toString() : '0',
+        contactId: initialData.contactId || ''
       });
+      // Set initial search value to contact name if exists, else description
+      setContactSearch(contact ? contact.name : initialData.description);
     } else {
-      // Reset defaults
       setFormData({
         description: '',
         amount: '',
@@ -59,10 +69,23 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         isRecurring: false,
         recurrenceFrequency: 'MONTHLY',
         recurrenceEndDate: '',
-        interestRate: '0'
+        interestRate: '0',
+        contactId: ''
       });
+      setContactSearch('');
     }
-  }, [initialData, isOpen, accounts]);
+  }, [initialData, isOpen, accounts, contacts]);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+              setShowContactDropdown(false);
+          }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -85,8 +108,37 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         }
     }
 
+    // Determine final contact
+    let finalContactId = formData.contactId;
+    let finalDescription = formData.description;
+    let newContactObj: Contact | undefined;
+
+    // Se usuário digitou algo no campo de contato mas não selecionou ID
+    // Assumimos que quer criar um novo contato OU usar como descrição simples (se for transfer)
+    // Para Expense/Income, vamos criar o contato se ele não existe.
+    if (!finalContactId && contactSearch && formData.type !== TransactionType.TRANSFER) {
+         // Verifica se já existe pelo nome
+         const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
+         if (existing) {
+             finalContactId = existing.id;
+         } else {
+             // Create New Contact Logic
+             const newId = crypto.randomUUID();
+             newContactObj = { id: newId, name: contactSearch };
+             finalContactId = newId;
+         }
+         finalDescription = contactSearch; // Description mirrors contact name usually
+    } else if (formData.type === TransactionType.TRANSFER) {
+        // Para transferências, usamos o campo como descrição simples
+        finalDescription = contactSearch;
+    } else if (finalContactId) {
+        // Se já tem ID selecionado, garante que descrição está atualizada com nome
+        const c = contacts.find(co => co.id === finalContactId);
+        if (c) finalDescription = c.name;
+    }
+
     onSave({
-      description: formData.description,
+      description: finalDescription,
       amount: parseFloat(formData.amount),
       type: formData.type,
       category: formData.type === TransactionType.TRANSFER ? 'Transferência' : formData.category,
@@ -97,36 +149,39 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       isRecurring: formData.isRecurring,
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
-      interestRate: parseFloat(formData.interestRate) || 0
-    });
+      interestRate: parseFloat(formData.interestRate) || 0,
+      contactId: finalContactId
+    }, newContactObj);
+    
     onClose();
   };
 
-  // Helper para textos dinâmicos
   const getDynamicLabels = () => {
     switch (formData.type) {
         case TransactionType.INCOME:
             return {
-                accountLabel: 'Receber em (Destino)',
-                descLabel: 'Descrição (De quem / Motivo)',
-                descPlaceholder: 'Ex: Salário, Cliente X, Reembolso...'
+                accountLabel: 'Receber em (Conta)',
+                contactLabel: 'Origem (Quem pagou?)'
             };
         case TransactionType.EXPENSE:
             return {
-                accountLabel: 'Pagar com (Origem)',
-                descLabel: 'Descrição (Para quem / O que)',
-                descPlaceholder: 'Ex: Supermercado, Aluguel, Posto Y...'
+                accountLabel: 'Pagar com (Conta)',
+                contactLabel: 'Destino (Favorecido / Local)'
             };
         default:
             return {
                 accountLabel: 'Conta de Saída',
-                descLabel: 'Descrição',
-                descPlaceholder: 'Ex: Transf. para Poupança'
+                contactLabel: 'Descrição'
             };
     }
   };
 
   const labels = getDynamicLabels();
+
+  // Filter contacts based on search
+  const filteredContacts = contacts.filter(c => 
+      c.name.toLowerCase().includes(contactSearch.toLowerCase())
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -145,7 +200,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
             <button
               type="button"
-              onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' })}
+              onClick={() => {
+                  setFormData({ ...formData, type: TransactionType.EXPENSE, category: 'Geral' });
+                  setContactSearch(''); // Limpa ao mudar contexto
+              }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE
                   ? 'bg-white text-rose-600 shadow-sm'
@@ -156,7 +214,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </button>
             <button
               type="button"
-              onClick={() => setFormData({ ...formData, type: TransactionType.INCOME, category: 'Salário' })}
+              onClick={() => {
+                  setFormData({ ...formData, type: TransactionType.INCOME, category: 'Salário' });
+                  setContactSearch('');
+              }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.INCOME
                   ? 'bg-white text-emerald-600 shadow-sm'
@@ -167,7 +228,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </button>
             <button
               type="button"
-              onClick={() => setFormData({ ...formData, type: TransactionType.TRANSFER, category: 'Transferência' })}
+              onClick={() => {
+                  setFormData({ ...formData, type: TransactionType.TRANSFER, category: 'Transferência' });
+                  setContactSearch('Transferência');
+              }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.TRANSFER
                   ? 'bg-white text-blue-600 shadow-sm'
@@ -194,20 +258,58 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">{labels.descLabel}</label>
+          {/* Contact Autocomplete */}
+          <div className="relative" ref={dropdownRef}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{labels.contactLabel}</label>
             <div className="relative">
-                <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <div className="absolute left-3 top-2.5 pointer-events-none">
+                    {formData.type === TransactionType.TRANSFER ? <Tag className="w-4 h-4 text-gray-400"/> : <User className="w-4 h-4 text-gray-400" />}
+                </div>
                 <input
-                type="text"
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder={labels.descPlaceholder}
+                    type="text"
+                    required
+                    value={contactSearch}
+                    onFocus={() => setShowContactDropdown(true)}
+                    onChange={(e) => {
+                        setContactSearch(e.target.value);
+                        setFormData({...formData, contactId: ''}); // Reset ID if user types manually
+                        setShowContactDropdown(true);
+                    }}
+                    className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder={formData.type === TransactionType.TRANSFER ? "Motivo da transferência" : "Busque ou digite novo nome..."}
                 />
             </div>
+            
+            {/* Dropdown Results */}
+            {showContactDropdown && formData.type !== TransactionType.TRANSFER && contactSearch && (
+                <div className="absolute z-10 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredContacts.map(c => (
+                        <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                                setContactSearch(c.name);
+                                setFormData({...formData, contactId: c.id});
+                                setShowContactDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm text-gray-700 flex items-center justify-between group"
+                        >
+                            <span>{c.name}</span>
+                            <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100">Selecionar</span>
+                        </button>
+                    ))}
+                    {filteredContacts.length === 0 && contactSearch.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setShowContactDropdown(false)} // Just closes, logic in submit handles creation
+                            className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-sm text-emerald-700 flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Criar "{contactSearch}"
+                        </button>
+                    )}
+                </div>
+            )}
           </div>
 
           {/* Category & Date Row */}
@@ -250,7 +352,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             </div>
           </div>
 
-           {/* Interest Rate Field (Only for Expense/Income) */}
+           {/* Interest Rate Field */}
            {formData.type !== TransactionType.TRANSFER && (
               <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Taxa de Juros (Mensal %)</label>
@@ -265,7 +367,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                       className="block w-full rounded-lg border-gray-200 border pl-9 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
                       placeholder="0"
                     />
-                    <p className="text-[10px] text-gray-400 mt-1">Usado para calcular valor final em caso de atraso.</p>
                   </div>
               </div>
            )}
@@ -275,10 +376,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
                   <div className="col-span-2 flex items-center gap-2 text-blue-700 text-xs font-bold mb-1">
                       <ArrowRightLeft className="w-3 h-3" />
-                      Dados da Transferência
+                      Contas Envolvidas
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-blue-800 mb-1">De (Saída)</label>
+                    <label className="block text-[10px] font-bold text-blue-800 mb-1">Sai de</label>
                     <select
                         value={formData.accountId}
                         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
@@ -290,7 +391,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-blue-800 mb-1">Para (Entrada)</label>
+                    <label className="block text-[10px] font-bold text-blue-800 mb-1">Entra em</label>
                     <select
                         value={formData.destinationAccountId}
                         onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })}
@@ -319,17 +420,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         <option key={acc.id} value={acc.id}>{acc.name}</option>
                         ))
                     ) : (
-                        <option value="">Nenhuma conta disponível</option>
+                        <option value="">Nenhuma conta</option>
                     )}
                     </select>
-                    {!hasAccounts && (
-                    <div className="absolute top-10 left-0 w-full">
-                        <p className="text-[10px] text-red-500 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            Cadastre uma conta primeiro
-                        </p>
-                    </div>
-                    )}
                 </div>
                 </div>
                 <div>
@@ -358,7 +451,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               />
               <label htmlFor="recurring" className="text-sm font-medium text-gray-700 flex items-center gap-1">
                 <Repeat className="w-3.5 h-3.5" />
-                {formData.type === TransactionType.TRANSFER ? 'Transferência recorrente?' : 'Conta recorrente?'}
+                Recorrente?
               </label>
             </div>
             
@@ -377,14 +470,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     </select>
                  </div>
                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Data de Término (Opcional)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Data de Término</label>
                     <input
                       type="date"
                       value={formData.recurrenceEndDate}
                       onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
                       className="block w-full rounded-lg border-gray-200 border px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Deixe vazio se for contínuo.</p>
                  </div>
               </div>
             )}

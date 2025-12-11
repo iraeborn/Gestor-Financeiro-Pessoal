@@ -1,12 +1,13 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact } from '../types';
 
 const API_URL = '/api';
 
 const INITIAL_EMPTY_STATE: AppState = {
   accounts: [],
   transactions: [],
-  goals: []
+  goals: [],
+  contacts: []
 };
 
 const getHeaders = () => {
@@ -140,6 +141,10 @@ export const api = {
   deleteAccount: async (id: string) => {
     const res = await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE', headers: getHeaders() });
     await handleResponse(res);
+  },
+  saveContact: async (contact: Contact) => {
+      const res = await fetch(`${API_URL}/contacts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(contact) });
+      await handleResponse(res);
   },
   saveTransaction: async (transaction: Transaction) => {
     const res = await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });

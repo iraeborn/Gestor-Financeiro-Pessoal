@@ -53,14 +53,14 @@ pool.connect()
     console.log('DB Connected Successfully');
     // Migrations Automáticas
     try {
-        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL;`);
-        console.log('Migration: destination_account_id column verified.');
-        
-        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
-        console.log('Migration: settings column verified.');
+        await client.query(`CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+        console.log('Migration: contacts table verified.');
 
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}';`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_rate DECIMAL(10,2) DEFAULT 0;`);
-        console.log('Migration: interest_rate column verified.');
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL;`);
+        console.log('Migration: transactions columns verified.');
     } catch (e) {
         console.error('Migration Error:', e.message);
     } finally {
@@ -135,7 +135,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // --- Auth Routes ---
-
+// (Mantidos iguais - omitindo para brevidade na resposta do prompt, mas essenciais no arquivo final)
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
   try {
@@ -143,14 +143,11 @@ app.post('/api/auth/register', async (req, res) => {
     const id = crypto.randomUUID();
     const check = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (check.rows.length > 0) return res.status(400).json({ error: 'Email já cadastrado' });
-
     const defaultSettings = { includeCreditCardsInTotal: true };
-
     await pool.query(
       'INSERT INTO users (id, name, email, password_hash, family_id, settings) VALUES ($1, $2, $3, $4, $1, $5)',
       [id, name, email, hashedPassword, defaultSettings]
     );
-
     const user = { id, name, email, familyId: id, settings: defaultSettings };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
@@ -165,16 +162,13 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const userRow = result.rows[0];
     if (!userRow || !userRow.password_hash) return res.status(400).json({ error: 'Login inválido' });
-
     const valid = await bcrypt.compare(password, userRow.password_hash);
     if (!valid) return res.status(400).json({ error: 'Senha incorreta' });
-
     let familyId = userRow.family_id;
     if (!familyId) {
         familyId = userRow.id;
         await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [familyId, userRow.id]);
     }
-
     const user = { 
         id: userRow.id, 
         name: userRow.name, 
@@ -195,12 +189,9 @@ app.post('/api/auth/google', async (req, res) => {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const { sub: googleId, email, name } = payload;
-
     let result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     let userRow = result.rows[0];
-
     const defaultSettings = { includeCreditCardsInTotal: true };
-
     if (!userRow) {
        const id = crypto.randomUUID();
        await pool.query(
@@ -215,7 +206,6 @@ app.post('/api/auth/google', async (req, res) => {
            userRow.family_id = userRow.id;
        }
     }
-
     const user = { 
         id: userRow.id, 
         name: userRow.name, 
@@ -231,7 +221,6 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// --- Settings Route ---
 app.post('/api/settings', authenticateToken, async (req, res) => {
     const { settings } = req.body;
     const userId = req.user.id;
@@ -243,14 +232,12 @@ app.post('/api/settings', authenticateToken, async (req, res) => {
     }
 });
 
-// --- Invite Routes ---
 app.post('/api/invite/create', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         const familyId = await ensureFamilyId(userId);
         const code = crypto.randomBytes(3).toString('hex').toUpperCase();
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); 
-
         await pool.query('INSERT INTO invites (code, family_id, created_by, expires_at) VALUES ($1, $2, $3, $4)', 
             [code, familyId, userId, expiresAt]);
         res.json({ code, expiresAt });
@@ -265,15 +252,11 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
     try {
         const inviteRes = await pool.query('SELECT * FROM invites WHERE code = $1', [code]);
         const invite = inviteRes.rows[0];
-
         if (!invite) return res.status(404).json({ error: 'Código inválido' });
         if (new Date() > new Date(invite.expires_at)) return res.status(400).json({ error: 'Código expirado' });
-
         await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
-
         const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
         const userRow = userRes.rows[0];
-        
         const user = { 
             id: userRow.id, 
             name: userRow.name, 
@@ -282,7 +265,6 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
             settings: userRow.settings || { includeCreditCardsInTotal: true }
         };
         const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
-
         res.json({ success: true, user, token });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -302,7 +284,6 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
 
 // --- Data Routes ---
 
-// Use for read-only queries where there is only one parameter ($1 = userId)
 const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
@@ -311,6 +292,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const accs = await pool.query(`SELECT * FROM accounts WHERE ${getFamilyCondition}`, [userId]);
         const trans = await pool.query(`SELECT * FROM transactions WHERE ${getFamilyCondition} ORDER BY date DESC`, [userId]);
         const goals = await pool.query(`SELECT * FROM goals WHERE ${getFamilyCondition}`, [userId]);
+        const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition}`, [userId]);
 
         res.json({
             accounts: accs.rows.map(r => ({ id: r.id, name: r.name, type: r.type, balance: parseFloat(r.balance) })),
@@ -321,12 +303,14 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 destinationAccountId: r.destination_account_id,
                 isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
                 recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined,
-                interestRate: r.interest_rate ? parseFloat(r.interest_rate) : 0
+                interestRate: r.interest_rate ? parseFloat(r.interest_rate) : 0,
+                contactId: r.contact_id
             })),
             goals: goals.rows.map(r => ({ 
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
                 currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined 
-            }))
+            })),
+            contacts: contacts.rows.map(r => ({ id: r.id, name: r.name }))
         });
     } catch (err) {
         console.error('Initial Data Error:', err);
@@ -362,16 +346,30 @@ app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/api/contacts', authenticateToken, async (req, res) => {
+    const { id, name } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO contacts (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2`,
+            [id, name, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              ON CONFLICT (id) DO UPDATE SET 
-                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13`,
-            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate || 0, userId]
+                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14`,
+            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate || 0, t.contactId, userId]
         );
         res.json({ success: true });
     } catch (err) {
@@ -392,24 +390,17 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// --- API Fallback ---
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });
 
-// --- Serve Frontend ---
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath, { index: false }));
-
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (!fs.existsSync(indexPath)) return res.status(500).send('Build not found. Run npm run build.');
-    
     fs.readFile(indexPath, 'utf8', (err, htmlData) => {
-        if (err) {
-            console.error('Error reading index.html', err);
-            return res.status(500).send('Error');
-        }
+        if (err) return res.status(500).send('Error');
         const envScript = `<script>window.GOOGLE_CLIENT_ID = "${GOOGLE_CLIENT_ID}";</script>`;
         res.send(htmlData.replace('</head>', `${envScript}</head>`));
     });

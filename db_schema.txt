@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT,
     google_id TEXT,
     family_id TEXT, -- Usuários com o mesmo family_id compartilham a visualização
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    settings JSONB DEFAULT '{"includeCreditCardsInTotal": true}'
 );
 
 -- Criação da Tabela de Convites
@@ -33,6 +34,14 @@ CREATE TABLE IF NOT EXISTS accounts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Criação da Tabela de Contatos (Favorecidos / Pagadores)
+CREATE TABLE IF NOT EXISTS contacts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    user_id TEXT REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Criação da Tabela de Transações
 -- Receitas e Despesas
 CREATE TABLE IF NOT EXISTS transactions (
@@ -45,6 +54,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     status TEXT NOT NULL, -- PAID, PENDING, OVERDUE
     account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
     destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL, -- Coluna para Transferências
+    contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL, -- Vínculo com Contato
     user_id TEXT REFERENCES users(id),
     is_recurring BOOLEAN DEFAULT FALSE,
     recurrence_frequency TEXT, -- WEEKLY, MONTHLY, YEARLY

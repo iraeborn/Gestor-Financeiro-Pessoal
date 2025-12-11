@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode, AppSettings, AccountType } from '../types';
+import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode, AppSettings, AccountType, Contact } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
@@ -12,9 +12,9 @@ import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, 
 interface DashboardProps {
   state: AppState;
   settings?: AppSettings;
-  onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
+  onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact) => void;
   onDeleteTransaction: (id: string) => void;
-  onEditTransaction: (t: Transaction) => void;
+  onEditTransaction: (t: Transaction, newContact?: Contact) => void;
   onUpdateStatus: (t: Transaction) => void;
   onSaveAccount: (a: Account) => void;
   onDeleteAccount: (id: string) => void;
@@ -76,11 +76,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     setTransModalOpen(true);
   };
 
-  const handleSaveTrans = (t: Omit<Transaction, 'id'>) => {
+  const handleSaveTrans = (t: Omit<Transaction, 'id'>, newContact?: Contact) => {
     if (editingTransaction) {
-        onEditTransaction({ ...t, id: editingTransaction.id });
+        onEditTransaction({ ...t, id: editingTransaction.id }, newContact);
     } else {
-        onAddTransaction(t);
+        onAddTransaction(t, newContact);
     }
     setEditingTransaction(null);
   };
@@ -232,6 +232,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <TransactionList 
                   transactions={state.transactions.slice(0, recentLimit)} 
                   accounts={state.accounts} // Passando contas
+                  contacts={state.contacts} // Passando contatos
                   onDelete={onDeleteTransaction}
                   onEdit={handleEditTrans}
                   onToggleStatus={handleStatusToggle}
@@ -319,6 +320,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         onClose={closeTransModal} 
         onSave={handleSaveTrans}
         accounts={state.accounts}
+        contacts={state.contacts}
         initialData={editingTransaction}
       />
       

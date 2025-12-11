@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType, Contact } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
@@ -10,6 +10,7 @@ import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, Tren
 interface TransactionsViewProps {
   transactions: Transaction[];
   accounts: Account[];
+  contacts: Contact[];
   settings?: AppSettings;
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
@@ -20,6 +21,7 @@ interface TransactionsViewProps {
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
   transactions, 
   accounts,
+  contacts,
   settings,
   onDelete, 
   onEdit, 
@@ -271,7 +273,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       <TransactionList 
         transactions={filteredTransactions} 
-        accounts={accounts} // Passando contas
+        accounts={accounts} 
+        contacts={contacts}
         onDelete={onDelete}
         onEdit={handleOpenEdit}
         onToggleStatus={handleStatusToggle}
@@ -282,6 +285,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         onClose={handleCloseModal} 
         onSave={handleSave}
         accounts={accounts}
+        contacts={contacts}
         initialData={editingTransaction}
       />
 

@@ -10,11 +10,11 @@ import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({ accounts: [], transactions: [], goals: [] });
+  const [state, setState] = useState<AppState>({ accounts: [], transactions: [], goals: [], contacts: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -72,12 +72,21 @@ const App: React.FC = () => {
 
   // --- Transactions Logic ---
 
-  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>) => {
+  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact) => {
     try {
         const transaction: Transaction = {
           ...newTransaction,
           id: crypto.randomUUID(),
         };
+
+        // 0. Handle New Contact Creation (if any)
+        if (newContact) {
+            await api.saveContact(newContact);
+            setState(prev => ({
+                ...prev,
+                contacts: [...prev.contacts, newContact]
+            }));
+        }
 
         // 1. Update Server (Saves Single Record)
         await api.saveTransaction(transaction);
@@ -174,10 +183,19 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEditTransaction = async (updatedT: Transaction) => {
+  const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact) => {
     try {
         const oldT = state.transactions.find(t => t.id === updatedT.id);
         if (!oldT) return;
+
+        // 0. Handle New Contact Creation (if any)
+        if (newContact) {
+            await api.saveContact(newContact);
+            setState(prev => ({
+                ...prev,
+                contacts: [...prev.contacts, newContact]
+            }));
+        }
 
         // 1. Update Server
         await api.saveTransaction(updatedT);
@@ -329,6 +347,7 @@ const App: React.FC = () => {
           <TransactionsView 
             transactions={state.transactions} 
             accounts={state.accounts}
+            contacts={state.contacts}
             settings={currentUser.settings}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
@@ -341,6 +360,7 @@ const App: React.FC = () => {
           <CalendarView 
             transactions={state.transactions}
             accounts={state.accounts}
+            contacts={state.contacts}
             onAdd={handleAddTransaction}
             onEdit={handleEditTransaction}
           />
