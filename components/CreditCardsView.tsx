@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Account, AccountType, Transaction, TransactionType } from '../types';
-import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Account, AccountType, Transaction, TransactionType, TransactionStatus } from '../types';
+import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import AccountModal from './AccountModal';
 
 interface CreditCardsViewProps {
@@ -30,7 +30,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
     setEditingAccount(null);
   };
 
-  // Calcula a data de início da fatura atual (dia após o fechamento do mês anterior ou atual)
+  // Calcula a data de início da fatura atual
   const getBillingCycleStart = (closingDay: number): Date => {
       const today = new Date();
       const currentMonth = today.getMonth();
@@ -38,7 +38,6 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
       
       // Se hoje é antes do dia de fechamento, a fatura atual começou no fechamento do mês anterior
       if (today.getDate() < closingDay) {
-          // Mês passado
           let lastMonth = currentMonth - 1;
           let year = currentYear;
           if (lastMonth < 0) {
@@ -47,54 +46,66 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
           }
           return new Date(year, lastMonth, closingDay);
       } else {
-          // Se hoje já passou do dia de fechamento, o ciclo começou neste mês
           return new Date(currentYear, currentMonth, closingDay);
       }
   };
 
   const calculateCardMetrics = (card: Account) => {
       // 1. Saldo Total (Dívida Acumulada no Banco de Dados)
-      // Se o usuário faz tudo certo, isso deve ser negativo.
-      const totalDebt = card.balance < 0 ? Math.abs(card.balance) : 0; 
+      // Representa tudo o que foi usado do limite: Parcelas Futuras + Fatura Atual + Atrasados + Saldo Inicial Manual
+      const totalUsedLimit = card.balance < 0 ? Math.abs(card.balance) : 0; 
       
-      // 2. Fatura Atual (Gastos do Ciclo)
+      // 2. Fatura Atual (Gastos Novos do Ciclo)
       let currentInvoice = 0;
+      let overdueAmount = 0;
       let status = "Indefinido";
+
+      // Calcular Fatura em Atraso (Status = OVERDUE ou PENDING com data antiga)
+      // Para simplificar, assumimos que o usuário marca como OVERDUE explicitamente ou data < hoje
+      overdueAmount = transactions
+        .filter(t => 
+            t.accountId === card.id && 
+            t.type === TransactionType.EXPENSE &&
+            t.status === TransactionStatus.OVERDUE
+        )
+        .reduce((acc, t) => acc + t.amount, 0);
 
       if (card.closingDay) {
           const startDate = getBillingCycleStart(card.closingDay);
           
-          // Somar todas as DESPESAS feitas neste cartão após a data de início do ciclo
+          // Somar DESPESAS deste ciclo (que não estão pagas nem atrasadas)
           currentInvoice = transactions
             .filter(t => 
                 t.accountId === card.id && 
                 t.type === TransactionType.EXPENSE &&
+                t.status === TransactionStatus.PENDING &&
                 new Date(t.date) >= startDate
             )
             .reduce((acc, t) => acc + t.amount, 0);
 
           const today = new Date().getDate();
           if (today < card.closingDay) status = "Aberta";
-          else if (card.dueDay && today > card.dueDay) status = "Vencida";
+          else if (card.dueDay && today > card.dueDay) status = "Fechada";
           else status = "Fechada";
-      } else {
-          // Fallback se não tiver dia configurado
-          currentInvoice = totalDebt;
       }
 
-      // 3. Limite Disponível
-      // O limite disponível é baseado na Dívida Total Real, não apenas na fatura do mês.
-      // Ex: Limite 5000. Dívida Total 2000 (1000 parcelado + 1000 mês atual). Disponível 3000.
-      const limit = card.creditLimit || 0;
-      // Balance positivo no cartão significa crédito extra, negativo significa dívida.
-      // Disponível = Limite + Saldo (se saldo for -200, Limite - 200).
-      const available = limit + card.balance;
+      // 3. Saldo Residual / Parcelado Futuro / Legado
+      // É a diferença entre o que sabemos (Fatura Atual + Atrasada) e o que o banco diz (Total Usado)
+      // Se o usuário cadastrou um saldo inicial de -4000 e só tem 500 de fatura atual, os 3500 são "Outros/Parcelado"
+      const knownExpenses = currentInvoice + overdueAmount;
+      const residualDebt = Math.max(0, totalUsedLimit - knownExpenses);
 
-      const usagePercent = limit > 0 ? Math.min(100, (totalDebt / limit) * 100) : 0;
+      // 4. Limite Disponível
+      const limit = card.creditLimit || 0;
+      const available = limit - totalUsedLimit; // Simples: Limite - Tudo que tá devendo
+
+      const usagePercent = limit > 0 ? Math.min(100, (totalUsedLimit / limit) * 100) : 0;
 
       return {
           currentInvoice,
-          totalDebt,
+          overdueAmount,
+          residualDebt,
+          totalUsedLimit,
           available,
           usagePercent,
           status,
@@ -129,10 +140,10 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {cards.map(card => {
-                const { currentInvoice, totalDebt, available, usagePercent, status, limit } = calculateCardMetrics(card);
+                const { currentInvoice, overdueAmount, residualDebt, totalUsedLimit, available, usagePercent, status, limit } = calculateCardMetrics(card);
 
                 return (
-                    <div key={card.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-shadow">
+                    <div key={card.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-shadow flex flex-col h-full">
                         {/* Card Header Visual */}
                         <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white relative">
                             <div className="flex justify-between items-start">
@@ -142,15 +153,13 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
                                 </div>
                                 <CreditCard className="w-8 h-8 text-slate-400 opacity-50" />
                             </div>
-                            <div className="mt-6 flex justify-between items-end">
-                                <div>
-                                    <p className="text-xs text-slate-400 mb-1">Fatura Atual (Ciclo)</p>
-                                    <span className="text-2xl font-bold">{formatCurrency(currentInvoice)}</span>
-                                </div>
-                                <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${status === 'Aberta' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                                    {status}
-                                </div>
+                            
+                            {/* Grande destaque para o Disponível */}
+                            <div className="mt-6">
+                                <p className="text-xs text-slate-400 mb-1">Limite Disponível</p>
+                                <span className="text-3xl font-bold text-emerald-400">{formatCurrency(available)}</span>
                             </div>
+
                             {/* Action Buttons Overlay */}
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => handleEdit(card)} className="p-1.5 bg-white/20 hover:bg-white/30 rounded backdrop-blur-sm">
@@ -168,51 +177,67 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({ accounts, transaction
                         </div>
 
                         {/* Card Details */}
-                        <div className="p-6 space-y-4">
-                            {/* Progress Bar */}
-                            <div>
+                        <div className="p-6 space-y-5 flex-1 flex flex-col">
+                            {/* Alerta de Atraso */}
+                            {overdueAmount > 0 && (
+                                <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 flex items-start gap-3">
+                                    <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-bold text-rose-700 uppercase">Fatura em Atraso</p>
+                                        <p className="text-lg font-bold text-rose-600">{formatCurrency(overdueAmount)}</p>
+                                        <p className="text-[10px] text-rose-500 leading-tight mt-1">
+                                            Regularize para evitar juros.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Resumo da Dívida */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Fatura Atual</p>
+                                    <p className="text-base font-bold text-gray-800">{formatCurrency(currentInvoice)}</p>
+                                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${status === 'Aberta' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {status}
+                                    </span>
+                                </div>
+                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] text-gray-500 uppercase font-bold mb-1" title="Parcelas futuras ou saldo inicial não detalhado">Outros / Parc.</p>
+                                    <p className="text-base font-bold text-gray-600">{formatCurrency(residualDebt)}</p>
+                                </div>
+                            </div>
+
+                            {/* Progress Bar - Total Limit Usage */}
+                            <div className="mt-auto pt-2">
                                 <div className="flex justify-between text-xs mb-1.5">
-                                    <span className="text-gray-500">Limite Utilizado (Total)</span>
+                                    <span className="text-gray-500">Comprometimento Total</span>
                                     <span className="font-medium text-gray-700">{Math.round(usagePercent)}%</span>
                                 </div>
-                                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1">
                                     <div 
-                                        className={`h-full rounded-full transition-all duration-500 ${usagePercent > 80 ? 'bg-rose-500' : usagePercent > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                        className={`h-full rounded-full transition-all duration-500 ${usagePercent > 90 ? 'bg-rose-500' : usagePercent > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
                                         style={{ width: `${usagePercent}%` }}
                                     ></div>
                                 </div>
-                                <div className="flex justify-between text-xs mt-1.5">
-                                    <span className="text-gray-400">Disp: {formatCurrency(available)}</span>
-                                    <span className="text-gray-400">Total: {formatCurrency(limit)}</span>
+                                <div className="text-right">
+                                    <span className="text-[10px] text-gray-400">Total: {formatCurrency(limit)}</span>
                                 </div>
-                            </div>
-
-                            {/* Help Text for Payment */}
-                            <div className="bg-blue-50 p-2 rounded-lg flex gap-2 items-start">
-                                <ArrowRightLeft className="w-4 h-4 text-blue-500 mt-0.5" />
-                                <p className="text-[10px] text-blue-700 leading-tight">
-                                    Para pagar a fatura, realize uma <strong>Transferência</strong> da sua conta bancária para este cartão. Isso reduzirá a dívida total.
-                                </p>
                             </div>
 
                             {/* Dates */}
-                            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                                        <TrendingUp className="w-4 h-4" />
-                                    </div>
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
+                                <div className="flex items-center gap-2">
+                                    <TrendingUp className="w-4 h-4 text-indigo-400" />
                                     <div>
-                                        <p className="text-[10px] text-gray-400 uppercase font-bold">Fechamento</p>
-                                        <p className="text-sm font-semibold text-gray-700">Dia {card.closingDay || '--'}</p>
+                                        <p className="text-[9px] text-gray-400 uppercase font-bold">Fecha dia</p>
+                                        <p className="text-sm font-semibold text-gray-700">{card.closingDay || '--'}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
-                                        <AlertCircle className="w-4 h-4" />
-                                    </div>
+                                <div className="flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4 text-rose-400" />
                                     <div>
-                                        <p className="text-[10px] text-gray-400 uppercase font-bold">Vencimento</p>
-                                        <p className="text-sm font-semibold text-gray-700">Dia {card.dueDay || '--'}</p>
+                                        <p className="text-[9px] text-gray-400 uppercase font-bold">Vence dia</p>
+                                        <p className="text-sm font-semibold text-gray-700">{card.dueDay || '--'}</p>
                                     </div>
                                 </div>
                             </div>

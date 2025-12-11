@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Wallet, Building, CreditCard, TrendingUp, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { X, Wallet, Building, CreditCard, TrendingUp, DollarSign, Calendar, AlertCircle, Info } from 'lucide-react';
 import { Account, AccountType } from '../types';
 
 interface AccountModalProps {
@@ -105,33 +105,19 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Saldo / Fatura Atual (R$)</label>
-            <div className="relative">
-              <DollarSign className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={formData.balance}
-                onChange={(e) => setFormData({ ...formData, balance: e.target.value })}
-                className="pl-9 block w-full rounded-lg border-gray-200 border py-2 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="0.00"
-              />
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1">
-                {formData.type === AccountType.CARD 
-                    ? "Para cartões, insira o valor da fatura atual negativo (ex: -150.00)."
-                    : "Saldo atual disponível."}
-            </p>
-          </div>
-
           {/* Campos Específicos para Cartão */}
           {formData.type === AccountType.CARD && (
-              <div className="space-y-4 pt-2 border-t border-gray-100">
-                  <div className="flex items-center gap-2 mb-2">
-                      <CreditCard className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider">Detalhes do Cartão</span>
+              <div className="space-y-4 pt-2 border-t border-gray-100 animate-fade-in">
+                  <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                      <div className="flex gap-2 items-start">
+                          <Info className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                          <p className="text-[11px] text-indigo-800 leading-tight">
+                              <strong>Como cadastrar cartão em uso:</strong><br/>
+                              1. Defina o <strong>Limite Total</strong>.<br/>
+                              2. Em <strong>Valor Utilizado</strong>, coloque o total da dívida atual (compras parceladas + faturas em aberto + atrasados) como negativo.<br/>
+                              <em className="block mt-1">Ex: Limite 7.500. Disponível 2.800. Dívida = -4.700.</em>
+                          </p>
+                      </div>
                   </div>
                   
                   <div>
@@ -142,7 +128,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
                         value={formData.creditLimit}
                         onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
                         className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="Ex: 5000.00"
+                        placeholder="Ex: 7500.00"
                     />
                   </div>
 
@@ -161,7 +147,6 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
                                 placeholder="Dia"
                             />
                         </div>
-                        <p className="text-[9px] text-gray-400 mt-0.5">Melhor dia compra</p>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Dia Vencimento</label>
@@ -181,6 +166,29 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
                   </div>
               </div>
           )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+                {formData.type === AccountType.CARD ? 'Valor Utilizado Total (Dívida)' : 'Saldo Atual (R$)'}
+            </label>
+            <div className="relative">
+              <DollarSign className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={formData.balance}
+                onChange={(e) => setFormData({ ...formData, balance: e.target.value })}
+                className="pl-9 block w-full rounded-lg border-gray-200 border py-2 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder={formData.type === AccountType.CARD ? "-4631.39" : "0.00"}
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">
+                {formData.type === AccountType.CARD 
+                    ? "Insira valor negativo. O sistema calculará o disponível."
+                    : "Saldo atual disponível."}
+            </p>
+          </div>
 
           <button
             type="submit"
