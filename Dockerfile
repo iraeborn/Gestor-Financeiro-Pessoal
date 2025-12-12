@@ -1,5 +1,4 @@
 # ============================
-
 # 1) STAGE DE BUILD
 # ============================
 FROM node:18 AS build
@@ -48,3 +47,4 @@ ENV PORT=8080
 ENV NODE_ENV=production
 
 CMD ["node", "server/index.js"]
+
