@@ -17,8 +17,9 @@ import AdminDashboard from './components/AdminDashboard';
 import ServiceModule from './components/ServiceModule';
 import AccessView from './components/AccessView';
 import CategoriesView from './components/CategoriesView'; 
+import GoalsView from './components/GoalsView';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment, FinancialGoal } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 import { useAlert, useConfirm } from './components/AlertSystem';
 
@@ -409,6 +410,25 @@ const App: React.FC = () => {
       }
   };
 
+  // --- Goals Logic ---
+  const handleSaveGoal = async (goal: FinancialGoal) => {
+      try {
+          await api.saveGoal(goal);
+          setState(prev => {
+              const exists = prev.goals.find(g => g.id === goal.id);
+              if (exists) return { ...prev, goals: prev.goals.map(g => g.id === goal.id ? goal : g) };
+              return { ...prev, goals: [...prev.goals, goal] };
+          });
+      } catch(e: any) { showAlert("Erro ao salvar meta", "error"); }
+  };
+
+  const handleDeleteGoal = async (id: string) => {
+      try {
+          await api.deleteGoal(id);
+          setState(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
+      } catch(e: any) { showAlert("Erro ao excluir meta", "error"); }
+  };
+
   // --- PJ Entities Logic ---
   const handleSavePJEntity = async (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => {
       try {
@@ -675,6 +695,14 @@ const App: React.FC = () => {
             onAdd={handleAddTransaction}
             onEdit={handleEditTransaction}
           />
+        );
+      case 'FIN_GOALS':
+        return (
+            <GoalsView 
+                goals={state.goals}
+                onSaveGoal={handleSaveGoal}
+                onDeleteGoal={handleDeleteGoal}
+            />
         );
       case 'FIN_CARDS':
         return (

@@ -238,7 +238,14 @@ export const api = {
     const res = await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE', headers: getHeaders() });
     await handleResponse(res);
   },
-  saveGoal: async (goal: FinancialGoal) => {},
+  saveGoal: async (goal: FinancialGoal) => {
+      const res = await fetch(`${API_URL}/goals`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(goal) });
+      await handleResponse(res);
+  },
+  deleteGoal: async (id: string) => {
+      const res = await fetch(`${API_URL}/goals/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
   
   // PJ Methods
   saveCompanyProfile: async (company: CompanyProfile) => {

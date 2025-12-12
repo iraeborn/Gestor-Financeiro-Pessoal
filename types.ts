@@ -297,13 +297,14 @@ export type ViewMode =
   | 'FIN_REPORTS' 
   | 'FIN_ADVISOR'
   | 'FIN_CATEGORIES'
-  | 'FIN_CONTACTS' // Novo: Contatos com viés financeiro
+  | 'FIN_CONTACTS' 
+  | 'FIN_GOALS' // Novo: Metas
   // Odonto
   | 'ODONTO_AGENDA'
   | 'ODONTO_PATIENTS'
   | 'ODONTO_PROCEDURES'
   // Gestão / Sistema
-  | 'SYS_CONTACTS' // Contatos com viés administrativo (Master)
+  | 'SYS_CONTACTS' 
   | 'SYS_LOGS'
   | 'SYS_SETTINGS'
   | 'SYS_ACCESS';

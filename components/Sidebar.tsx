@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
@@ -89,6 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
               { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
               { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
               { id: 'FIN_CALENDAR', label: 'Calendário', icon: CalendarDays },
+              { id: 'FIN_GOALS', label: 'Metas', icon: Target },
               { id: 'FIN_CARDS', label: 'Meus Cartões', icon: CreditCard },
               { id: 'FIN_REPORTS', label: 'Relatórios', icon: PieChart },
               { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },

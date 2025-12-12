@@ -924,6 +924,44 @@ app.post('/api/revert-change', authenticateToken, async (req, res) => {
     }
 });
 
+// --- GOALS ROUTES ---
+app.post('/api/goals', authenticateToken, async (req, res) => {
+    const { id, name, targetAmount, currentAmount, deadline } = req.body;
+    const userId = req.user.id;
+    try {
+        const existingRes = await pool.query('SELECT * FROM goals WHERE id = $1', [id]);
+        const existing = existingRes.rows[0];
+        const action = existing ? 'UPDATE' : 'CREATE';
+
+        const changes = calculateChanges(existing, req.body, { 
+            name: 'name', targetAmount: 'target_amount', currentAmount: 'current_amount', deadline: 'deadline' 
+        });
+
+        await pool.query(
+            `INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (id) DO UPDATE SET 
+                name = $2, target_amount = $3, current_amount = $4, deadline = $5, deleted_at = NULL`,
+            [id, name, targetAmount, currentAmount, deadline || null, userId]
+        );
+        
+        await logAudit(pool, userId, action, 'goal', id, `Meta: ${name}`, existing, changes);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/goals/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const row = await pool.query(`SELECT * FROM goals WHERE id = $1`, [req.params.id]);
+        const previousState = row.rows[0];
+        
+        await pool.query(`UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
+        await logAudit(pool, userId, 'DELETE', 'goal', req.params.id, `Meta: ${previousState?.name}`, previousState);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 const createPjEndpoints = (pathName, tableName, entityName) => {
     app.post(`/api/${pathName}`, authenticateToken, async (req, res) => {
         const { id, name, code } = req.body;
