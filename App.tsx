@@ -139,8 +139,10 @@ const App: React.FC = () => {
 
         setState(prevState => {
           let updatedAccounts = [...prevState.accounts];
+          let updatedGoals = [...prevState.goals];
           
           if (transaction.status === TransactionStatus.PAID) {
+            // Update Accounts
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === transaction.accountId) {
                 let newBalance = acc.balance;
@@ -156,11 +158,22 @@ const App: React.FC = () => {
               }
               return acc;
             });
+
+            // Update Goals if linked
+            if (transaction.goalId) {
+                updatedGoals = updatedGoals.map(g => {
+                    if (g.id === transaction.goalId) {
+                        return { ...g, currentAmount: g.currentAmount + transaction.amount };
+                    }
+                    return g;
+                });
+            }
           }
 
           return {
             ...prevState,
             accounts: updatedAccounts,
+            goals: updatedGoals,
             transactions: [transaction, ...prevState.transactions]
           };
         });
@@ -189,7 +202,10 @@ const App: React.FC = () => {
 
         setState(prevState => {
           let updatedAccounts = [...prevState.accounts];
+          let updatedGoals = [...prevState.goals];
+
           if (target.status === TransactionStatus.PAID) {
+            // Revert Accounts
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === target.accountId) {
                  let newBalance = acc.balance;
@@ -205,11 +221,22 @@ const App: React.FC = () => {
               }
               return acc;
             });
+
+            // Revert Goals
+            if (target.goalId) {
+                updatedGoals = updatedGoals.map(g => {
+                    if (g.id === target.goalId) {
+                        return { ...g, currentAmount: g.currentAmount - target.amount };
+                    }
+                    return g;
+                });
+            }
           }
 
           return {
             ...prevState,
             accounts: updatedAccounts,
+            goals: updatedGoals,
             transactions: prevState.transactions.filter(t => t.id !== id)
           };
         });
@@ -238,7 +265,9 @@ const App: React.FC = () => {
 
         setState(prevState => {
             let updatedAccounts = [...prevState.accounts];
+            let updatedGoals = [...prevState.goals];
 
+            // 1. Revert Old Effect
             if (oldT.status === TransactionStatus.PAID) {
                 updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === oldT.accountId) {
@@ -252,8 +281,13 @@ const App: React.FC = () => {
                     }
                     return acc;
                 });
+
+                if (oldT.goalId) {
+                    updatedGoals = updatedGoals.map(g => g.id === oldT.goalId ? { ...g, currentAmount: g.currentAmount - oldT.amount } : g);
+                }
             }
 
+            // 2. Apply New Effect
             if (updatedT.status === TransactionStatus.PAID) {
                  updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === updatedT.accountId) {
@@ -267,8 +301,13 @@ const App: React.FC = () => {
                     }
                     return acc;
                 });
+
+                if (updatedT.goalId) {
+                    updatedGoals = updatedGoals.map(g => g.id === updatedT.goalId ? { ...g, currentAmount: g.currentAmount + updatedT.amount } : g);
+                }
             }
             
+            // Persist Account Balances locally updated
             updatedAccounts.forEach(acc => {
                 const original = prevState.accounts.find(a => a.id === acc.id);
                 if (original && original.balance !== acc.balance) {
@@ -279,6 +318,7 @@ const App: React.FC = () => {
             return {
                 ...prevState,
                 accounts: updatedAccounts,
+                goals: updatedGoals,
                 transactions: prevState.transactions.map(t => t.id === updatedT.id ? updatedT : t)
             };
         });
@@ -700,8 +740,10 @@ const App: React.FC = () => {
         return (
             <GoalsView 
                 goals={state.goals}
+                accounts={state.accounts}
                 onSaveGoal={handleSaveGoal}
                 onDeleteGoal={handleDeleteGoal}
+                onAddTransaction={handleAddTransaction}
             />
         );
       case 'FIN_CARDS':

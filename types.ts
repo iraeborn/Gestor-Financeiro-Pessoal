@@ -185,6 +185,7 @@ export interface Transaction {
   destinationAccountId?: string;
   interestRate?: number;
   contactId?: string;
+  goalId?: string; // Link to FinancialGoal (Aporte)
   // PJ Fields
   branchId?: string;
   destinationBranchId?: string; // Para transferências entre filiais

@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { FinancialGoal } from '../types';
-import { Target, Plus, Trash2, Calendar, TrendingUp, DollarSign, CheckCircle, AlertTriangle, ArrowRight, Lightbulb } from 'lucide-react';
+import { FinancialGoal, Account, TransactionType, TransactionStatus, Transaction } from '../types';
+import { Target, Plus, Trash2, Calendar, TrendingUp, DollarSign, CheckCircle, AlertTriangle, ArrowRight, Lightbulb, Wallet } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface GoalsViewProps {
   goals: FinancialGoal[];
+  accounts: Account[];
   onSaveGoal: (g: FinancialGoal) => void;
   onDeleteGoal: (id: string) => void;
+  onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
 }
 
 interface PlanResult {
@@ -18,9 +20,11 @@ interface PlanResult {
     summary: string;
 }
 
-const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }) => {
+const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, onSaveGoal, onDeleteGoal, onAddTransaction }) => {
   const { showAlert } = useAlert();
   const { showConfirm } = useConfirm();
+  
+  // States for Goal Edit/Create Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
       id: '',
@@ -31,6 +35,15 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
   });
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
 
+  // States for Contribution Modal
+  const [isContribModalOpen, setIsContribModalOpen] = useState(false);
+  const [contribGoal, setContribGoal] = useState<FinancialGoal | null>(null);
+  const [contribData, setContribData] = useState({
+      amount: '',
+      accountId: '',
+      date: new Date().toISOString().split('T')[0]
+  });
+
   // Auto-calculate plan when inputs change
   useEffect(() => {
       if (formData.targetAmount && formData.deadline) {
@@ -39,6 +52,8 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
           setPlanResult(null);
       }
   }, [formData.targetAmount, formData.currentAmount, formData.deadline]);
+
+  // --- Handlers for Goal Management ---
 
   const handleOpenModal = (goal?: FinancialGoal) => {
       if (goal) {
@@ -79,13 +94,12 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
       let months = (deadlineDate.getFullYear() - today.getFullYear()) * 12;
       months -= today.getMonth();
       months += deadlineDate.getMonth();
-      // Se dia do prazo for menor que dia atual, desconta um mês (pagamento já passou ou está muito perto)
       if (deadlineDate.getDate() < today.getDate()) months--;
       
       const monthsRemaining = Math.max(1, months);
       const monthlySavings = remainingAmount / monthsRemaining;
 
-      // Realistic Check (Mock logic - in real app would check user average income)
+      // Realistic Check
       let isRealistic: 'YES' | 'NO' | 'MAYBE' = 'YES';
       const suggestions: string[] = [];
 
@@ -140,6 +154,45 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
       }
   };
 
+  // --- Handlers for Contribution ---
+
+  const handleOpenContrib = (goal: FinancialGoal) => {
+      setContribGoal(goal);
+      setContribData({
+          amount: '',
+          accountId: accounts.length > 0 ? accounts[0].id : '',
+          date: new Date().toISOString().split('T')[0]
+      });
+      setIsContribModalOpen(true);
+  };
+
+  const handleSaveContrib = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!contribGoal || !contribData.amount || !contribData.accountId) return;
+
+      const amount = parseFloat(contribData.amount);
+      if (isNaN(amount) || amount <= 0) {
+          showAlert("Valor inválido.", "warning");
+          return;
+      }
+
+      // Criar transação de despesa vinculada à meta
+      onAddTransaction({
+          description: `Aporte: ${contribGoal.name}`,
+          amount: amount,
+          type: TransactionType.EXPENSE, // Sai do saldo da conta
+          category: 'Investimentos/Metas',
+          date: contribData.date,
+          status: TransactionStatus.PAID,
+          accountId: contribData.accountId,
+          goalId: contribGoal.id, // Vínculo importante
+          isRecurring: false
+      });
+
+      setIsContribModalOpen(false);
+      showAlert("Aporte registrado com sucesso!", "success");
+  };
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -178,37 +231,47 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
               {goals.map(goal => {
                   const percent = Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100));
                   return (
-                      <div key={goal.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow group relative">
-                          <div className="flex justify-between items-start mb-4">
-                              <div>
-                                  <h3 className="font-bold text-gray-800 text-lg">{goal.name}</h3>
-                                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                                      <Calendar className="w-3 h-3" /> 
-                                      Meta: {new Date(goal.deadline).toLocaleDateString('pt-BR')}
-                                  </p>
-                              </div>
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm border-4 ${percent >= 100 ? 'border-emerald-100 text-emerald-600' : 'border-indigo-50 text-indigo-600'}`}>
-                                  {percent}%
-                              </div>
+                      <div key={goal.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow group relative flex flex-col justify-between">
+                          <div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 className="font-bold text-gray-800 text-lg">{goal.name}</h3>
+                                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                        <Calendar className="w-3 h-3" /> 
+                                        Meta: {new Date(goal.deadline).toLocaleDateString('pt-BR')}
+                                    </p>
+                                </div>
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm border-4 ${percent >= 100 ? 'border-emerald-100 text-emerald-600' : 'border-indigo-50 text-indigo-600'}`}>
+                                    {percent}%
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 mb-6">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-500">Guardado</span>
+                                    <span className="font-bold text-gray-900">{formatCurrency(goal.currentAmount)}</span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all duration-1000 ${percent >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${percent}%` }}></div>
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-400">
+                                    <span>0</span>
+                                    <span>Alvo: {formatCurrency(goal.targetAmount)}</span>
+                                </div>
+                            </div>
                           </div>
 
-                          <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                  <span className="text-gray-500">Guardado</span>
-                                  <span className="font-bold text-gray-900">{formatCurrency(goal.currentAmount)}</span>
+                          <div className="flex gap-2">
+                              <button 
+                                onClick={() => handleOpenContrib(goal)}
+                                className="flex-1 flex items-center justify-center gap-1 bg-indigo-50 text-indigo-700 py-2 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                              >
+                                  <DollarSign className="w-3 h-3" /> Adicionar Aporte
+                              </button>
+                              <div className="flex gap-1">
+                                <button onClick={() => handleOpenModal(goal)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"><Plus className="w-4 h-4" /></button>
+                                <button onClick={() => handleDelete(goal.id)} className="p-2 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
                               </div>
-                              <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                                  <div className={`h-full rounded-full transition-all duration-1000 ${percent >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${percent}%` }}></div>
-                              </div>
-                              <div className="flex justify-between text-xs text-gray-400">
-                                  <span>0</span>
-                                  <span>Alvo: {formatCurrency(goal.targetAmount)}</span>
-                              </div>
-                          </div>
-
-                          <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                              <button onClick={() => handleOpenModal(goal)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-600"><Plus className="w-4 h-4" /></button>
-                              <button onClick={() => handleDelete(goal.id)} className="p-1.5 bg-rose-50 hover:bg-rose-100 rounded text-rose-600"><Trash2 className="w-4 h-4" /></button>
                           </div>
                       </div>
                   );
@@ -260,7 +323,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
                                   />
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-gray-700 mb-1">Já tenho guardado (R$)</label>
+                                  <label className="block text-xs font-bold text-gray-700 mb-1">Saldo inicial (R$)</label>
                                   <input 
                                       type="number" 
                                       placeholder="0"
@@ -268,6 +331,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
                                       value={formData.currentAmount}
                                       onChange={e => setFormData({...formData, currentAmount: e.target.value})}
                                   />
+                                  <p className="text-[10px] text-gray-400 mt-1">Aportes mensais devem ser feitos pelo botão "Adicionar Aporte". Use este campo apenas para ajuste manual.</p>
                               </div>
                           </form>
                       </div>
@@ -335,6 +399,68 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, onSaveGoal, onDeleteGoal }
                           </div>
                       )}
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal - Aporte Rápido */}
+      {isContribModalOpen && contribGoal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-scale-up">
+                  <div className="px-6 py-4 border-b border-gray-100 bg-indigo-600 text-white">
+                      <h2 className="text-lg font-bold flex items-center gap-2">
+                          <DollarSign className="w-5 h-5" /> Novo Aporte
+                      </h2>
+                      <p className="text-xs text-indigo-200 opacity-80 mt-1">Para a meta: {contribGoal.name}</p>
+                  </div>
+                  <form onSubmit={handleSaveContrib} className="p-6 space-y-4">
+                      <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Valor do Aporte (R$)</label>
+                          <input 
+                              type="number" 
+                              step="0.01"
+                              autoFocus
+                              value={contribData.amount}
+                              onChange={(e) => setContribData({...contribData, amount: e.target.value})}
+                              className="w-full px-4 py-2 border rounded-lg text-lg font-bold text-gray-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                              placeholder="0,00"
+                              required
+                          />
+                      </div>
+                      
+                      <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Sair da conta</label>
+                          <div className="relative">
+                              <Wallet className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                              <select 
+                                  value={contribData.accountId}
+                                  onChange={(e) => setContribData({...contribData, accountId: e.target.value})}
+                                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                  required
+                              >
+                                  {accounts.map(acc => (
+                                      <option key={acc.id} value={acc.id}>{acc.name} (R$ {acc.balance.toFixed(2)})</option>
+                                  ))}
+                              </select>
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Data</label>
+                          <input 
+                              type="date"
+                              value={contribData.date}
+                              onChange={(e) => setContribData({...contribData, date: e.target.value})}
+                              className="w-full px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                              required
+                          />
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                          <button type="button" onClick={() => setIsContribModalOpen(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg text-sm font-bold">Cancelar</button>
+                          <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors">Confirmar</button>
+                      </div>
+                  </form>
               </div>
           </div>
       )}

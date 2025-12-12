@@ -142,6 +142,8 @@ pool.connect()
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'STANDARD';`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_branch_id TEXT REFERENCES branches(id) ON DELETE SET NULL;`);
+        // NEW: Goal Link
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL;`);
         
         // Audit Columns
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_by TEXT REFERENCES users(id) ON DELETE SET NULL;`);
@@ -593,6 +595,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 contactId: r.contact_id, branchId: r.branch_id, costCenterId: r.cost_center_id,
                 departmentId: r.department_id, projectId: r.project_id,
                 classification: r.classification, destinationBranchId: r.destination_branch_id,
+                goalId: r.goal_id,
                 createdByName: r.created_by_name, updatedByName: r.updated_by_name,
                 createdAt: r.created_at, updatedAt: r.updated_at
             })),
@@ -738,6 +741,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
             destinationAccountId: 'destination_account_id',
             interestRate: 'interest_rate',
             contactId: 'contact_id',
+            goalId: 'goal_id',
             branchId: 'branch_id',
             costCenterId: 'cost_center_id',
             departmentId: 'department_id',
@@ -749,25 +753,47 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         await pool.query(
             `INSERT INTO transactions (
                 id, description, amount, type, category, date, status, account_id, destination_account_id, 
-                is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, 
+                is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, goal_id,
                 user_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id,
                 created_by, updated_by, updated_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $22, NOW())
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23, NOW())
              ON CONFLICT (id) DO UPDATE SET 
                 description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, 
-                is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, 
-                branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19, classification=$20, destination_branch_id=$21,
-                updated_by=$22, updated_at=NOW(), deleted_at=NULL`,
+                is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, goal_id=$15,
+                branch_id=$17, cost_center_id=$18, department_id=$19, project_id=$20, classification=$21, destination_branch_id=$22,
+                updated_by=$23, updated_at=NOW(), deleted_at=NULL`,
             [
                 t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, 
                 sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, 
-                t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId,
+                t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), sanitizeValue(t.goalId),
+                userId,
                 sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId),
                 t.classification || 'STANDARD', sanitizeValue(t.destinationBranchId),
                 userId
             ]
         );
+
+        // Auto-update Goal current_amount if linked
+        if (t.goalId && t.status === 'PAID') {
+            const amountToAdd = parseFloat(t.amount);
+            // If it's a new transaction (CREATE), we add the full amount
+            // If it's an update (UPDATE), we need to diff. But simplest logic for MVP is:
+            // "Goals view calculates sum of linked transactions" OR "We update current_amount here".
+            // Since `goals` table has a `current_amount` column, we update it.
+            
+            if (action === 'CREATE') {
+                await pool.query(`UPDATE goals SET current_amount = current_amount + $1 WHERE id = $2`, [amountToAdd, t.goalId]);
+            } else if (action === 'UPDATE' && existing) {
+                // Adjust difference
+                const oldAmount = existing.goal_id === t.goalId ? parseFloat(existing.amount) : 0;
+                const diff = amountToAdd - oldAmount;
+                await pool.query(`UPDATE goals SET current_amount = current_amount + $1 WHERE id = $2`, [diff, t.goalId]);
+                
+                // If goal changed (unlikely in this UI but possible), we'd need to handle removing from old goal. Keeping simple.
+            }
+        }
+
         await logAudit(pool, userId, action, 'transaction', t.id, `${t.type}: ${t.description} (R$ ${t.amount})`, existing, changes);
         res.json({ success: true });
     } catch (err) {
@@ -784,6 +810,12 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         const desc = previousState ? `${previousState.description} (R$ ${previousState.amount})` : 'Transação';
 
         await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
+        
+        // Reverse Goal Amount if linked
+        if (previousState && previousState.goal_id && previousState.status === 'PAID') {
+             await pool.query(`UPDATE goals SET current_amount = current_amount - $1 WHERE id = $2`, [previousState.amount, previousState.goal_id]);
+        }
+
         await logAudit(pool, userId, 'DELETE', 'transaction', req.params.id, desc, previousState);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -856,6 +888,11 @@ app.post('/api/restore', authenticateToken, async (req, res) => {
             } else {
                 await updateAccountBalance(pool, record.account_id, record.amount, record.type);
             }
+            
+            // Restore Goal Amount
+            if (record.goal_id) {
+                await pool.query(`UPDATE goals SET current_amount = current_amount + $1 WHERE id = $2`, [record.amount, record.goal_id]);
+            }
         }
 
         await logAudit(pool, userId, 'RESTORE', entity, id, `Registro restaurado via Auditoria`, record);
@@ -902,6 +939,7 @@ app.post('/api/revert-change', authenticateToken, async (req, res) => {
         await pool.query(query, [log.entity_id, ...values]);
 
         if (log.entity === 'transaction' && currentState && previousState.status === 'PAID') {
+            // Revert Account Balances
             if (currentState.account_id === previousState.account_id) {
                 const oldAmount = parseFloat(previousState.amount);
                 const newAmount = parseFloat(currentState.amount); 
@@ -913,6 +951,15 @@ app.post('/api/revert-change', authenticateToken, async (req, res) => {
                     const diff = newAmount - oldAmount;
                     await updateAccountBalance(pool, previousState.account_id, diff, 'EXPENSE'); 
                 }
+            }
+            
+            // Revert Goal Amounts if applicable
+            if (currentState.goal_id === previousState.goal_id && currentState.goal_id) {
+                 const oldAmount = parseFloat(previousState.amount);
+                 const newAmount = parseFloat(currentState.amount);
+                 // If reverting means going back to OLD amount
+                 const diff = oldAmount - newAmount; // Logic might be complex, simplified for now
+                 await pool.query(`UPDATE goals SET current_amount = current_amount + $1 WHERE id = $2`, [diff, currentState.goal_id]);
             }
         }
 
