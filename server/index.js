@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import pg from 'pg';
@@ -157,7 +158,7 @@ const parsers = {
             paymentType: detectPaymentMethod(html)
         };
     },
-    // Paraná (41) - Exemplo genérico baseado em estrutura comum
+    // Paraná (41)
     '41': (html) => {
         const amountMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i) || html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)/i);
         const merchantMatch = html.match(/id=["']u20["'][^>]*>([^<]+)<\/span>/i) || html.match(/class=["']txtTopo["'][^>]*>([^<]+)/i);
@@ -169,7 +170,7 @@ const parsers = {
             paymentType: detectPaymentMethod(html)
         };
     },
-    // Genérico (Fallback)
+    // Genérico (Fallback e Outros Estados)
     'default': (html) => {
         // Tenta padrões comuns nacionais
         // Valor Total
@@ -178,7 +179,9 @@ const parsers = {
             /Valor\s*Total.*?R\$\s*([\d\.,]+)/i,
             /class=["']txtMax["'][^>]*>([\d\.,]+)/i,
             /id=["']lblValorTotal["'][^>]*>([\d\.,]+)/i,
-            /Total\s*R\$\s*([\d\.,]+)/i
+            /Total\s*R\$\s*([\d\.,]+)/i,
+            /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i,
+            /Valor\s*a\s*Pagar.*?([\d\.,]+)/i
         ];
         for (const p of totalPatterns) {
             const m = html.match(p);
@@ -190,11 +193,17 @@ const parsers = {
         const merchantPatterns = [
             /class=["']txtTopo["'][^>]*>([^<]+)/i,
             /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
-            /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i
+            /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
+            /<div[^>]*class="txtTopo"[^>]*>([^<]+)<\/div>/i,
+            /<h4[^>]*>([^<]+)<\/h4>/i 
         ];
         for (const p of merchantPatterns) {
             const m = html.match(p);
-            if (m) { merchant = m[1].trim(); break; }
+            if (m) { 
+                // Remove tags HTML se vierem junto
+                merchant = m[1].replace(/<[^>]+>/g, '').trim(); 
+                break; 
+            }
         }
 
         // Data
@@ -411,6 +420,8 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
     
     if (!url) return res.status(400).json({ error: 'URL é obrigatória' });
 
+    console.log(`[Scraper] Iniciando scraping para: ${url}`);
+
     try {
         const response = await fetch(url, {
             headers: {
@@ -419,6 +430,7 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
         });
 
         if (!response.ok) {
+            console.error(`[Scraper] Falha no acesso: ${response.status} ${response.statusText}`);
             throw new Error(`Erro ao acessar SEFAZ: ${response.status}`);
         }
 
@@ -432,7 +444,7 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
             ufCode = accessKey.substring(0, 2); // Primeiros 2 dígitos são o código da UF
         }
 
-        console.log(`Scraping NFC-e. URL: ${url}, Key: ${accessKey}, UF: ${ufCode}`);
+        console.log(`[Scraper] Key: ${accessKey}, UF: ${ufCode}`);
 
         // 2. Selecionar Parser
         const parser = parsers[ufCode] || parsers['default'];
@@ -457,7 +469,9 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
         }
 
         if (!amount) {
-            return res.status(404).json({ error: 'Não foi possível ler o valor total da nota. Verifique se o QR Code é válido.' });
+            console.warn(`[Scraper] Valor não encontrado. Parser usado: ${ufCode}`);
+            // Mudança Importante: Retornar 422 (Unprocessable Entity) em vez de 404 para distinguir de "Rota não encontrada"
+            return res.status(422).json({ error: 'Não foi possível ler o valor total da nota. O layout da SEFAZ pode ter mudado ou o QR Code é inválido.' });
         }
 
         res.json({
@@ -469,7 +483,7 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Scraping Error:", error);
+        console.error("[Scraper] Exception:", error);
         res.status(500).json({ error: 'Erro ao processar link da nota fiscal. Tente inserir manualmente.' });
     }
 });
