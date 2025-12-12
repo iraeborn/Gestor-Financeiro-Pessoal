@@ -82,6 +82,10 @@ pool.connect()
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cost_center_id TEXT REFERENCES cost_centers(id) ON DELETE SET NULL;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS department_id TEXT REFERENCES departments(id) ON DELETE SET NULL;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;`);
+        
+        // New Fields for Advance/Cash Replenishment
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'STANDARD';`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_branch_id TEXT REFERENCES branches(id) ON DELETE SET NULL;`);
 
         // Updates to Accounts
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2);`);
@@ -441,7 +445,9 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 branchId: r.branch_id,
                 costCenterId: r.cost_center_id,
                 departmentId: r.department_id,
-                projectId: r.project_id
+                projectId: r.project_id,
+                classification: r.classification,
+                destinationBranchId: r.destination_branch_id
             })),
             goals: goals.rows.map(r => ({ 
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
@@ -653,15 +659,22 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, user_id, branch_id, cost_center_id, department_id, project_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            `INSERT INTO transactions (
+                id, description, amount, type, category, date, status, account_id, destination_account_id, 
+                is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, 
+                user_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
              ON CONFLICT (id) DO UPDATE SET 
-                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19`,
+                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, 
+                is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, 
+                branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19, classification=$20, destination_branch_id=$21`,
             [
                 t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, 
                 sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, 
                 t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId,
-                sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId)
+                sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId),
+                t.classification || 'STANDARD', sanitizeValue(t.destinationBranchId)
             ]
         );
         res.json({ success: true });

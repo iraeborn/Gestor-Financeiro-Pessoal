@@ -11,6 +11,13 @@ export enum TransactionStatus {
   OVERDUE = 'OVERDUE'
 }
 
+export enum TransactionClassification {
+  STANDARD = 'STANDARD',           // Operação Comum
+  ADVANCE = 'ADVANCE',             // Adiantamento (Fornecedor/Funcionário)
+  CASH_REPLENISHMENT = 'REPLENISH',// Suprimento de Caixa
+  INTER_BRANCH = 'INTER_BRANCH'    // Transferência entre Filiais
+}
+
 export enum AccountType {
   WALLET = 'WALLET',
   BANK = 'BANK',
@@ -152,9 +159,11 @@ export interface Transaction {
   contactId?: string;
   // PJ Fields
   branchId?: string;
+  destinationBranchId?: string; // Para transferências entre filiais
   costCenterId?: string;
   departmentId?: string;
   projectId?: string;
+  classification?: TransactionClassification;
 }
 
 export interface FinancialGoal {

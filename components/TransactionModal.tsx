@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users } from 'lucide-react';
-import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project } from '../types';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote } from 'lucide-react';
+import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -28,7 +28,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     description: '',
     amount: '',
     type: TransactionType.EXPENSE,
-    category: '', // Armazena o nome da categoria
+    category: '', 
     date: new Date().toISOString().split('T')[0],
     status: TransactionStatus.PAID,
     accountId: '',
@@ -40,9 +40,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     contactId: '',
     // PJ Fields
     branchId: '',
+    destinationBranchId: '',
     costCenterId: '',
     departmentId: '',
-    projectId: ''
+    projectId: '',
+    classification: TransactionClassification.STANDARD
   });
 
   // Autocomplete Contact State
@@ -76,9 +78,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         interestRate: initialData.interestRate !== undefined ? initialData.interestRate.toString() : '0',
         contactId: initialData.contactId || '',
         branchId: initialData.branchId || '',
+        destinationBranchId: initialData.destinationBranchId || '',
         costCenterId: initialData.costCenterId || '',
         departmentId: initialData.departmentId || '',
-        projectId: initialData.projectId || ''
+        projectId: initialData.projectId || '',
+        classification: initialData.classification || TransactionClassification.STANDARD
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
@@ -98,9 +102,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         interestRate: '0',
         contactId: '',
         branchId: branches[0]?.id || '',
+        destinationBranchId: '',
         costCenterId: '',
         departmentId: '',
-        projectId: ''
+        projectId: '',
+        classification: TransactionClassification.STANDARD
       });
       setContactSearch('');
       setCategorySearch('');
@@ -121,6 +127,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Update logic when classification changes
+  useEffect(() => {
+      if (formData.classification === TransactionClassification.CASH_REPLENISHMENT) {
+          setFormData(prev => ({ ...prev, type: TransactionType.TRANSFER }));
+          // Suggest description
+          if (!formData.description) setFormData(prev => ({...prev, description: 'Suprimento de Caixa'}));
+      } else if (formData.classification === TransactionClassification.INTER_BRANCH) {
+          setFormData(prev => ({ ...prev, type: TransactionType.TRANSFER }));
+          if (!formData.description) setFormData(prev => ({...prev, description: 'Transf. entre Filiais'}));
+      } else if (formData.classification === TransactionClassification.ADVANCE) {
+          setFormData(prev => ({ ...prev, type: TransactionType.EXPENSE })); // Typically expense first
+      }
+  }, [formData.classification]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -139,6 +159,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         if (formData.accountId === formData.destinationAccountId) {
             alert("A conta de origem e destino não podem ser a mesma.");
             return;
+        }
+        
+        if (formData.classification === TransactionClassification.INTER_BRANCH) {
+            if (!formData.branchId || !formData.destinationBranchId) {
+                alert("Para transferências entre filiais, selecione a filial de origem e a de destino.");
+                return;
+            }
+            if (formData.branchId === formData.destinationBranchId) {
+                alert("A filial de origem e destino devem ser diferentes.");
+                return;
+            }
         }
     }
 
@@ -190,9 +221,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       contactId: finalContactId || undefined,
       // PJ
       branchId: isPJ ? formData.branchId : undefined,
+      destinationBranchId: isPJ && formData.classification === TransactionClassification.INTER_BRANCH ? formData.destinationBranchId : undefined,
       costCenterId: isPJ ? formData.costCenterId : undefined,
       departmentId: isPJ ? formData.departmentId : undefined,
       projectId: isPJ ? formData.projectId : undefined,
+      classification: isPJ ? formData.classification : undefined
     }, newContactObj, newCategoryObj);
     
     onClose();
@@ -230,6 +263,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())
   );
 
+  // Filter destination accounts for Cash Replenishment (Only Wallets)
+  const availableDestAccounts = formData.classification === TransactionClassification.CASH_REPLENISHMENT 
+      ? accounts.filter(a => a.id !== formData.accountId && a.type === AccountType.WALLET)
+      : accounts.filter(a => a.id !== formData.accountId);
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
@@ -243,24 +281,44 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Type Selection */}
+          
+          {/* PJ Classification Selector */}
+          {isPJ && (
+              <div className="mb-2">
+                  <label className="block text-xs font-bold text-indigo-700 mb-1">Tipo de Operação (PJ)</label>
+                  <select
+                      value={formData.classification}
+                      onChange={(e) => setFormData({ ...formData, classification: e.target.value as TransactionClassification })}
+                      className="block w-full rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-indigo-900 font-medium"
+                  >
+                      <option value={TransactionClassification.STANDARD}>Padrão (Receita/Despesa)</option>
+                      <option value={TransactionClassification.ADVANCE}>Adiantamento</option>
+                      <option value={TransactionClassification.CASH_REPLENISHMENT}>Suprimento de Caixa</option>
+                      <option value={TransactionClassification.INTER_BRANCH}>Transf. Entre Filiais</option>
+                  </select>
+              </div>
+          )}
+
+          {/* Type Selection (Disabled for specialized PJ operations) */}
           <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
             <button
               type="button"
+              disabled={formData.classification !== TransactionClassification.STANDARD}
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.EXPENSE });
-                  setCategorySearch(''); // Reset category when type changes
+                  setCategorySearch('');
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.EXPENSE
                   ? 'bg-white text-rose-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-700 disabled:opacity-50'
               }`}
             >
               Despesa
             </button>
             <button
               type="button"
+              disabled={formData.classification !== TransactionClassification.STANDARD}
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.INCOME });
                   setCategorySearch('');
@@ -268,20 +326,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.INCOME
                   ? 'bg-white text-emerald-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-700 disabled:opacity-50'
               }`}
             >
               Receita
             </button>
             <button
               type="button"
+              disabled={formData.classification !== TransactionClassification.STANDARD}
               onClick={() => {
                   setFormData({ ...formData, type: TransactionType.TRANSFER });
               }}
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                 formData.type === TransactionType.TRANSFER
                   ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  : 'text-gray-500 hover:text-gray-700 disabled:opacity-50'
               }`}
             >
               Transf.
@@ -369,7 +428,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="Ex: Compras do Mês"
+                placeholder={formData.classification === TransactionClassification.CASH_REPLENISHMENT ? "Suprimento de Caixa" : "Ex: Compras do Mês"}
                 />
             </div>
           </div>
@@ -483,11 +542,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         className="block w-full rounded-lg border border-blue-200 px-2 py-2 text-sm outline-none bg-white"
                     >
                          <option value="">Selecione...</option>
-                         {accounts.filter(a => a.id !== formData.accountId).map(acc => (
+                         {availableDestAccounts.map(acc => (
                             <option key={acc.id} value={acc.id}>{acc.name}</option>
                          ))}
                     </select>
                   </div>
+                  {formData.classification === TransactionClassification.CASH_REPLENISHMENT && availableDestAccounts.length === 0 && (
+                      <p className="col-span-2 text-[10px] text-rose-600">Atenção: Nenhuma conta tipo "Carteira" ou "Caixa" encontrada para suprimento.</p>
+                  )}
               </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
@@ -588,6 +650,37 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                               </select>
                           </div>
                       </div>
+                  </div>
+              </div>
+          )}
+
+          {/* Inter-Branch Specific Fields */}
+          {isPJ && formData.classification === TransactionClassification.INTER_BRANCH && (
+              <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200 grid grid-cols-2 gap-3">
+                  <div className="col-span-2 text-xs font-bold text-indigo-700 flex items-center gap-1">
+                      <Banknote className="w-3 h-3" /> Movimentação entre Filiais
+                  </div>
+                  <div>
+                      <label className="block text-[10px] font-medium text-indigo-600 mb-1">Filial Origem (Saída)</label>
+                      <select 
+                        value={formData.branchId} 
+                        onChange={e => setFormData({...formData, branchId: e.target.value})}
+                        className="w-full px-2 py-1.5 text-xs border border-indigo-200 rounded-md outline-none focus:border-indigo-500"
+                      >
+                          <option value="">Selecione...</option>
+                          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                  </div>
+                  <div>
+                      <label className="block text-[10px] font-medium text-indigo-600 mb-1">Filial Destino (Entrada)</label>
+                      <select 
+                        value={formData.destinationBranchId} 
+                        onChange={e => setFormData({...formData, destinationBranchId: e.target.value})}
+                        className="w-full px-2 py-1.5 text-xs border border-indigo-200 rounded-md outline-none focus:border-indigo-500"
+                      >
+                          <option value="">Selecione...</option>
+                          {branches.filter(b => b.id !== formData.branchId).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
                   </div>
               </div>
           )}
