@@ -30,6 +30,11 @@ export type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
+  activeModules?: {
+      odonto?: boolean;
+      physio?: boolean;
+      consulting?: boolean;
+  };
 }
 
 export enum UserRole {
@@ -208,6 +213,39 @@ export interface AuditLog {
   changes?: Record<string, ChangeDiff>; // JSON com o diff das alterações
 }
 
+// --- GENERIC SERVICE MODULE TYPES ---
+
+export interface ServiceClient {
+    id: string;
+    contactId: string; // Link to core Contacts table
+    contactName?: string; // Resolved name
+    notes?: string; // Anamnese, Histórico, Prontuário, etc.
+    birthDate?: string;
+    moduleTag: string; // 'ODONTO', 'PHYSIO', etc. (MANDATORY for filtering)
+    createdAt?: string;
+}
+
+export interface ServiceItem {
+    id: string;
+    name: string; // Nome do procedimento/serviço
+    code?: string;
+    defaultPrice: number;
+    moduleTag: string; // 'ODONTO', 'PHYSIO'
+}
+
+export interface ServiceAppointment {
+    id: string;
+    clientId: string; 
+    clientName?: string; 
+    serviceId?: string; 
+    serviceName?: string; 
+    date: string; // YYYY-MM-DD HH:mm
+    status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
+    notes?: string;
+    transactionId?: string; 
+    moduleTag: string; // 'ODONTO', 'PHYSIO'
+}
+
 export interface AppState {
   accounts: Account[];
   transactions: Transaction[];
@@ -220,9 +258,13 @@ export interface AppState {
   costCenters: CostCenter[];
   departments: Department[];
   projects: Project[];
+  // Generic Module Data
+  serviceClients?: ServiceClient[];
+  serviceItems?: ServiceItem[];
+  serviceAppointments?: ServiceAppointment[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS' | 'LOGS';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS' | 'LOGS' | 'ODONTO';
 
 declare global {
   interface Window {

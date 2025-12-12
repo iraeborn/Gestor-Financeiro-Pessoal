@@ -163,7 +163,7 @@ pool.connect()
         // Add changes column for diffs
         await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS changes JSONB;`);
 
-        // --- NEW: MEMBERSHIPS FOR MULTI-TENANCY ---
+        // --- MEMBERSHIPS ---
         await client.query(`
             CREATE TABLE IF NOT EXISTS memberships (
                 id SERIAL PRIMARY KEY,
@@ -183,8 +183,51 @@ pool.connect()
             ON CONFLICT (user_id, family_id) DO NOTHING;
         `);
 
+        // --- GENERIC MODULE TABLES ---
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS module_clients (
+                id TEXT PRIMARY KEY,
+                contact_id TEXT REFERENCES contacts(id) ON DELETE CASCADE,
+                notes TEXT, -- Anamnese/Prontuário/Detalhes
+                birth_date DATE,
+                module_tag TEXT NOT NULL DEFAULT 'GENERAL', -- ODONTO, PHYSIO, ETC
+                user_id TEXT REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS module_services (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                code TEXT,
+                default_price DECIMAL(15,2),
+                module_tag TEXT NOT NULL DEFAULT 'GENERAL',
+                user_id TEXT REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS module_appointments (
+                id TEXT PRIMARY KEY,
+                client_id TEXT REFERENCES module_clients(id) ON DELETE CASCADE,
+                service_id TEXT REFERENCES module_services(id) ON DELETE SET NULL,
+                date TIMESTAMP NOT NULL,
+                status TEXT DEFAULT 'SCHEDULED', -- SCHEDULED, COMPLETED, CANCELED
+                notes TEXT,
+                transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+                module_tag TEXT NOT NULL DEFAULT 'GENERAL',
+                user_id TEXT REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Add module_tag column if missing (for migrations from previous step)
+        await client.query(`ALTER TABLE module_clients ADD COLUMN IF NOT EXISTS module_tag TEXT DEFAULT 'GENERAL';`);
+        await client.query(`ALTER TABLE module_services ADD COLUMN IF NOT EXISTS module_tag TEXT DEFAULT 'GENERAL';`);
+        await client.query(`ALTER TABLE module_appointments ADD COLUMN IF NOT EXISTS module_tag TEXT DEFAULT 'GENERAL';`);
+
         // Soft Delete
-        const tables = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'branches', 'cost_centers', 'departments', 'projects'];
+        const tables = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'branches', 'cost_centers', 'departments', 'projects', 'module_clients', 'module_services', 'module_appointments'];
         for (const t of tables) {
             await client.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`);
         }
@@ -485,6 +528,24 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const departmentsRes = await pool.query(`SELECT * FROM departments WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
         const projectsRes = await pool.query(`SELECT * FROM projects WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
 
+        // Generic Module Data (renamed from Odonto)
+        const clientsRes = await pool.query(`
+            SELECT mc.*, c.name as contact_name 
+            FROM module_clients mc 
+            JOIN contacts c ON mc.contact_id = c.id
+            WHERE mc.${familyFilter} AND mc.deleted_at IS NULL
+        `, [activeFamilyId]);
+        const servicesRes = await pool.query(`SELECT * FROM module_services WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+        const appointmentsRes = await pool.query(`
+            SELECT ma.*, c.name as client_name, ms.name as service_name
+            FROM module_appointments ma
+            JOIN module_clients mc ON ma.client_id = mc.id
+            JOIN contacts c ON mc.contact_id = c.id
+            LEFT JOIN module_services ms ON ma.service_id = ms.id
+            WHERE ma.${familyFilter} AND ma.deleted_at IS NULL
+            ORDER BY ma.date ASC
+        `, [activeFamilyId]);
+
         if (categories.rows.length === 0) {
             const defaults = [
                 { name: 'Alimentação', type: 'EXPENSE' }, { name: 'Moradia', type: 'EXPENSE' },
@@ -532,7 +593,24 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
             branches: branchesRes.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
             costCenters: costCentersRes.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
             departments: departmentsRes.rows.map(r => ({ id: r.id, name: r.name })),
-            projects: projectsRes.rows.map(r => ({ id: r.id, name: r.name }))
+            projects: projectsRes.rows.map(r => ({ id: r.id, name: r.name })),
+            
+            // Generic Module Mapping
+            serviceClients: clientsRes.rows.map(r => ({
+                id: r.id, contactId: r.contact_id, contactName: r.contact_name, 
+                notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined,
+                moduleTag: r.module_tag
+            })),
+            serviceItems: servicesRes.rows.map(r => ({
+                id: r.id, name: r.name, code: r.code, defaultPrice: parseFloat(r.default_price),
+                moduleTag: r.module_tag
+            })),
+            serviceAppointments: appointmentsRes.rows.map(r => ({
+                id: r.id, clientId: r.client_id, clientName: r.client_name,
+                serviceId: r.service_id, serviceName: r.service_name,
+                date: r.date, status: r.status, notes: r.notes, transactionId: r.transaction_id,
+                moduleTag: r.module_tag
+            }))
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -929,6 +1007,74 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
     } catch(err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// --- GENERIC MODULE ROUTES (Replaced Odonto) ---
+
+app.post('/api/modules/clients', authenticateToken, async (req, res) => {
+    const { id, contactId, notes, birthDate, moduleTag } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO module_clients (id, contact_id, notes, birth_date, module_tag, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             ON CONFLICT (id) DO UPDATE SET contact_id=$2, notes=$3, birth_date=$4, module_tag=$5, deleted_at=NULL`,
+            [id, contactId, notes || '', sanitizeValue(birthDate), moduleTag || 'GENERAL', userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/modules/clients/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`UPDATE module_clients SET deleted_at = NOW() WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/modules/services', authenticateToken, async (req, res) => {
+    const { id, name, code, defaultPrice, moduleTag } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO module_services (id, name, code, default_price, module_tag, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, default_price=$4, module_tag=$5, deleted_at=NULL`,
+            [id, name, sanitizeValue(code), defaultPrice || 0, moduleTag || 'GENERAL', userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/modules/services/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`UPDATE module_services SET deleted_at = NOW() WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/modules/appointments', authenticateToken, async (req, res) => {
+    const { id, clientId, serviceId, date, status, notes, transactionId, moduleTag } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO module_appointments (id, client_id, service_id, date, status, notes, transaction_id, module_tag, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, date=$4, status=$5, notes=$6, transaction_id=$7, module_tag=$8, deleted_at=NULL`,
+            [id, clientId, sanitizeValue(serviceId), date, status, notes, sanitizeValue(transactionId), moduleTag || 'GENERAL', userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/modules/appointments/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`UPDATE module_appointments SET deleted_at = NOW() WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 app.all('/api/*', (req, res) => {

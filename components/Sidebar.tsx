@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, Check, Briefcase, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, Check, Briefcase, User as UserIcon, SmilePlus } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
 
@@ -51,6 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const activeWorkspace = currentUser?.workspaces?.find(w => w.id === currentUser.familyId);
   const workspaceName = activeWorkspace ? activeWorkspace.name : (currentUser?.name || 'Minha Conta');
   const isPJ = currentUser?.entityType === 'PJ';
+  const showOdonto = isPJ && currentUser?.settings?.activeModules?.odonto;
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
@@ -129,6 +130,23 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
             </button>
           );
         })}
+
+        {showOdonto && (
+            <>
+                <div className="my-2 border-t border-gray-100 mx-4"></div>
+                <button
+                    onClick={() => onChangeView('ODONTO')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
+                        currentView === 'ODONTO'
+                        ? 'bg-sky-50 text-sky-600 shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                >
+                    <SmilePlus className={`w-5 h-5 ${currentView === 'ODONTO' ? 'text-sky-600' : 'text-sky-400'}`} />
+                    Módulo Odonto
+                </button>
+            </>
+        )}
         
         <div className="pt-4 mt-4 border-t border-gray-100">
             <button

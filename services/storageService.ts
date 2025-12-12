@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment } from '../types';
 
 const API_URL = '/api';
 
@@ -260,6 +260,32 @@ export const api = {
   },
   deleteProject: async (id: string) => {
       const res = await fetch(`${API_URL}/projects/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+
+  // Generic Module Methods (Replaces Odonto)
+  saveServiceClient: async (client: ServiceClient) => {
+      const res = await fetch(`${API_URL}/modules/clients`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(client) });
+      await handleResponse(res);
+  },
+  deleteServiceClient: async (id: string) => {
+      const res = await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+  saveServiceItem: async (item: ServiceItem) => {
+      const res = await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(item) });
+      await handleResponse(res);
+  },
+  deleteServiceItem: async (id: string) => {
+      const res = await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+  saveServiceAppointment: async (appt: ServiceAppointment) => {
+      const res = await fetch(`${API_URL}/modules/appointments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(appt) });
+      await handleResponse(res);
+  },
+  deleteServiceAppointment: async (id: string) => {
+      const res = await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() });
       await handleResponse(res);
   }
 };

@@ -14,8 +14,9 @@ import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
+import ServiceModule from './components/ServiceModule';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -29,7 +30,8 @@ const App: React.FC = () => {
   // App Data States
   const [state, setState] = useState<AppState>({ 
       accounts: [], transactions: [], goals: [], contacts: [], categories: [],
-      branches: [], costCenters: [], departments: [], projects: []
+      branches: [], costCenters: [], departments: [], projects: [],
+      serviceClients: [], serviceItems: [], serviceAppointments: [] 
   });
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
@@ -37,6 +39,9 @@ const App: React.FC = () => {
   
   // Modal States
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
+
+  // Constants
+  const ODONTO_TAG = 'ODONTO';
 
   // Initial Load
   useEffect(() => {
@@ -297,7 +302,6 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAccount = async (id: string) => {
-    // Confirmation handled inside views before calling this
     try {
         await api.deleteAccount(id);
         setState(prevState => ({
@@ -416,6 +420,63 @@ const App: React.FC = () => {
       }
   };
 
+  // --- GENERIC MODULE HANDLERS ---
+  const handleSaveServiceClient = async (c: ServiceClient) => {
+      try {
+          await api.saveServiceClient(c);
+          setState(prev => {
+              const exists = prev.serviceClients?.find(sc => sc.id === c.id);
+              const contact = prev.contacts.find(co => co.id === c.contactId);
+              const cWithContact = { ...c, contactName: contact?.name };
+              
+              if(exists) {
+                  return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === c.id ? cWithContact : sc) };
+              }
+              return { ...prev, serviceClients: [...(prev.serviceClients || []), cWithContact] };
+          });
+      } catch(e) { alert("Erro ao salvar cliente"); }
+  };
+  const handleDeleteServiceClient = async (id: string) => {
+      if(!confirm("Excluir cliente?")) return;
+      await api.deleteServiceClient(id);
+      setState(prev => ({ ...prev, serviceClients: prev.serviceClients?.filter(c => c.id !== id) }));
+  };
+  const handleSaveServiceItem = async (s: ServiceItem) => {
+      try {
+          await api.saveServiceItem(s);
+          setState(prev => {
+              const exists = prev.serviceItems?.find(si => si.id === s.id);
+              if(exists) return { ...prev, serviceItems: prev.serviceItems?.map(si => si.id === s.id ? s : si) };
+              return { ...prev, serviceItems: [...(prev.serviceItems || []), s] };
+          });
+      } catch(e) { alert("Erro ao salvar serviço"); }
+  };
+  const handleDeleteServiceItem = async (id: string) => {
+      if(!confirm("Excluir serviço?")) return;
+      await api.deleteServiceItem(id);
+      setState(prev => ({ ...prev, serviceItems: prev.serviceItems?.filter(s => s.id !== id) }));
+  };
+  const handleSaveServiceAppointment = async (a: ServiceAppointment) => {
+      try {
+          await api.saveServiceAppointment(a);
+          setState(prev => {
+              const exists = prev.serviceAppointments?.find(sa => sa.id === a.id);
+              // Resolve names locally
+              const client = prev.serviceClients?.find(c => c.id === a.clientId);
+              const service = prev.serviceItems?.find(s => s.id === a.serviceId);
+              const resolvedA = { ...a, clientName: client?.contactName, serviceName: service?.name };
+
+              if(exists) return { ...prev, serviceAppointments: prev.serviceAppointments?.map(sa => sa.id === a.id ? resolvedA : sa) };
+              return { ...prev, serviceAppointments: [...(prev.serviceAppointments || []), resolvedA] };
+          });
+      } catch(e) { alert("Erro ao salvar agendamento"); }
+  };
+  const handleDeleteServiceAppointment = async (id: string) => {
+      if(!confirm("Excluir agendamento?")) return;
+      await api.deleteServiceAppointment(id);
+      setState(prev => ({ ...prev, serviceAppointments: prev.serviceAppointments?.filter(a => a.id !== id) }));
+  };
+
   // --- VIEW RENDERING ---
 
   if (!currentUser) {
@@ -454,7 +515,7 @@ const App: React.FC = () => {
           <Dashboard 
             state={state}
             settings={currentUser.settings}
-            userEntity={currentUser.entityType} // Pass current context type
+            userEntity={currentUser.entityType} 
             onAddTransaction={handleAddTransaction}
             onDeleteTransaction={(id) => {
                 if (window.confirm("Confirmar exclusão da transação?")) handleDeleteTransaction(id);
@@ -529,6 +590,35 @@ const App: React.FC = () => {
         return <SmartAdvisor data={state} />;
       case 'LOGS':
         return <LogsView />;
+      case 'ODONTO':
+        // Filtra dados do estado global para passar apenas os do módulo ODONTO
+        const odontoClients = state.serviceClients?.filter(c => c.moduleTag === ODONTO_TAG) || [];
+        const odontoServices = state.serviceItems?.filter(s => s.moduleTag === ODONTO_TAG) || [];
+        const odontoAppointments = state.serviceAppointments?.filter(a => a.moduleTag === ODONTO_TAG) || [];
+
+        return (
+            <ServiceModule 
+                moduleTitle="Módulo Odonto"
+                clientLabel="Paciente"
+                serviceLabel="Procedimento"
+                transactionCategory="Serviços Odontológicos"
+                
+                clients={odontoClients}
+                services={odontoServices}
+                appointments={odontoAppointments}
+                contacts={state.contacts}
+                
+                // Injeta a tag ODONTO ao salvar
+                onSaveClient={(c) => handleSaveServiceClient({ ...c, moduleTag: ODONTO_TAG })}
+                onDeleteClient={handleDeleteServiceClient}
+                onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
+                onDeleteService={handleDeleteServiceItem}
+                onSaveAppointment={(a) => handleSaveServiceAppointment({ ...a, moduleTag: ODONTO_TAG })}
+                onDeleteAppointment={handleDeleteServiceAppointment}
+                
+                onAddTransaction={handleAddTransaction}
+            />
+        );
       case 'SETTINGS':
         return (
             <SettingsView 
