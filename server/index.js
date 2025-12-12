@@ -104,6 +104,101 @@ const sanitizeValue = (val) => {
     return val;
 };
 
+// --- NFC-e Parsers Logic ---
+
+// Helper to extract numeric key from URL parameter 'p' or query
+const extractAccessKey = (urlStr) => {
+    try {
+        const url = new URL(urlStr);
+        // Tenta pegar o parâmetro 'p' (comum em SP, RS, etc)
+        let p = url.searchParams.get('p');
+        // Se 'p' contiver pipes (formato novo QR Code 2.0), pega a primeira parte
+        if (p && p.includes('|')) {
+            p = p.split('|')[0];
+        }
+        
+        // Se não achou 'p', tenta ver se a chave está na path (alguns estados)
+        if (!p) {
+            // Lógica de fallback: procurar sequência de 44 dígitos na string completa
+            const match = urlStr.match(/\d{44}/);
+            if (match) return match[0];
+        }
+        
+        // Limpa caracteres não numéricos se existirem (ex: espaços)
+        return p ? p.replace(/\D/g, '') : null;
+    } catch (e) {
+        // Fallback para string pura
+        const match = urlStr.match(/p=(\d{44})/);
+        if (match) return match[1];
+        const matchPipe = urlStr.match(/p=(\d{44})\|/);
+        if (matchPipe) return matchPipe[1];
+        return null;
+    }
+};
+
+const parsers = {
+    // São Paulo (35)
+    '35': (html) => {
+        const amountMatch = html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)<\/span>/i);
+        const merchantMatch = html.match(/class=["']txtTopo["'][^>]*>([^<]+)<\/div>/i);
+        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/);
+        
+        return {
+            amount: amountMatch ? amountMatch[1] : null,
+            merchant: merchantMatch ? merchantMatch[1].trim() : null,
+            date: dateMatch ? dateMatch[1] : null
+        };
+    },
+    // Paraná (41) - Exemplo genérico baseado em estrutura comum
+    '41': (html) => {
+        const amountMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i) || html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)/i);
+        const merchantMatch = html.match(/id=["']u20["'][^>]*>([^<]+)<\/span>/i) || html.match(/class=["']txtTopo["'][^>]*>([^<]+)/i);
+        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+[\d:]+/);
+        return {
+            amount: amountMatch ? amountMatch[1] : null,
+            merchant: merchantMatch ? merchantMatch[1].trim() : null,
+            date: dateMatch ? dateMatch[1] : null
+        };
+    },
+    // Genérico (Fallback)
+    'default': (html) => {
+        // Tenta padrões comuns nacionais
+        // Valor Total
+        let amount = null;
+        const totalPatterns = [
+            /Valor\s*Total.*?R\$\s*([\d\.,]+)/i,
+            /class=["']txtMax["'][^>]*>([\d\.,]+)/i,
+            /id=["']lblValorTotal["'][^>]*>([\d\.,]+)/i,
+            /Total\s*R\$\s*([\d\.,]+)/i
+        ];
+        for (const p of totalPatterns) {
+            const m = html.match(p);
+            if (m) { amount = m[1]; break; }
+        }
+
+        // Estabelecimento
+        let merchant = null;
+        const merchantPatterns = [
+            /class=["']txtTopo["'][^>]*>([^<]+)/i,
+            /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
+            /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i
+        ];
+        for (const p of merchantPatterns) {
+            const m = html.match(p);
+            if (m) { merchant = m[1].trim(); break; }
+        }
+
+        // Data
+        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/) || html.match(/Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i);
+
+        return {
+            amount,
+            merchant,
+            date: dateMatch ? dateMatch[1] : null
+        };
+    }
+};
+
 pool.connect()
   .then(async (client) => {
     console.log('DB Connected Successfully');
@@ -300,17 +395,11 @@ app.get('/api/health', async (req, res) => {
     res.json({ status: 'OK' });
 });
 
-// --- NEW SCRAPER ROUTE ---
+// --- SCRAPER ROUTE (Enhanced) ---
 app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
     const { url } = req.body;
     
     if (!url) return res.status(400).json({ error: 'URL é obrigatória' });
-
-    // Validação básica para evitar SSRF malicioso
-    if (!url.includes('fazenda.sp.gov.br') && !url.includes('nfce')) {
-        // Permitir URLs de NFC-e de outros estados se necessário, mas filtrar genéricos
-        // return res.status(400).json({ error: 'URL inválida ou não suportada' });
-    }
 
     try {
         const response = await fetch(url, {
@@ -325,49 +414,47 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
 
         const html = await response.text();
 
-        // Estratégia Regex para SP e Padrão Nacional
-        // Procura por "Valor Total R$ X,XX" ou elementos com classe txtMax (comum em SP)
-        let amount = null;
-        let date = null;
-        let merchant = null;
-
-        // 1. Tentar capturar Valor Total (SP usa class="txtMax", outros usam id="lblValorTotal" ou texto "Valor a Pagar")
-        const spTotalMatch = html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)<\/span>/i);
-        const genericTotalMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i);
+        // 1. Identificar Estado pela Chave de Acesso
+        const accessKey = extractAccessKey(url);
+        let ufCode = 'default';
         
-        if (spTotalMatch && spTotalMatch[1]) {
-            amount = spTotalMatch[1];
-        } else if (genericTotalMatch && genericTotalMatch[1]) {
-            amount = genericTotalMatch[1];
+        if (accessKey && accessKey.length === 44) {
+            ufCode = accessKey.substring(0, 2); // Primeiros 2 dígitos são o código da UF
         }
 
-        // 2. Tentar capturar Nome do Estabelecimento (txtTopo)
-        const merchantMatch = html.match(/class=["']txtTopo["'][^>]*>([^<]+)<\/div>/i);
-        if (merchantMatch && merchantMatch[1]) {
-            merchant = merchantMatch[1].trim();
-        }
+        console.log(`Scraping NFC-e. URL: ${url}, Key: ${accessKey}, UF: ${ufCode}`);
 
-        // 3. Tentar Data de Emissão (Strong pattern for DD/MM/YYYY)
-        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/);
-        if (dateMatch && dateMatch[1]) {
-            // Convert DD/MM/YYYY to YYYY-MM-DD
-            const parts = dateMatch[1].split('/');
-            date = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
+        // 2. Selecionar Parser
+        const parser = parsers[ufCode] || parsers['default'];
+        
+        // 3. Executar Parser
+        const data = parser(html);
 
-        // Normalização do valor (trocar vírgula por ponto)
+        // 4. Normalização Final
+        let amount = data.amount;
         if (amount) {
-            amount = amount.replace('.', '').replace(',', '.');
+            // Remove pontos de milhar e troca vírgula por ponto
+            amount = amount.replace(/\./g, '').replace(',', '.');
+        }
+
+        let date = null;
+        if (data.date) {
+            // Convert DD/MM/YYYY to YYYY-MM-DD
+            const parts = data.date.split('/');
+            if (parts.length === 3) {
+                date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
         }
 
         if (!amount) {
-            return res.status(404).json({ error: 'Não foi possível ler o valor total da nota. O site pode estar protegido por CAPTCHA.' });
+            return res.status(404).json({ error: 'Não foi possível ler o valor total da nota. Verifique se o QR Code é válido.' });
         }
 
         res.json({
             amount: parseFloat(amount),
             date: date || new Date().toISOString().split('T')[0],
-            merchant: merchant || 'Estabelecimento'
+            merchant: data.merchant || 'Estabelecimento NFC-e',
+            stateCode: ufCode
         });
 
     } catch (error) {
