@@ -290,6 +290,7 @@ app.post('/api/auth/google', async (req, res) => {
 // --- Data Routes (Soft Delete Enabled) ---
 
 const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
+const familyCheckParam2 = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
     const userId = req.user.id;
@@ -397,7 +398,7 @@ app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
         const acc = await pool.query(`SELECT name FROM accounts WHERE id = $1`, [req.params.id]);
         const name = acc.rows[0]?.name || 'Desconhecida';
         
-        await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
         await logAudit(pool, userId, 'DELETE', 'account', req.params.id, `Conta: ${name}`);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -422,7 +423,7 @@ app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
         const ct = await pool.query(`SELECT name FROM contacts WHERE id = $1`, [req.params.id]);
         const name = ct.rows[0]?.name || 'Desconhecido';
 
-        await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
         await logAudit(pool, userId, 'DELETE', 'contact', req.params.id, `Contato: ${name}`);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -471,7 +472,7 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         const tx = await pool.query(`SELECT description, amount FROM transactions WHERE id = $1`, [req.params.id]);
         const desc = tx.rows[0] ? `${tx.rows[0].description} (R$ ${tx.rows[0].amount})` : 'Transação';
 
-        await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
         await logAudit(pool, userId, 'DELETE', 'transaction', req.params.id, desc);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -532,7 +533,7 @@ app.post('/api/restore', authenticateToken, async (req, res) => {
 
     try {
         // Restore
-        await pool.query(`UPDATE ${tableName} SET deleted_at = NULL WHERE id = $1 AND ${getFamilyCondition}`, [id, userId]);
+        await pool.query(`UPDATE ${tableName} SET deleted_at = NULL WHERE id = $1 AND ${familyCheckParam2}`, [id, userId]);
         
         // Log Restoration
         await logAudit(pool, userId, 'RESTORE', entity, id, `Registro restaurado via Auditoria`);
@@ -594,7 +595,7 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         const cat = await pool.query(`SELECT name FROM categories WHERE id = $1`, [req.params.id]);
-        await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND ${getFamilyCondition}`, [req.params.id, userId]);
+        await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
         await logAudit(pool, userId, 'DELETE', 'category', req.params.id, cat.rows[0]?.name);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
