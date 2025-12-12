@@ -97,6 +97,13 @@ const updateAccountBalance = async (client, accountId, amount, type, isReversal 
     );
 };
 
+// Helper para sanitizar valores opcionais (strings vazias viram null)
+const sanitizeValue = (val) => {
+    if (val === undefined || val === null) return null;
+    if (typeof val === 'string' && val.trim() === '') return null;
+    return val;
+};
+
 pool.connect()
   .then(async (client) => {
     console.log('DB Connected Successfully');
@@ -873,6 +880,17 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
         await logAudit(pool, userId, 'DELETE', 'category', req.params.id, cat.rows[0]?.name, cat.rows[0]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/settings', authenticateToken, async (req, res) => {
+    const { settings } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query('UPDATE users SET settings = $1 WHERE id = $2', [settings, userId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Admin Route example (optional)
