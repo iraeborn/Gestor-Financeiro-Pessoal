@@ -1,7 +1,7 @@
 
-import React from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Transaction, TransactionType, Account } from '../types';
+import React, { useMemo } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
+import { Transaction, TransactionType, Account, TransactionStatus } from '../types';
 
 interface ChartsProps {
   transactions?: Transaction[];
@@ -145,6 +145,97 @@ export const BalanceDistributionChart: React.FC<ChartsProps> = ({ accounts = [] 
             <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px'}} />
             </PieChart>
         </ResponsiveContainer>
+        </div>
+    );
+};
+
+export const BalanceHistoryChart: React.FC<ChartsProps> = ({ accounts = [], transactions = [] }) => {
+    const data = useMemo(() => {
+        const historyData = [];
+        // 1. Get current total balance
+        let currentBalance = accounts.reduce((acc, a) => acc + a.balance, 0);
+        
+        // 2. Map transactions by date to calculate daily change
+        const transMap = new Map<string, number>();
+        transactions.forEach(t => {
+            if (t.status === TransactionStatus.PAID) {
+                const date = t.date.split('T')[0];
+                let amount = 0;
+                if (t.type === TransactionType.INCOME) amount = t.amount;
+                else if (t.type === TransactionType.EXPENSE) amount = -t.amount;
+                // Transfers net to 0 generally if internal, but simplistic view:
+                // If it's a transfer, unless we filter accounts, the net sum of total assets is 0. 
+                // We assume internal transfers cancel out in the global sum.
+                
+                transMap.set(date, (transMap.get(date) || 0) + amount);
+            }
+        });
+
+        // 3. Loop backwards 30 days
+        for (let i = 0; i < 30; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            const displayDate = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+            // Push current state for this day
+            historyData.push({
+                name: displayDate,
+                balance: currentBalance,
+                rawDate: d
+            });
+
+            // Calculate opening balance for this day (which is closing for previous day in reverse)
+            // CurrentBalance is end-of-day. To get start-of-day (or prev end-of-day), subtract today's net change.
+            const change = transMap.get(dateStr) || 0;
+            currentBalance -= change; 
+        }
+
+        return historyData.reverse();
+    }, [accounts, transactions]);
+
+    if (accounts.length === 0) {
+        return <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem contas cadastradas</div>;
+    }
+
+    return (
+        <div className="h-full w-full min-h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data}>
+                    <defs>
+                        <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{fill: '#94a3b8', fontSize: 11}} 
+                        interval={4}
+                    />
+                    <YAxis 
+                        hide 
+                        domain={['auto', 'auto']}
+                    />
+                    <Tooltip 
+                        formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '4px' }}
+                    />
+                    <Area 
+                        type="monotone" 
+                        dataKey="balance" 
+                        stroke="#6366f1" 
+                        strokeWidth={2}
+                        fillOpacity={1} 
+                        fill="url(#colorBalance)" 
+                        name="Saldo Acumulado"
+                    />
+                </AreaChart>
+            </ResponsiveContainer>
         </div>
     );
 };

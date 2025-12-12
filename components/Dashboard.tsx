@@ -5,7 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
-import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart } from './Charts';
+import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart, BalanceHistoryChart } from './Charts';
 import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, PieChart, BarChart3, Coins, Building, CreditCard, Utensils, Landmark } from 'lucide-react';
 
 interface DashboardProps {
@@ -103,32 +103,6 @@ const Dashboard: React.FC<DashboardProps> = ({
      };
      onEditTransaction(updatedTransaction);
   };
-
-  // Helper para ícones de conta
-  const getAccountIcon = (type: AccountType) => {
-    switch (type) {
-      case AccountType.WALLET: return <Wallet className="w-4 h-4 text-indigo-500" />;
-      case AccountType.BANK: return <Building className="w-4 h-4 text-blue-500" />;
-      case AccountType.CARD: return <CreditCard className="w-4 h-4 text-rose-500" />;
-      case AccountType.INVESTMENT: return <TrendingUp className="w-4 h-4 text-emerald-500" />;
-      case AccountType.MEAL_VOUCHER: return <Utensils className="w-4 h-4 text-orange-500" />;
-      default: return <Wallet className="w-4 h-4 text-gray-400" />;
-    }
-  };
-
-  const getAccountLabel = (type: AccountType) => {
-      switch(type) {
-          case AccountType.MEAL_VOUCHER: return 'Vale Alimentação';
-          case AccountType.WALLET: return 'Carteira';
-          case AccountType.BANK: return 'Conta Bancária';
-          case AccountType.CARD: return 'Cartão de Crédito';
-          case AccountType.INVESTMENT: return 'Investimento';
-          default: return type;
-      }
-  };
-
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -238,11 +212,11 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* SEÇÃO 2: RELATÓRIO DE SALDOS (70%) E METAS (30%) */}
       <div className="flex flex-col lg:flex-row gap-6">
         
-        {/* Relatório de Contas (Read-Only) - 70% */}
-        <div className="lg:w-[70%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
-            <div className="flex items-center justify-between mb-4">
+        {/* Relatório de Contas (Chart) - 70% */}
+        <div className="lg:w-[70%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-80 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Landmark className="w-5 h-5 text-gray-400"/> Relatório de Saldos
+                    <Landmark className="w-5 h-5 text-gray-400"/> Evolução Patrimonial
                 </h3>
                 <button 
                     onClick={() => onChangeView('FIN_ACCOUNTS')}
@@ -252,47 +226,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </button>
             </div>
             
-            {state.accounts.length === 0 ? (
-                <p className="text-center text-gray-400 py-6 text-sm">Nenhuma conta encontrada.</p>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 text-gray-500 uppercase font-medium">
-                            <tr>
-                                <th className="px-4 py-3 rounded-tl-lg">Conta</th>
-                                <th className="px-4 py-3">Tipo</th>
-                                <th className="px-4 py-3 text-right rounded-tr-lg">Saldo</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {state.accounts.map(acc => (
-                                <tr key={acc.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2">
-                                        <div className="p-1.5 bg-gray-100 rounded-lg">{getAccountIcon(acc.type)}</div>
-                                        {acc.name}
-                                    </td>
-                                    <td className="px-4 py-3 text-gray-500">{getAccountLabel(acc.type)}</td>
-                                    <td className={`px-4 py-3 text-right font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                                        {formatCurrency(acc.balance)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                        <tfoot className="border-t border-gray-100">
-                            <tr className="bg-gray-50/50">
-                                <td colSpan={2} className="px-4 py-3 font-bold text-gray-700 text-right">Saldo Total</td>
-                                <td className={`px-4 py-3 text-right font-extrabold ${currentRealBalance < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>
-                                    {formatCurrency(currentRealBalance)}
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            )}
+            <div className="flex-1 w-full">
+                <BalanceHistoryChart accounts={state.accounts} transactions={state.transactions} />
+            </div>
         </div>
 
         {/* Painel Metas - 30% */}
-        <div className="lg:w-[30%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
+        <div className="lg:w-[30%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-80 overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                     <Target className="w-5 h-5 text-gray-400"/> Metas
