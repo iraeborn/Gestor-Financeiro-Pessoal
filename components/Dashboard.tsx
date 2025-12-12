@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode, AppSettings, AccountType, Contact } from '../types';
+import { AppState, Transaction, TransactionType, TransactionStatus, Account, ViewMode, AppSettings, AccountType, Contact, EntityType } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
@@ -12,6 +12,8 @@ import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, 
 interface DashboardProps {
   state: AppState;
   settings?: AppSettings;
+  // Inject User/PJ context to dashboard to pass to modal
+  userEntity?: EntityType;
   onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact) => void;
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (t: Transaction, newContact?: Contact) => void;
@@ -24,6 +26,7 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ 
   state, 
   settings,
+  userEntity = EntityType.PERSONAL,
   onAddTransaction, 
   onDeleteTransaction, 
   onEditTransaction, 
@@ -341,6 +344,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         accounts={state.accounts}
         contacts={state.contacts}
         initialData={editingTransaction}
+        userEntity={userEntity}
+        branches={state.branches}
+        costCenters={state.costCenters}
+        departments={state.departments}
+        projects={state.projects}
       />
       
       <AccountModal 

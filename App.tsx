@@ -14,7 +14,7 @@ import CollaborationModal from './components/CollaborationModal';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan } from './types';
+import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -26,7 +26,10 @@ const App: React.FC = () => {
   const [registerPlan, setRegisterPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
 
   // App Data States
-  const [state, setState] = useState<AppState>({ accounts: [], transactions: [], goals: [], contacts: [], categories: [] });
+  const [state, setState] = useState<AppState>({ 
+      accounts: [], transactions: [], goals: [], contacts: [], categories: [],
+      branches: [], costCenters: [], departments: [], projects: []
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -425,6 +428,74 @@ const App: React.FC = () => {
       }
   };
 
+  // --- PJ Entities Logic ---
+  const handleSavePJEntity = async (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => {
+      try {
+          if (type === 'company') {
+              await api.saveCompanyProfile(data);
+              setState(prev => ({ ...prev, companyProfile: data }));
+          } else if (type === 'branch') {
+              await api.saveBranch(data);
+              setState(prev => {
+                  const exists = prev.branches.find(i => i.id === data.id);
+                  return {
+                      ...prev,
+                      branches: exists ? prev.branches.map(i => i.id === data.id ? data : i) : [...prev.branches, data]
+                  };
+              });
+          } else if (type === 'costCenter') {
+              await api.saveCostCenter(data);
+              setState(prev => {
+                  const exists = prev.costCenters.find(i => i.id === data.id);
+                  return {
+                      ...prev,
+                      costCenters: exists ? prev.costCenters.map(i => i.id === data.id ? data : i) : [...prev.costCenters, data]
+                  };
+              });
+          } else if (type === 'department') {
+              await api.saveDepartment(data);
+              setState(prev => {
+                  const exists = prev.departments.find(i => i.id === data.id);
+                  return {
+                      ...prev,
+                      departments: exists ? prev.departments.map(i => i.id === data.id ? data : i) : [...prev.departments, data]
+                  };
+              });
+          } else if (type === 'project') {
+              await api.saveProject(data);
+              setState(prev => {
+                  const exists = prev.projects.find(i => i.id === data.id);
+                  return {
+                      ...prev,
+                      projects: exists ? prev.projects.map(i => i.id === data.id ? data : i) : [...prev.projects, data]
+                  };
+              });
+          }
+      } catch (e: any) {
+          alert(`Erro ao salvar ${type}: ` + e.message);
+      }
+  };
+
+  const handleDeletePJEntity = async (type: 'branch' | 'costCenter' | 'department' | 'project', id: string) => {
+      try {
+          if (type === 'branch') {
+              await api.deleteBranch(id);
+              setState(prev => ({ ...prev, branches: prev.branches.filter(i => i.id !== id) }));
+          } else if (type === 'costCenter') {
+              await api.deleteCostCenter(id);
+              setState(prev => ({ ...prev, costCenters: prev.costCenters.filter(i => i.id !== id) }));
+          } else if (type === 'department') {
+              await api.deleteDepartment(id);
+              setState(prev => ({ ...prev, departments: prev.departments.filter(i => i.id !== id) }));
+          } else if (type === 'project') {
+              await api.deleteProject(id);
+              setState(prev => ({ ...prev, projects: prev.projects.filter(i => i.id !== id) }));
+          }
+      } catch (e: any) {
+          alert(`Erro ao excluir ${type}: ` + e.message);
+      }
+  };
+
   // --- VIEW RENDERING ---
 
   if (!currentUser) {
@@ -530,10 +601,19 @@ const App: React.FC = () => {
             <SettingsView 
                 user={currentUser} 
                 categories={state.categories}
+                pjData={{
+                    companyProfile: state.companyProfile,
+                    branches: state.branches,
+                    costCenters: state.costCenters,
+                    departments: state.departments,
+                    projects: state.projects
+                }}
                 onUpdateSettings={handleUpdateSettings}
                 onOpenCollab={() => setIsCollabModalOpen(true)}
                 onSaveCategory={handleSaveCategory}
                 onDeleteCategory={handleDeleteCategory}
+                onSavePJEntity={handleSavePJEntity}
+                onDeletePJEntity={handleDeletePJEntity}
             />
         );
       default:
@@ -585,6 +665,16 @@ const App: React.FC = () => {
         currentUser={currentUser}
         onUserUpdate={setCurrentUser}
       />
+      
+      {/* Passing PJ Data to Modal via Portal or State Context would be ideal, 
+          but here we pass via props to active modal in components. 
+          Actually, TransactionModal is instantiated inside views.
+          We need to update TransactionModal usage in Views to accept PJ props.
+          Or better: The views already have `categories`, we just need to pass `branches` etc down the tree.
+          
+          Since we updated AppState, `state` variable passed to Dashboard/Views now contains branches etc.
+          We just need to update the props interfaces in those components.
+      */}
     </div>
   );
 };

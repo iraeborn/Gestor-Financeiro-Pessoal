@@ -57,6 +57,13 @@ pool.connect()
         await client.query(`CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
         await client.query(`CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
         
+        // PJ Tables
+        await client.query(`CREATE TABLE IF NOT EXISTS company_profiles (id TEXT PRIMARY KEY, trade_name TEXT, legal_name TEXT, cnpj TEXT, user_id TEXT REFERENCES users(id) UNIQUE);`);
+        await client.query(`CREATE TABLE IF NOT EXISTS branches (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
+        await client.query(`CREATE TABLE IF NOT EXISTS cost_centers (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
+        await client.query(`CREATE TABLE IF NOT EXISTS departments (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id));`);
+        await client.query(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id));`);
+
         // Updates to Users Table for SaaS
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'USER';`);
         await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS entity_type TEXT DEFAULT 'PF';`);
@@ -70,6 +77,12 @@ pool.connect()
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS interest_rate DECIMAL(10,2) DEFAULT 0;`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL;`);
         
+        // PJ Fields in Transactions
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS branch_id TEXT REFERENCES branches(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cost_center_id TEXT REFERENCES cost_centers(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS department_id TEXT REFERENCES departments(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;`);
+
         // Updates to Accounts
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2);`);
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS closing_day INTEGER;`);
@@ -371,6 +384,7 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
     }
 });
 
+// Helper for Family Query
 const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
@@ -381,6 +395,13 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const goals = await pool.query(`SELECT * FROM goals WHERE ${getFamilyCondition}`, [userId]);
         const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
         let categories = await pool.query(`SELECT * FROM categories WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+
+        // PJ Data Fetch
+        const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [userId]);
+        const branchesRes = await pool.query(`SELECT * FROM branches WHERE ${getFamilyCondition}`, [userId]);
+        const costCentersRes = await pool.query(`SELECT * FROM cost_centers WHERE ${getFamilyCondition}`, [userId]);
+        const departmentsRes = await pool.query(`SELECT * FROM departments WHERE ${getFamilyCondition}`, [userId]);
+        const projectsRes = await pool.query(`SELECT * FROM projects WHERE ${getFamilyCondition}`, [userId]);
 
         if (categories.rows.length === 0) {
             const defaults = [
@@ -416,14 +437,30 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 isRecurring: r.is_recurring, recurrenceFrequency: r.recurrence_frequency, 
                 recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined,
                 interestRate: r.interest_rate ? parseFloat(r.interest_rate) : 0,
-                contactId: r.contact_id
+                contactId: r.contact_id,
+                branchId: r.branch_id,
+                costCenterId: r.cost_center_id,
+                departmentId: r.department_id,
+                projectId: r.project_id
             })),
             goals: goals.rows.map(r => ({ 
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
                 currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined 
             })),
             contacts: contacts.rows.map(r => ({ id: r.id, name: r.name })),
-            categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type }))
+            categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type })),
+            
+            // PJ Data
+            companyProfile: companyRes.rows[0] ? {
+                id: companyRes.rows[0].id,
+                tradeName: companyRes.rows[0].trade_name,
+                legalName: companyRes.rows[0].legal_name,
+                cnpj: companyRes.rows[0].cnpj
+            } : null,
+            branches: branchesRes.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
+            costCenters: costCentersRes.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
+            departments: departmentsRes.rows.map(r => ({ id: r.id, name: r.name })),
+            projects: projectsRes.rows.map(r => ({ id: r.id, name: r.name }))
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -513,19 +550,118 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- PJ Routes ---
+
+// Company Profile
+app.post('/api/company', authenticateToken, async (req, res) => {
+    const { id, tradeName, legalName, cnpj } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, user_id) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id) DO UPDATE SET trade_name=$2, legal_name=$3, cnpj=$4`,
+            [id, tradeName, legalName, cnpj, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Branches
+app.post('/api/branches', authenticateToken, async (req, res) => {
+    const { id, name, code } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO branches (id, name, code, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3`,
+            [id, name, code, userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+app.delete('/api/branches/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`DELETE FROM branches WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// Cost Centers
+app.post('/api/cost-centers', authenticateToken, async (req, res) => {
+    const { id, name, code } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO cost_centers (id, name, code, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3`,
+            [id, name, code, userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+app.delete('/api/cost-centers/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`DELETE FROM cost_centers WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// Departments
+app.post('/api/departments', authenticateToken, async (req, res) => {
+    const { id, name } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO departments (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2`,
+            [id, name, userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+app.delete('/api/departments/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`DELETE FROM departments WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// Projects
+app.post('/api/projects', authenticateToken, async (req, res) => {
+    const { id, name } = req.body;
+    const userId = req.user.id;
+    try {
+        await pool.query(
+            `INSERT INTO projects (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2`,
+            [id, name, userId]
+        );
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+app.delete('/api/projects/:id', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        await pool.query(`DELETE FROM projects WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, user_id, branch_id, cost_center_id, department_id, project_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
              ON CONFLICT (id) DO UPDATE SET 
-                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14`,
+                description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19`,
             [
                 t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, 
                 sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, 
-                t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId
+                t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId,
+                sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId)
             ]
         );
         res.json({ success: true });

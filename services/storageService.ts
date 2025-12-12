@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
 
 const API_URL = '/api';
 
@@ -8,7 +8,11 @@ const INITIAL_EMPTY_STATE: AppState = {
   transactions: [],
   goals: [],
   contacts: [],
-  categories: []
+  categories: [],
+  branches: [],
+  costCenters: [],
+  departments: [],
+  projects: []
 };
 
 const getHeaders = () => {
@@ -178,5 +182,43 @@ export const api = {
     const res = await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE', headers: getHeaders() });
     await handleResponse(res);
   },
-  saveGoal: async (goal: FinancialGoal) => {}
+  saveGoal: async (goal: FinancialGoal) => {},
+  
+  // PJ Methods
+  saveCompanyProfile: async (company: CompanyProfile) => {
+      const res = await fetch(`${API_URL}/company`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(company) });
+      await handleResponse(res);
+  },
+  saveBranch: async (branch: Branch) => {
+      const res = await fetch(`${API_URL}/branches`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(branch) });
+      await handleResponse(res);
+  },
+  deleteBranch: async (id: string) => {
+      const res = await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+  saveCostCenter: async (cc: CostCenter) => {
+      const res = await fetch(`${API_URL}/cost-centers`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(cc) });
+      await handleResponse(res);
+  },
+  deleteCostCenter: async (id: string) => {
+      const res = await fetch(`${API_URL}/cost-centers/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+  saveDepartment: async (dept: Department) => {
+      const res = await fetch(`${API_URL}/departments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(dept) });
+      await handleResponse(res);
+  },
+  deleteDepartment: async (id: string) => {
+      const res = await fetch(`${API_URL}/departments/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  },
+  saveProject: async (project: Project) => {
+      const res = await fetch(`${API_URL}/projects`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(project) });
+      await handleResponse(res);
+  },
+  deleteProject: async (id: string) => {
+      const res = await fetch(`${API_URL}/projects/${id}`, { method: 'DELETE', headers: getHeaders() });
+      await handleResponse(res);
+  }
 };

@@ -99,6 +99,41 @@ export interface Category {
   userId?: string;
 }
 
+// --- PJ Specific Interfaces ---
+export interface CompanyProfile {
+  id: string;
+  tradeName: string; // Nome Fantasia
+  legalName: string; // Razão Social
+  cnpj: string;
+  userId?: string;
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  code?: string;
+  userId?: string;
+}
+
+export interface CostCenter {
+  id: string;
+  name: string;
+  code?: string;
+  userId?: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  userId?: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  userId?: string;
+}
+
 export interface Transaction {
   id: string;
   description: string;
@@ -115,6 +150,11 @@ export interface Transaction {
   destinationAccountId?: string;
   interestRate?: number;
   contactId?: string;
+  // PJ Fields
+  branchId?: string;
+  costCenterId?: string;
+  departmentId?: string;
+  projectId?: string;
 }
 
 export interface FinancialGoal {
@@ -132,6 +172,12 @@ export interface AppState {
   goals: FinancialGoal[];
   contacts: Contact[]; 
   categories: Category[];
+  // PJ Data
+  companyProfile?: CompanyProfile | null;
+  branches: Branch[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  projects: Project[];
 }
 
 export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS';

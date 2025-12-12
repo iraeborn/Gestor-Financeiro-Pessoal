@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType, Contact, Category } from '../types';
+import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, AccountType, Contact, Category, EntityType } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
@@ -11,8 +11,11 @@ interface TransactionsViewProps {
   transactions: Transaction[];
   accounts: Account[];
   contacts: Contact[];
-  categories: Category[]; // Nova Prop
+  categories: Category[]; 
   settings?: AppSettings;
+  // User/PJ Context
+  userEntity?: EntityType;
+  pjData?: any; // Shortcut for simplicity, ideally typed fully
   onDelete: (id: string) => void;
   onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
@@ -25,6 +28,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   contacts,
   categories,
   settings,
+  userEntity = EntityType.PERSONAL,
+  pjData,
   onDelete, 
   onEdit, 
   onToggleStatus,
@@ -290,6 +295,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         contacts={contacts}
         categories={categories}
         initialData={editingTransaction}
+        userEntity={userEntity}
+        branches={pjData?.branches}
+        costCenters={pjData?.costCenters}
+        departments={pjData?.departments}
+        projects={pjData?.projects}
       />
 
       <PaymentConfirmationModal

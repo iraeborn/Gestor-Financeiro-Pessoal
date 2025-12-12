@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText } from 'lucide-react';
-import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category } from '../types';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users } from 'lucide-react';
+import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project } from '../types';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -11,10 +11,18 @@ interface TransactionModalProps {
   contacts: Contact[];
   categories?: Category[];
   initialData?: Partial<Transaction> | null;
+  // User context
+  userEntity?: EntityType;
+  // PJ Data
+  branches?: Branch[];
+  costCenters?: CostCenter[];
+  departments?: Department[];
+  projects?: Project[];
 }
 
 const TransactionModal: React.FC<TransactionModalProps> = ({ 
-    isOpen, onClose, onSave, accounts, contacts, categories = [], initialData 
+    isOpen, onClose, onSave, accounts, contacts, categories = [], initialData, 
+    userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
 }) => {
   const [formData, setFormData] = useState({
     description: '',
@@ -29,7 +37,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
     recurrenceEndDate: '',
     interestRate: '0',
-    contactId: ''
+    contactId: '',
+    // PJ Fields
+    branchId: '',
+    costCenterId: '',
+    departmentId: '',
+    projectId: ''
   });
 
   // Autocomplete Contact State
@@ -43,6 +56,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   const hasAccounts = accounts && accounts.length > 0;
+  const isPJ = userEntity === EntityType.BUSINESS;
 
   useEffect(() => {
     if (initialData) {
@@ -60,7 +74,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
         recurrenceEndDate: initialData.recurrenceEndDate || '',
         interestRate: initialData.interestRate !== undefined ? initialData.interestRate.toString() : '0',
-        contactId: initialData.contactId || ''
+        contactId: initialData.contactId || '',
+        branchId: initialData.branchId || '',
+        costCenterId: initialData.costCenterId || '',
+        departmentId: initialData.departmentId || '',
+        projectId: initialData.projectId || ''
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
@@ -78,12 +96,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrenceFrequency: 'MONTHLY',
         recurrenceEndDate: '',
         interestRate: '0',
-        contactId: ''
+        contactId: '',
+        branchId: branches[0]?.id || '',
+        costCenterId: '',
+        departmentId: '',
+        projectId: ''
       });
       setContactSearch('');
       setCategorySearch('');
     }
-  }, [initialData, isOpen, accounts, contacts]);
+  }, [initialData, isOpen, accounts, contacts, branches]);
 
   // Click outside listener
   useEffect(() => {
@@ -165,7 +187,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
       interestRate: parseFloat(formData.interestRate) || 0,
-      contactId: finalContactId || undefined
+      contactId: finalContactId || undefined,
+      // PJ
+      branchId: isPJ ? formData.branchId : undefined,
+      costCenterId: isPJ ? formData.costCenterId : undefined,
+      departmentId: isPJ ? formData.departmentId : undefined,
+      projectId: isPJ ? formData.projectId : undefined,
     }, newContactObj, newCategoryObj);
     
     onClose();
@@ -496,6 +523,73 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 </select>
                 </div>
             </div>
+          )}
+
+          {/* PJ Fields */}
+          {isPJ && formData.type !== TransactionType.TRANSFER && (
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                      <Briefcase className="w-3 h-3" /> Classificação Corporativa
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                      <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-1">Filial</label>
+                          <div className="relative">
+                              <MapPin className="w-3 h-3 text-gray-400 absolute left-2 top-2" />
+                              <select 
+                                value={formData.branchId} 
+                                onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                className="w-full pl-6 pr-2 py-1.5 text-xs border border-gray-200 rounded-md outline-none focus:border-indigo-500"
+                              >
+                                  <option value="">Selecione...</option>
+                                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-1">Centro de Custo</label>
+                          <div className="relative">
+                              <Calculator className="w-3 h-3 text-gray-400 absolute left-2 top-2" />
+                              <select 
+                                value={formData.costCenterId} 
+                                onChange={e => setFormData({...formData, costCenterId: e.target.value})}
+                                className="w-full pl-6 pr-2 py-1.5 text-xs border border-gray-200 rounded-md outline-none focus:border-indigo-500"
+                              >
+                                  <option value="">Selecione...</option>
+                                  {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-1">Departamento</label>
+                          <div className="relative">
+                              <Users className="w-3 h-3 text-gray-400 absolute left-2 top-2" />
+                              <select 
+                                value={formData.departmentId} 
+                                onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                                className="w-full pl-6 pr-2 py-1.5 text-xs border border-gray-200 rounded-md outline-none focus:border-indigo-500"
+                              >
+                                  <option value="">Selecione...</option>
+                                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-medium text-gray-500 mb-1">Projeto</label>
+                          <div className="relative">
+                              <FolderKanban className="w-3 h-3 text-gray-400 absolute left-2 top-2" />
+                              <select 
+                                value={formData.projectId} 
+                                onChange={e => setFormData({...formData, projectId: e.target.value})}
+                                className="w-full pl-6 pr-2 py-1.5 text-xs border border-gray-200 rounded-md outline-none focus:border-indigo-500"
+                              >
+                                  <option value="">Selecione...</option>
+                                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+              </div>
           )}
 
           <div className="border-t border-gray-100 pt-3">
