@@ -1,20 +1,57 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType } from '../types';
-import { getFamilyMembers, createInvite, updateMemberRole, removeMember } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield } from 'lucide-react';
+import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight } from 'lucide-react';
 
 interface AccessViewProps {
     currentUser: User;
 }
 
+const PERMISSION_GROUPS = [
+    {
+        name: 'Financeiro',
+        items: [
+            { id: 'FIN_DASHBOARD', label: 'Visão Geral' },
+            { id: 'FIN_TRANSACTIONS', label: 'Lançamentos' },
+            { id: 'FIN_CALENDAR', label: 'Calendário' },
+            { id: 'FIN_CARDS', label: 'Cartões' },
+            { id: 'FIN_REPORTS', label: 'Relatórios' },
+            { id: 'FIN_ADVISOR', label: 'Consultor IA' },
+        ]
+    },
+    {
+        name: 'Odontologia',
+        items: [
+            { id: 'ODONTO_AGENDA', label: 'Agenda' },
+            { id: 'ODONTO_PATIENTS', label: 'Pacientes' },
+            { id: 'ODONTO_PROCEDURES', label: 'Procedimentos' },
+        ]
+    },
+    {
+        name: 'Gestão',
+        items: [
+            { id: 'SYS_CONTACTS', label: 'Contatos' },
+            { id: 'SYS_ACCESS', label: 'Acesso & Equipe' },
+            { id: 'SYS_LOGS', label: 'Logs & Auditoria' },
+            { id: 'SYS_SETTINGS', label: 'Configurações' },
+        ]
+    }
+];
+
 const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Invite Generation State
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [generatingInvite, setGeneratingInvite] = useState(false);
+
+    // Join State
+    const [joinCode, setJoinCode] = useState('');
+    const [joining, setJoining] = useState(false);
     
-    // Edit Permissions Modal
+    // Edit Permissions Modal State
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [editRole, setEditRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
     const [editPermissions, setEditPermissions] = useState<string[]>([]);
@@ -54,6 +91,21 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         }
     };
 
+    const handleJoinFamily = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!joinCode) return;
+        setJoining(true);
+        try {
+            await joinFamily(joinCode);
+            alert("Você entrou na nova equipe com sucesso! A página será recarregada.");
+            window.location.reload();
+        } catch (e: any) {
+            alert("Erro ao entrar: " + e.message);
+        } finally {
+            setJoining(false);
+        }
+    };
+
     const handleRemoveMember = async (memberId: string) => {
         if (!confirm("Tem certeza que deseja remover este membro? Ele perderá o acesso imediatamente.")) return;
         try {
@@ -89,8 +141,13 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         }
     };
 
+    const countPermissions = (perms: string[] | undefined) => {
+        if (!perms) return 0;
+        return perms.length;
+    };
+
     return (
-        <div className="space-y-8 animate-fade-in max-w-5xl pb-10">
+        <div className="space-y-8 animate-fade-in max-w-6xl pb-10">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-indigo-600" />
@@ -98,62 +155,95 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                 </h1>
                 <p className="text-gray-500">
                     {isPJ 
-                        ? "Gerencie os sócios, funcionários e suas permissões na organização."
+                        ? "Gerencie convites, sócios e permissões de acesso da organização."
                         : "Gerencie quem tem acesso às finanças da família."}
                 </p>
             </div>
 
-            {/* Invite Section */}
-            {isAdmin && (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-gray-50 bg-gray-50/50">
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <Users className="w-5 h-5 text-indigo-600" />
-                            Convidar Novo Membro
-                        </h2>
-                    </div>
-                    <div className="p-6">
-                        <p className="text-sm text-gray-600 mb-4 max-w-2xl">
-                            Gere um código de acesso único. Compartilhe este código com quem você deseja adicionar. 
-                            O código é válido por 24 horas.
-                        </p>
-                        
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                            {!inviteCode ? (
-                                <button 
-                                    onClick={handleCreateInvite}
-                                    disabled={generatingInvite}
-                                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
-                                >
-                                    {generatingInvite ? 'Gerando...' : 'Gerar Código de Convite'}
-                                </button>
-                            ) : (
-                                <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-100 rounded-xl p-2 px-4 animate-fade-in">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] text-indigo-500 font-bold uppercase">Código Gerado</span>
-                                        <span className="text-2xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Invite Generation Section (Admin Only) */}
+                {isAdmin && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                        <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <Users className="w-5 h-5 text-indigo-600" />
+                                Convidar Novo Membro
+                            </h2>
+                        </div>
+                        <div className="p-6 flex-1 flex flex-col justify-center">
+                            <p className="text-sm text-gray-600 mb-6">
+                                Gere um código temporário para adicionar um novo membro à sua equipe/família. O código expira em 24 horas.
+                            </p>
+                            
+                            <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-xl border border-gray-100 border-dashed min-h-[120px]">
+                                {!inviteCode ? (
+                                    <button 
+                                        onClick={handleCreateInvite}
+                                        disabled={generatingInvite}
+                                        className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {generatingInvite ? <RefreshCw className="w-4 h-4 animate-spin"/> : <UserPlus className="w-4 h-4" />}
+                                        {generatingInvite ? 'Gerando...' : 'Gerar Código de Convite'}
+                                    </button>
+                                ) : (
+                                    <div className="w-full animate-fade-in text-center">
+                                        <p className="text-xs text-indigo-500 font-bold uppercase mb-2">Compartilhe este código</p>
+                                        <div className="flex items-center justify-center gap-3 mb-2">
+                                            <span className="text-3xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
+                                            <button 
+                                                onClick={() => { navigator.clipboard.writeText(inviteCode); alert('Copiado!'); }}
+                                                className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
+                                                title="Copiar"
+                                            >
+                                                <Copy className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                        <button 
+                                            onClick={() => setInviteCode(null)}
+                                            className="text-xs text-gray-400 hover:text-gray-600 underline"
+                                        >
+                                            Gerar outro código
+                                        </button>
                                     </div>
-                                    <div className="h-8 w-px bg-indigo-200"></div>
-                                    <button 
-                                        onClick={() => { navigator.clipboard.writeText(inviteCode); alert('Copiado!'); }}
-                                        className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
-                                        title="Copiar"
-                                    >
-                                        <Copy className="w-5 h-5" />
-                                    </button>
-                                    <button 
-                                        onClick={() => setInviteCode(null)}
-                                        className="p-2 hover:bg-white rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
-                                        title="Fechar"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
+                )}
+
+                {/* Join Team Section */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                    <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <ArrowRight className="w-5 h-5 text-emerald-600" />
+                            Entrar em Outra Equipe
+                        </h2>
+                    </div>
+                    <div className="p-6 flex-1 flex flex-col justify-center">
+                        <p className="text-sm text-gray-600 mb-6">
+                            Tem um código de convite? Digite-o abaixo para acessar uma nova conta empresarial ou familiar.
+                        </p>
+                        
+                        <form onSubmit={handleJoinFamily} className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={joinCode}
+                                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                                placeholder="Código (ex: A1B2C3)"
+                                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 font-mono text-center uppercase tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none"
+                                maxLength={10}
+                            />
+                            <button 
+                                type="submit"
+                                disabled={joining || joinCode.length < 3}
+                                className="bg-emerald-600 text-white px-6 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200 disabled:opacity-50"
+                            >
+                                {joining ? '...' : 'Entrar'}
+                            </button>
+                        </form>
+                    </div>
                 </div>
-            )}
+            </div>
 
             {/* Members List */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -173,7 +263,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                             <tr>
                                 <th className="px-6 py-4">Membro</th>
                                 <th className="px-6 py-4">Função</th>
-                                <th className="px-6 py-4">Permissões Especiais</th>
+                                <th className="px-6 py-4">Acesso Permitido</th>
                                 {isAdmin && <th className="px-6 py-4 text-right">Ações</th>}
                             </tr>
                         </thead>
@@ -197,19 +287,21 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex flex-wrap gap-1">
-                                            {member.role === 'ADMIN' ? (
-                                                <span className="text-xs text-gray-400 italic">Acesso Total</span>
-                                            ) : (
-                                                member.permissions?.length > 0 ? (
-                                                    member.permissions.map(p => (
-                                                        <span key={p} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded border border-blue-100 font-medium">
-                                                            {p.replace('_', ' ')}
-                                                        </span>
-                                                    ))
-                                                ) : <span className="text-xs text-gray-400 italic">Básico</span>
-                                            )}
-                                        </div>
+                                        {member.role === 'ADMIN' ? (
+                                            <span className="text-xs text-gray-400 italic">Acesso Total</span>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="h-full bg-indigo-500 rounded-full" 
+                                                        style={{ width: `${Math.min(100, (countPermissions(member.permissions) / 10) * 100)}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-xs font-medium text-gray-700">
+                                                    {countPermissions(member.permissions)} telas
+                                                </span>
+                                            </div>
+                                        )}
                                     </td>
                                     {isAdmin && (
                                         <td className="px-6 py-4 text-right">
@@ -245,8 +337,8 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             {/* Edit Permissions Modal */}
             {editingMember && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
                             <h2 className="text-lg font-bold text-gray-800">
                                 Editar Membro: {editingMember.name}
                             </h2>
@@ -254,8 +346,9 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div>
+                        
+                        <div className="p-6 overflow-y-auto">
+                            <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Função</label>
                                 <select 
                                     value={editRole} 
@@ -265,41 +358,45 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                     <option value="MEMBER">Membro</option>
                                     <option value="ADMIN">Administrador</option>
                                 </select>
-                                <p className="text-xs text-gray-500 mt-1">Administradores têm acesso total e podem gerenciar outros membros.</p>
+                                <p className="text-xs text-gray-500 mt-1">Administradores têm acesso total a todas as telas e podem gerenciar a equipe.</p>
                             </div>
 
                             {editRole === 'MEMBER' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Permissões Específicas</label>
-                                    <div className="space-y-2 border border-gray-100 rounded-lg p-3 bg-gray-50/50">
-                                        {[
-                                            { id: 'FIN_VIEW', label: 'Ver Financeiro' },
-                                            { id: 'FIN_EDIT', label: 'Editar Financeiro' },
-                                            { id: 'ODONTO_VIEW', label: 'Ver Odonto' },
-                                            { id: 'ODONTO_EDIT', label: 'Editar Odonto' },
-                                        ].map(perm => (
-                                            <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1.5 rounded-md transition-colors">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={editPermissions.includes(perm.id)}
-                                                    onChange={() => togglePermission(perm.id)}
-                                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                                />
-                                                <span className="text-sm text-gray-700">{perm.label}</span>
-                                            </label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-3">Páginas Permitidas</label>
+                                    <div className="space-y-4">
+                                        {PERMISSION_GROUPS.map((group) => (
+                                            <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
+                                                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
+                                                    <span className="text-xs font-bold text-gray-500 uppercase">{group.name}</span>
+                                                </div>
+                                                <div className="p-3 grid grid-cols-2 gap-2">
+                                                    {group.items.map(perm => (
+                                                        <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors border border-transparent hover:border-gray-100">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={editPermissions.includes(perm.id)}
+                                                                onChange={() => togglePermission(perm.id)}
+                                                                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                                            />
+                                                            <span className="text-sm text-gray-700">{perm.label}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             )}
+                        </div>
 
-                            <div className="pt-2">
-                                <button 
-                                    onClick={handleSavePermissions}
-                                    className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
-                                >
-                                    Salvar Alterações
-                                </button>
-                            </div>
+                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                            <button 
+                                onClick={handleSavePermissions}
+                                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                            >
+                                Salvar Alterações
+                            </button>
                         </div>
                     </div>
                 </div>

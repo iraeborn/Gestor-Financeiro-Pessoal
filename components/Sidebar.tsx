@@ -62,11 +62,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
   };
 
-  // Find active workspace name
+  // Find active workspace & permissions
   const activeWorkspace = currentUser?.workspaces?.find(w => w.id === currentUser.familyId);
   const workspaceName = activeWorkspace ? activeWorkspace.name : (currentUser?.name || 'Minha Conta');
   const isPJ = currentUser?.entityType === 'PJ';
   const showOdonto = isPJ && currentUser?.settings?.activeModules?.odonto;
+  
+  // RBAC Logic
+  const isAdmin = activeWorkspace?.role === 'ADMIN';
+  const userPermissions = activeWorkspace?.permissions || [];
+
+  const hasPermission = (viewId: string) => {
+      if (isAdmin) return true;
+      return userPermissions.includes(viewId);
+  };
 
   const modules: ModuleGroup[] = [
       {
@@ -167,7 +176,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       </div>
 
       <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
-        {modules.filter(m => m.isVisible).map((module) => (
+        {modules.filter(m => m.isVisible).map((module) => {
+            // Filter items based on permission
+            const visibleItems = module.items.filter(item => hasPermission(item.id));
+            
+            // If no items are visible, hide the whole module
+            if (visibleItems.length === 0) return null;
+
+            return (
             <div key={module.id} className="space-y-1">
                 <button 
                     onClick={() => toggleModule(module.id)}
@@ -182,7 +198,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                 
                 {expandedModules[module.id] && (
                     <div className="space-y-1 animate-fade-in pl-2">
-                        {module.items.map(item => {
+                        {visibleItems.map(item => {
                             const Icon = item.icon;
                             const isActive = currentView === item.id;
                             return (
@@ -203,7 +219,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                     </div>
                 )}
             </div>
-        ))}
+            );
+        })}
       </nav>
 
       <div className="p-4 border-t border-gray-100 mt-auto">
