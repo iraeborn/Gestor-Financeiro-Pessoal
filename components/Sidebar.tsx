@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users, CreditCard, ScrollText } from 'lucide-react';
 import { ViewMode } from '../types';
 import { logout } from '../services/storageService';
 
@@ -19,6 +19,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
     { id: 'REPORTS', label: 'Relatórios', icon: PieChart },
     { id: 'CONTACTS', label: 'Contatos', icon: Users },
     { id: 'ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
+    { id: 'LOGS', label: 'Auditoria & Logs', icon: ScrollText },
   ];
 
   const handleLogout = () => {

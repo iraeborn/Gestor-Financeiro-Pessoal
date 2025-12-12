@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog } from '../types';
 
 const API_URL = '/api';
 
@@ -146,6 +146,21 @@ export const loadInitialData = async (): Promise<AppState> => {
         throw new Error("Unauthorized");
     }
     
+    return await handleResponse(res);
+};
+
+// --- Logs & Restore ---
+export const getAuditLogs = async (): Promise<AuditLog[]> => {
+    const res = await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+export const restoreRecord = async (entity: string, id: string) => {
+    const res = await fetch(`${API_URL}/restore`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ entity, id })
+    });
     return await handleResponse(res);
 };
 

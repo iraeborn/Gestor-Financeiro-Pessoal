@@ -165,6 +165,12 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
      onEdit(updatedTransaction);
   };
 
+  const handleDelete = (id: string) => {
+      if (window.confirm("Tem certeza que deseja excluir esta transação?")) {
+          onDelete(id);
+      }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -282,7 +288,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         transactions={filteredTransactions} 
         accounts={accounts} 
         contacts={contacts}
-        onDelete={onDelete}
+        onDelete={handleDelete}
         onEdit={handleOpenEdit}
         onToggleStatus={handleStatusToggle}
       />

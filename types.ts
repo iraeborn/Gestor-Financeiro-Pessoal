@@ -180,6 +180,18 @@ export interface FinancialGoal {
   userId?: string;
 }
 
+export interface AuditLog {
+  id: number;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE';
+  entity: string; // 'transaction', 'account', etc.
+  entityId: string;
+  details?: string; // Nome ou descrição resumida do item
+  timestamp: string;
+  userId: string;
+  userName: string;
+  isDeleted: boolean; // Se o registro atual está deletado (para saber se exibe botão restaurar)
+}
+
 export interface AppState {
   accounts: Account[];
   transactions: Transaction[];
@@ -194,7 +206,7 @@ export interface AppState {
   projects: Project[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS';
+export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS' | 'LOGS';
 
 declare global {
   interface Window {
