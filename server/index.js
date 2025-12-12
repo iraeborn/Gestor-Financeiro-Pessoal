@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import pg from 'pg';
@@ -136,6 +135,14 @@ const extractAccessKey = (urlStr) => {
     }
 };
 
+const detectPaymentMethod = (html) => {
+    if (html.match(/Crédito|Cartão de Crédito/i)) return 'CREDIT';
+    if (html.match(/Débito|Cartão de Débito/i)) return 'DEBIT';
+    if (html.match(/Pix/i)) return 'PIX';
+    if (html.match(/Dinheiro/i)) return 'CASH';
+    return null;
+};
+
 const parsers = {
     // São Paulo (35)
     '35': (html) => {
@@ -146,7 +153,8 @@ const parsers = {
         return {
             amount: amountMatch ? amountMatch[1] : null,
             merchant: merchantMatch ? merchantMatch[1].trim() : null,
-            date: dateMatch ? dateMatch[1] : null
+            date: dateMatch ? dateMatch[1] : null,
+            paymentType: detectPaymentMethod(html)
         };
     },
     // Paraná (41) - Exemplo genérico baseado em estrutura comum
@@ -157,7 +165,8 @@ const parsers = {
         return {
             amount: amountMatch ? amountMatch[1] : null,
             merchant: merchantMatch ? merchantMatch[1].trim() : null,
-            date: dateMatch ? dateMatch[1] : null
+            date: dateMatch ? dateMatch[1] : null,
+            paymentType: detectPaymentMethod(html)
         };
     },
     // Genérico (Fallback)
@@ -194,7 +203,8 @@ const parsers = {
         return {
             amount,
             merchant,
-            date: dateMatch ? dateMatch[1] : null
+            date: dateMatch ? dateMatch[1] : null,
+            paymentType: detectPaymentMethod(html)
         };
     }
 };
@@ -454,7 +464,8 @@ app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
             amount: parseFloat(amount),
             date: date || new Date().toISOString().split('T')[0],
             merchant: data.merchant || 'Estabelecimento NFC-e',
-            stateCode: ufCode
+            stateCode: ufCode,
+            paymentType: data.paymentType
         });
 
     } catch (error) {
