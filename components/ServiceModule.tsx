@@ -3,12 +3,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, TransactionType, TransactionStatus, Transaction } from '../types';
 import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign, CheckCircle } from 'lucide-react';
 
+// Sections map to the sub-items in sidebar
+export type ServiceModuleSection = 'CALENDAR' | 'CLIENTS' | 'SERVICES';
+
 interface ServiceModuleProps {
     moduleTitle: string;
     clientLabel: string; // "Paciente", "Cliente", "Aluno"
     serviceLabel: string; // "Procedimento", "Serviço", "Aula"
     transactionCategory: string; // Default category for generated transactions
     
+    // Controls which section is visible based on sidebar selection
+    activeSection: ServiceModuleSection;
+
     clients: ServiceClient[];
     services: ServiceItem[];
     appointments: ServiceAppointment[];
@@ -24,12 +30,11 @@ interface ServiceModuleProps {
 }
 
 const ServiceModule: React.FC<ServiceModuleProps> = ({ 
-    moduleTitle, clientLabel, serviceLabel, transactionCategory,
+    moduleTitle, clientLabel, serviceLabel, transactionCategory, activeSection,
     clients, services, appointments, contacts,
     onSaveClient, onDeleteClient, onSaveService, onDeleteService,
     onSaveAppointment, onDeleteAppointment, onAddTransaction
 }) => {
-    const [activeTab, setActiveTab] = useState<'CALENDAR' | 'CLIENTS' | 'SERVICES'>('CALENDAR');
     const [searchTerm, setSearchTerm] = useState('');
 
     // --- FORMS STATES ---
@@ -69,11 +74,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     const handleSaveClient = (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Se o usuário digitou um nome mas não selecionou da lista, 
-        // ou se selecionou mas o ID está no form, passamos ambos.
-        // A lógica de "Criar Contato se não existir" será feita no Pai (App.tsx).
-        
-        // Verifica se o nome digitado bate exatamente com algum contato existente (case insensitive) para evitar duplicidade
         let resolvedContactId = clientForm.contactId;
         const exactMatch = contacts.find(c => c.name.toLowerCase() === clientSearchName.trim().toLowerCase());
         if (exactMatch) {
@@ -82,8 +82,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
         onSaveClient({
             id: clientForm.id || crypto.randomUUID(),
-            contactId: resolvedContactId, // Pode ser undefined (novo contato)
-            contactName: exactMatch ? exactMatch.name : clientSearchName.trim(), // Nome para criar novo
+            contactId: resolvedContactId,
+            contactName: exactMatch ? exactMatch.name : clientSearchName.trim(), 
             notes: clientForm.notes,
             birthDate: clientForm.birthDate
         });
@@ -146,40 +146,22 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                         <div className="p-2 bg-sky-100 rounded-lg text-sky-600"><ClipboardList className="w-6 h-6"/></div>
                         {moduleTitle}
+                        <span className="text-gray-400 font-light text-xl">| 
+                            {activeSection === 'CALENDAR' ? ' Agenda' : 
+                             activeSection === 'CLIENTS' ? ` ${clientLabel}s` : 
+                             ` ${serviceLabel}s`}
+                        </span>
                     </h1>
-                    <p className="text-gray-500">Gestão de {clientLabel.toLowerCase()}s e agenda.</p>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-200">
-                <button 
-                    onClick={() => setActiveTab('CALENDAR')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'CALENDAR' ? 'border-sky-500 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    Agenda
-                </button>
-                <button 
-                    onClick={() => setActiveTab('CLIENTS')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'CLIENTS' ? 'border-sky-500 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    {clientLabel}s
-                </button>
-                <button 
-                    onClick={() => setActiveTab('SERVICES')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'SERVICES' ? 'border-sky-500 text-sky-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    {serviceLabel}s
-                </button>
-            </div>
-
             {/* --- CALENDAR TAB --- */}
-            {activeTab === 'CALENDAR' && (
+            {activeSection === 'CALENDAR' && (
                 <div className="space-y-4">
                     <div className="flex justify-end">
                         <button onClick={() => { setApptForm({}); setApptModalOpen(true); }} className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-sky-700">
@@ -225,7 +207,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             )}
 
             {/* --- CLIENTS TAB --- */}
-            {activeTab === 'CLIENTS' && (
+            {activeSection === 'CLIENTS' && (
                 <div className="space-y-4">
                     <div className="flex gap-2">
                         <div className="relative flex-1">
@@ -271,7 +253,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             )}
 
             {/* --- SERVICES TAB --- */}
-            {activeTab === 'SERVICES' && (
+            {activeSection === 'SERVICES' && (
                 <div className="space-y-4">
                     <div className="flex justify-end">
                         <button onClick={() => { setServiceForm({}); setServiceModalOpen(true); }} className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-sky-700">

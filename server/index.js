@@ -174,6 +174,8 @@ pool.connect()
                 UNIQUE(user_id, family_id)
             );
         `);
+        // Add permissions column for RBAC
+        await client.query(`ALTER TABLE memberships ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]';`);
 
         // MIGRATION: Ensure all existing users have a membership to their own family_id
         await client.query(`
@@ -270,7 +272,8 @@ const getUserWorkspaces = async (userId) => {
             m.family_id as id, 
             u.name as name, 
             m.role,
-            u.entity_type as "entityType"
+            u.entity_type as "entityType",
+            m.permissions
         FROM memberships m
         JOIN users u ON m.family_id = u.id
         WHERE m.user_id = $1
@@ -307,7 +310,7 @@ app.post('/api/auth/register', async (req, res) => {
       [id, name, email, hashedPassword, defaultSettings, 'USER', entityType || 'PF', plan || 'TRIAL', 'TRIALING', trialEndsAt]
     );
 
-    // Create default membership
+    // Create default membership (Admin has full permissions implicitly, but we can set empty array)
     await pool.query('INSERT INTO memberships (user_id, family_id, role) VALUES ($1, $1, $2)', [id, 'ADMIN']);
 
     const workspaces = await getUserWorkspaces(id);

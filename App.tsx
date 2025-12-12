@@ -34,7 +34,7 @@ const App: React.FC = () => {
       serviceClients: [], serviceItems: [], serviceAppointments: [] 
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<ViewMode>('DASHBOARD');
+  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD'); // Padrão Financeiro
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Modal States
@@ -537,7 +537,8 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentView) {
-      case 'DASHBOARD':
+      // --- FINANCEIRO MODULE ---
+      case 'FIN_DASHBOARD':
         return (
           <Dashboard 
             state={state}
@@ -556,7 +557,7 @@ const App: React.FC = () => {
             onChangeView={setCurrentView}
           />
         );
-      case 'TRANSACTIONS':
+      case 'FIN_TRANSACTIONS':
         return (
           <TransactionsView 
             transactions={state.transactions} 
@@ -577,7 +578,7 @@ const App: React.FC = () => {
             onAdd={handleAddTransaction}
           />
         );
-      case 'CALENDAR':
+      case 'FIN_CALENDAR':
         return (
           <CalendarView 
             transactions={state.transactions}
@@ -588,16 +589,7 @@ const App: React.FC = () => {
             onEdit={handleEditTransaction}
           />
         );
-      case 'CONTACTS':
-        return (
-            <ContactsView 
-                contacts={state.contacts}
-                onAddContact={handleSaveContact}
-                onEditContact={handleSaveContact}
-                onDeleteContact={handleDeleteContact}
-            />
-        );
-      case 'CARDS':
+      case 'FIN_CARDS':
         return (
             <CreditCardsView 
                 accounts={state.accounts}
@@ -611,42 +603,24 @@ const App: React.FC = () => {
                 onAddTransaction={handleAddTransaction}
             />
         );
-      case 'REPORTS':
+      case 'FIN_REPORTS':
         return <Reports transactions={state.transactions} />;
-      case 'ADVISOR':
+      case 'FIN_ADVISOR':
         return <SmartAdvisor data={state} />;
-      case 'LOGS':
-        return <LogsView />;
-      case 'ODONTO':
-        // Filtra dados do estado global para passar apenas os do módulo ODONTO
-        const odontoClients = state.serviceClients?.filter(c => c.moduleTag === ODONTO_TAG) || [];
-        const odontoServices = state.serviceItems?.filter(s => s.moduleTag === ODONTO_TAG) || [];
-        const odontoAppointments = state.serviceAppointments?.filter(a => a.moduleTag === ODONTO_TAG) || [];
-
+      
+      // --- SYSTEM/MANAGEMENT MODULE ---
+      case 'SYS_CONTACTS':
         return (
-            <ServiceModule 
-                moduleTitle="Módulo Odonto"
-                clientLabel="Paciente"
-                serviceLabel="Procedimento"
-                transactionCategory="Serviços Odontológicos"
-                
-                clients={odontoClients}
-                services={odontoServices}
-                appointments={odontoAppointments}
+            <ContactsView 
                 contacts={state.contacts}
-                
-                // Passa dados parciais (pode ser sem contactId se for novo)
-                onSaveClient={handleSaveServiceClient}
-                onDeleteClient={handleDeleteServiceClient}
-                onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
-                onDeleteService={handleDeleteServiceItem}
-                onSaveAppointment={(a) => handleSaveServiceAppointment({ ...a, moduleTag: ODONTO_TAG })}
-                onDeleteAppointment={handleDeleteServiceAppointment}
-                
-                onAddTransaction={handleAddTransaction}
+                onAddContact={handleSaveContact}
+                onEditContact={handleSaveContact}
+                onDeleteContact={handleDeleteContact}
             />
         );
-      case 'SETTINGS':
+      case 'SYS_LOGS':
+        return <LogsView />;
+      case 'SYS_SETTINGS':
         return (
             <SettingsView 
                 user={currentUser} 
@@ -666,6 +640,47 @@ const App: React.FC = () => {
                 onDeletePJEntity={handleDeletePJEntity}
             />
         );
+
+      // --- ODONTO MODULE ---
+      case 'ODONTO_AGENDA':
+      case 'ODONTO_PATIENTS':
+      case 'ODONTO_PROCEDURES':
+        // Filtra dados do estado global para passar apenas os do módulo ODONTO
+        const odontoClients = state.serviceClients?.filter(c => c.moduleTag === ODONTO_TAG) || [];
+        const odontoServices = state.serviceItems?.filter(s => s.moduleTag === ODONTO_TAG) || [];
+        const odontoAppointments = state.serviceAppointments?.filter(a => a.moduleTag === ODONTO_TAG) || [];
+
+        // Determina a seção ativa baseada no view mode
+        let section: 'CALENDAR' | 'CLIENTS' | 'SERVICES' = 'CALENDAR';
+        if (currentView === 'ODONTO_PATIENTS') section = 'CLIENTS';
+        if (currentView === 'ODONTO_PROCEDURES') section = 'SERVICES';
+
+        return (
+            <ServiceModule 
+                moduleTitle="Módulo Odonto"
+                clientLabel="Paciente"
+                serviceLabel="Procedimento"
+                transactionCategory="Serviços Odontológicos"
+                
+                activeSection={section}
+
+                clients={odontoClients}
+                services={odontoServices}
+                appointments={odontoAppointments}
+                contacts={state.contacts}
+                
+                // Passa dados parciais (pode ser sem contactId se for novo)
+                onSaveClient={handleSaveServiceClient}
+                onDeleteClient={handleDeleteServiceClient}
+                onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
+                onDeleteService={handleDeleteServiceItem}
+                onSaveAppointment={(a) => handleSaveServiceAppointment({ ...a, moduleTag: ODONTO_TAG })}
+                onDeleteAppointment={handleDeleteServiceAppointment}
+                
+                onAddTransaction={handleAddTransaction}
+            />
+        );
+
       default:
         return <div>Página não encontrada</div>;
     }

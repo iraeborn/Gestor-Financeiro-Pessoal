@@ -66,6 +66,7 @@ export interface Workspace {
   role: 'ADMIN' | 'MEMBER';
   entityType: EntityType;
   isCurrent: boolean;
+  permissions?: string[]; // Lista de permissões (ex: 'FIN_VIEW', 'ODONTO_AGENDA_EDIT')
 }
 
 export interface User {
@@ -264,7 +265,23 @@ export interface AppState {
   serviceAppointments?: ServiceAppointment[];
 }
 
-export type ViewMode = 'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'ADVISOR' | 'CALENDAR' | 'SETTINGS' | 'CONTACTS' | 'CARDS' | 'LOGS' | 'ODONTO';
+// Updated ViewMode to support Module Hierarchies
+export type ViewMode = 
+  // Financeiro (Padrão)
+  | 'FIN_DASHBOARD' 
+  | 'FIN_TRANSACTIONS' 
+  | 'FIN_CALENDAR' 
+  | 'FIN_CARDS' 
+  | 'FIN_REPORTS' 
+  | 'FIN_ADVISOR'
+  // Odonto
+  | 'ODONTO_AGENDA'
+  | 'ODONTO_PATIENTS'
+  | 'ODONTO_PROCEDURES'
+  // Gestão / Sistema
+  | 'SYS_CONTACTS'
+  | 'SYS_LOGS'
+  | 'SYS_SETTINGS';
 
 declare global {
   interface Window {

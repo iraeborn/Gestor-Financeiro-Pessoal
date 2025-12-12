@@ -1,6 +1,10 @@
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, Check, Briefcase, User as UserIcon, SmilePlus } from 'lucide-react';
+import { 
+    LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
+    CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar
+} from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
 
@@ -11,20 +15,28 @@ interface SidebarProps {
   currentUser?: User | null; // Pass current user to access workspaces
 }
 
+interface MenuItem {
+    id: ViewMode;
+    label: string;
+    icon?: React.ElementType;
+}
+
+interface ModuleGroup {
+    id: string;
+    label: string;
+    icon: React.ElementType;
+    items: MenuItem[];
+    isVisible?: boolean; // Control if module is shown (e.g. PJ only)
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
-
-  const menuItems = [
-    { id: 'DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
-    { id: 'TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
-    { id: 'CALENDAR', label: 'Calendário', icon: CalendarDays },
-    { id: 'CARDS', label: 'Meus Cartões', icon: CreditCard },
-    { id: 'REPORTS', label: 'Relatórios', icon: PieChart },
-    { id: 'CONTACTS', label: 'Contatos', icon: Users },
-    { id: 'ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
-    { id: 'LOGS', label: 'Auditoria & Logs', icon: ScrollText },
-  ];
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
+      'FINANCE': true,
+      'ODONTO': true,
+      'SYSTEM': true
+  });
 
   const handleLogout = () => {
     logout();
@@ -36,15 +48,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           setIsWorkspaceDropdownOpen(false);
           return;
       }
-      
       setSwitching(true);
       try {
           await switchContext(ws.id);
-          window.location.reload(); // Reload to refresh all data with new context
+          window.location.reload(); 
       } catch (e) {
           alert("Erro ao trocar de conta.");
           setSwitching(false);
       }
+  };
+
+  const toggleModule = (moduleId: string) => {
+      setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
   };
 
   // Find active workspace name
@@ -52,6 +67,45 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const workspaceName = activeWorkspace ? activeWorkspace.name : (currentUser?.name || 'Minha Conta');
   const isPJ = currentUser?.entityType === 'PJ';
   const showOdonto = isPJ && currentUser?.settings?.activeModules?.odonto;
+
+  const modules: ModuleGroup[] = [
+      {
+          id: 'FINANCE',
+          label: 'Financeiro',
+          icon: Wallet,
+          isVisible: true,
+          items: [
+              { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
+              { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
+              { id: 'FIN_CALENDAR', label: 'Calendário', icon: CalendarDays },
+              { id: 'FIN_CARDS', label: 'Meus Cartões', icon: CreditCard },
+              { id: 'FIN_REPORTS', label: 'Relatórios', icon: PieChart },
+              { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
+          ]
+      },
+      {
+          id: 'ODONTO',
+          label: 'Odontologia',
+          icon: SmilePlus,
+          isVisible: !!showOdonto,
+          items: [
+              { id: 'ODONTO_AGENDA', label: 'Agenda', icon: Calendar },
+              { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: Contact },
+              { id: 'ODONTO_PROCEDURES', label: 'Procedimentos', icon: Stethoscope },
+          ]
+      },
+      {
+          id: 'SYSTEM',
+          label: 'Gestão',
+          icon: Settings,
+          isVisible: true,
+          items: [
+              { id: 'SYS_CONTACTS', label: 'Contatos', icon: Users },
+              { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
+              { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
+          ]
+      }
+  ];
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
@@ -100,7 +154,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                       </div>
                       <div className="border-t border-gray-100 bg-gray-50 p-2">
                           <button 
-                            onClick={() => onChangeView('SETTINGS')} // Redirect to settings to invite/join
+                            onClick={() => onChangeView('SYS_SETTINGS')}
                             className="w-full py-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 text-center"
                           >
                               Gerenciar Contas
@@ -111,62 +165,50 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onChangeView(item.id as ViewMode)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
-                isActive
-                  ? 'bg-indigo-50 text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />
-              {item.label}
-            </button>
-          );
-        })}
-
-        {showOdonto && (
-            <>
-                <div className="my-2 border-t border-gray-100 mx-4"></div>
-                <button
-                    onClick={() => onChangeView('ODONTO')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
-                        currentView === 'ODONTO'
-                        ? 'bg-sky-50 text-sky-600 shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
+      <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
+        {modules.filter(m => m.isVisible).map((module) => (
+            <div key={module.id} className="space-y-1">
+                <button 
+                    onClick={() => toggleModule(module.id)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
                 >
-                    <SmilePlus className={`w-5 h-5 ${currentView === 'ODONTO' ? 'text-sky-600' : 'text-sky-400'}`} />
-                    Módulo Odonto
+                    <span className="flex items-center gap-2">
+                        <module.icon className="w-3 h-3" />
+                        {module.label}
+                    </span>
+                    <ChevronRight className={`w-3 h-3 transition-transform ${expandedModules[module.id] ? 'rotate-90' : ''}`} />
                 </button>
-            </>
-        )}
-        
-        <div className="pt-4 mt-4 border-t border-gray-100">
-            <button
-                onClick={() => onChangeView('SETTINGS')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium ${
-                    currentView === 'SETTINGS'
-                      ? 'bg-indigo-50 text-indigo-600 shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-            >
-                <Settings className="w-5 h-5" />
-                Configurações
-            </button>
-        </div>
+                
+                {expandedModules[module.id] && (
+                    <div className="space-y-1 animate-fade-in pl-2">
+                        {module.items.map(item => {
+                            const Icon = item.icon;
+                            const isActive = currentView === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    onClick={() => onChangeView(item.id)}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
+                                        isActive
+                                        ? 'bg-indigo-50 text-indigo-700 shadow-sm'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                    }`}
+                                >
+                                    {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />}
+                                    {item.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        ))}
       </nav>
 
       <div className="p-4 border-t border-gray-100 mt-auto">
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm font-medium"
         >
           <LogOut className="w-5 h-5" />
           Sair

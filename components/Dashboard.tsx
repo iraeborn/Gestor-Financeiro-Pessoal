@@ -239,7 +239,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <option value={20}>20 itens</option>
                     </select>
                     <button 
-                      onClick={() => onChangeView('TRANSACTIONS')}
+                      onClick={() => onChangeView('FIN_TRANSACTIONS')}
                       className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                     >
                       Ver todas <ArrowRight className="w-4 h-4" />
@@ -370,3 +370,4 @@ const Dashboard: React.FC<DashboardProps> = ({
 };
 
 export default Dashboard;
+    
