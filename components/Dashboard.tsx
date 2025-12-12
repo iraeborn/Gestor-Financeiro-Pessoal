@@ -343,6 +343,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         onSave={handleSaveTrans}
         accounts={state.accounts}
         contacts={state.contacts}
+        categories={state.categories}
         initialData={editingTransaction}
         userEntity={userEntity}
         branches={state.branches}
