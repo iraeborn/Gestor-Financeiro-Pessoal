@@ -1,4 +1,3 @@
-
 # Logs
 logs
 *.log
@@ -89,3 +88,6 @@ dist
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Docker
+Dockerfile
