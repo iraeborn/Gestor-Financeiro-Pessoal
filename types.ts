@@ -77,13 +77,21 @@ export interface User {
   familyId?: string;
   settings?: AppSettings;
   // SaaS Fields
-  role?: UserRole;
+  role?: UserRole; // App Level Role (Not Workspace Role)
   entityType?: EntityType; // Tipo da conta ATUAL
   plan?: SubscriptionPlan;
   status?: SubscriptionStatus;
   trialEndsAt?: string;
   createdAt?: string;
   workspaces?: Workspace[]; // Lista de contas acessíveis
+}
+
+export interface Member {
+    id: string;
+    name: string;
+    email: string;
+    role: 'ADMIN' | 'MEMBER';
+    permissions: string[];
 }
 
 export interface AuthResponse {
@@ -281,7 +289,8 @@ export type ViewMode =
   // Gestão / Sistema
   | 'SYS_CONTACTS'
   | 'SYS_LOGS'
-  | 'SYS_SETTINGS';
+  | 'SYS_SETTINGS'
+  | 'SYS_ACCESS';
 
 declare global {
   interface Window {

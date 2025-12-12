@@ -1000,7 +1000,7 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
         const familyId = activeFamilyIdRes.rows[0]?.family_id || userId;
 
         const members = await pool.query(`
-            SELECT u.id, u.name, u.email, m.role, u.entity_type
+            SELECT u.id, u.name, u.email, m.role, u.entity_type, m.permissions
             FROM users u
             JOIN memberships m ON u.id = m.user_id
             WHERE m.family_id = $1
@@ -1008,6 +1008,54 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
 
         res.json(members.rows);
     } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/family/members/:memberId', authenticateToken, async (req, res) => {
+    const { role, permissions } = req.body;
+    const memberId = req.params.memberId;
+    const userId = req.user.id;
+
+    try {
+        // Check if current user is ADMIN of the family
+        const activeFamilyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        const familyId = activeFamilyIdRes.rows[0]?.family_id;
+
+        const checkAdmin = await pool.query(`SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2`, [userId, familyId]);
+        if (checkAdmin.rows[0]?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas administradores podem gerenciar membros.' });
+
+        await pool.query(`
+            UPDATE memberships SET role = $1, permissions = $2
+            WHERE user_id = $3 AND family_id = $4
+        `, [role, JSON.stringify(permissions || []), memberId, familyId]);
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/family/members/:memberId', authenticateToken, async (req, res) => {
+    const memberId = req.params.memberId;
+    const userId = req.user.id;
+
+    try {
+        const activeFamilyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        const familyId = activeFamilyIdRes.rows[0]?.family_id;
+
+        const checkAdmin = await pool.query(`SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2`, [userId, familyId]);
+        if (checkAdmin.rows[0]?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas administradores podem remover membros.' });
+
+        if (userId === memberId) return res.status(400).json({ error: 'Você não pode remover a si mesmo.' });
+
+        await pool.query(`DELETE FROM memberships WHERE user_id = $1 AND family_id = $2`, [memberId, familyId]);
+        
+        // Reset user's family_id to their own ID if they were in this family
+        await pool.query(`UPDATE users SET family_id = id WHERE id = $1 AND family_id = $2`, [memberId, familyId]);
+
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

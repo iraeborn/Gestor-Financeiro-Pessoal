@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase } from 'lucide-react';
 import { createInvite, joinFamily, getFamilyMembers } from '../services/storageService';
-import { User, EntityType } from '../types';
+import { User, EntityType, Member } from '../types';
 
 interface CollaborationModalProps {
   isOpen: boolean;
@@ -15,7 +15,7 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
   const [activeTab, setActiveTab] = useState<'INVITE' | 'JOIN'>('INVITE');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
-  const [members, setMembers] = useState<Partial<User>[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');

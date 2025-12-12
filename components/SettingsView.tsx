@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, Category, TransactionType, EntityType, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
-import { CreditCard, Users, Shield, Tag, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle } from 'lucide-react';
+import { CreditCard, Shield, Tag, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users } from 'lucide-react';
 import { updateSettings } from '../services/storageService';
 
 interface SettingsViewProps {
@@ -15,7 +15,7 @@ interface SettingsViewProps {
       projects: Project[];
   };
   onUpdateSettings: (s: AppSettings) => void;
-  onOpenCollab: () => void;
+  onOpenCollab: () => void; // Deprecated, but kept in prop signature to avoid breaking parent passing it
   onSaveCategory: (c: Category) => void;
   onDeleteCategory: (id: string) => void;
   // PJ Handlers
@@ -24,7 +24,7 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
-    user, categories, pjData, onUpdateSettings, onOpenCollab, onSaveCategory, onDeleteCategory,
+    user, categories, pjData, onUpdateSettings, onSaveCategory, onDeleteCategory,
     onSavePJEntity, onDeletePJEntity
 }) => {
   const settings = user.settings || { includeCreditCardsInTotal: true, activeModules: {} };
@@ -308,7 +308,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </h2>
             </div>
             <div className="p-6 space-y-6">
-                {/* ... existing content ... */}
                 
                 {/* Form de Adicionar */}
                 <form onSubmit={handleAddCategory} className="flex gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
@@ -376,35 +375,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             ))}
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        {/* Seção de Colaboração (Dinâmica PF/PJ) */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-             <div className="p-6 border-b border-gray-50 bg-gray-50/50">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    {isPJ ? <Briefcase className="w-5 h-5 text-indigo-600" /> : <Users className="w-5 h-5 text-indigo-600" />}
-                    {isPJ ? "Gestão de Acesso" : "Colaboração Familiar"}
-                </h2>
-            </div>
-            <div className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div>
-                        <h3 className="font-semibold text-gray-900">{isPJ ? "Gerenciar Sócios e Equipe" : "Gerenciar Grupo Familiar"}</h3>
-                        <p className="text-sm text-gray-500 max-w-md mt-1">
-                            {isPJ 
-                                ? "Convide sócios ou contadores para visualizar e auditar as finanças da empresa em tempo real."
-                                : "Convide pessoas para visualizar e gerenciar as mesmas finanças que você ou entre em um grupo existente."
-                            }
-                        </p>
-                    </div>
-                    <button 
-                        onClick={onOpenCollab}
-                        className="px-5 py-2.5 bg-indigo-50 text-indigo-700 font-semibold rounded-xl hover:bg-indigo-100 transition-colors border border-indigo-200"
-                    >
-                        {isPJ ? "Gerenciar Acessos" : "Abrir Colaboração"}
-                    </button>
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment, Member } from '../types';
 
 const API_URL = '/api';
 
@@ -126,8 +126,6 @@ export const getAdminUsers = async () => {
 // --- Collab (Family) ---
 
 export const createInvite = async () => {
-    // Note: The logic for createInvite is actually in server/index.js under /api/admin/invite/create in the new code, 
-    // but the old code pointed to /invite/create. Let's align with the previous structure but ensure headers.
     const res = await fetch(`${API_URL}/admin/invite/create`, {
         method: 'GET',
         headers: getHeaders()
@@ -148,10 +146,27 @@ export const joinFamily = async (code: string) => {
     return data.user;
 };
 
-export const getFamilyMembers = async () => {
+export const getFamilyMembers = async (): Promise<Member[]> => {
     const res = await fetch(`${API_URL}/family/members`, { headers: getHeaders() });
     if (!res.ok) return [];
     return await res.json();
+};
+
+export const updateMemberRole = async (memberId: string, role: string, permissions: string[]) => {
+    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ role, permissions })
+    });
+    return await handleResponse(res);
+};
+
+export const removeMember = async (memberId: string) => {
+    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+    });
+    return await handleResponse(res);
 };
 
 // --- Data ---

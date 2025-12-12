@@ -15,6 +15,7 @@ import CollaborationModal from './components/CollaborationModal';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import ServiceModule from './components/ServiceModule';
+import AccessView from './components/AccessView';
 import { loadInitialData, api, logout } from './services/storageService';
 import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment } from './types';
 import { Menu, Loader2 } from 'lucide-react';
@@ -640,6 +641,8 @@ const App: React.FC = () => {
                 onDeletePJEntity={handleDeletePJEntity}
             />
         );
+      case 'SYS_ACCESS':
+        return <AccessView currentUser={currentUser} />;
 
       // --- ODONTO MODULE ---
       case 'ODONTO_AGENDA':

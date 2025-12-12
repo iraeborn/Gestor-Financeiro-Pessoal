@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
@@ -101,6 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           isVisible: true,
           items: [
               { id: 'SYS_CONTACTS', label: 'Contatos', icon: Users },
+              { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
               { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
               { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
           ]
