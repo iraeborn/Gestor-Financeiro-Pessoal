@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, TransactionType, TransactionStatus, Transaction } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign } from 'lucide-react';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign, CheckCircle } from 'lucide-react';
 
 interface ServiceModuleProps {
     moduleTitle: string;
@@ -14,7 +14,7 @@ interface ServiceModuleProps {
     appointments: ServiceAppointment[];
     contacts: Contact[];
     
-    onSaveClient: (c: Omit<ServiceClient, 'moduleTag'>) => void;
+    onSaveClient: (c: Partial<ServiceClient>) => void;
     onDeleteClient: (id: string) => void;
     onSaveService: (s: Omit<ServiceItem, 'moduleTag'>) => void;
     onDeleteService: (id: string) => void;
@@ -36,32 +36,54 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     const [isClientModalOpen, setClientModalOpen] = useState(false);
     const [clientForm, setClientForm] = useState<Partial<ServiceClient>>({});
     
+    // Autocomplete State for Client Modal
+    const [clientSearchName, setClientSearchName] = useState('');
+    const [showContactDropdown, setShowContactDropdown] = useState(false);
+    const contactDropdownRef = useRef<HTMLDivElement>(null);
+    
     const [isServiceModalOpen, setServiceModalOpen] = useState(false);
     const [serviceForm, setServiceForm] = useState<Partial<ServiceItem>>({});
 
     const [isApptModalOpen, setApptModalOpen] = useState(false);
     const [apptForm, setApptForm] = useState<Partial<ServiceAppointment>>({});
 
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+                setShowContactDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
     // --- HANDLERS ---
+
+    const handleOpenClientModal = () => {
+        setClientForm({});
+        setClientSearchName('');
+        setClientModalOpen(true);
+    };
 
     const handleSaveClient = (e: React.FormEvent) => {
         e.preventDefault();
-        // Check if creating new contact or linking existing
-        let finalContactId = clientForm.contactId;
-        if (!finalContactId && clientForm.contactName) {
-            // Find existing contact by name
-            const existing = contacts.find(c => c.name.toLowerCase() === clientForm.contactName?.toLowerCase());
-            if (existing) {
-                finalContactId = existing.id;
-            } else {
-                alert(`Para criar um ${clientLabel.toLowerCase()}, primeiro selecione um contato existente ou crie um novo na aba Contatos.`);
-                return;
-            }
+        
+        // Se o usuário digitou um nome mas não selecionou da lista, 
+        // ou se selecionou mas o ID está no form, passamos ambos.
+        // A lógica de "Criar Contato se não existir" será feita no Pai (App.tsx).
+        
+        // Verifica se o nome digitado bate exatamente com algum contato existente (case insensitive) para evitar duplicidade
+        let resolvedContactId = clientForm.contactId;
+        const exactMatch = contacts.find(c => c.name.toLowerCase() === clientSearchName.trim().toLowerCase());
+        if (exactMatch) {
+            resolvedContactId = exactMatch.id;
         }
 
         onSaveClient({
             id: clientForm.id || crypto.randomUUID(),
-            contactId: finalContactId!,
+            contactId: resolvedContactId, // Pode ser undefined (novo contato)
+            contactName: exactMatch ? exactMatch.name : clientSearchName.trim(), // Nome para criar novo
             notes: clientForm.notes,
             birthDate: clientForm.birthDate
         });
@@ -116,6 +138,11 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     };
 
     const filteredClients = clients.filter(c => c.contactName?.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // Filter contacts for dropdown in modal
+    const filteredContacts = contacts.filter(c => 
+        c.name.toLowerCase().includes(clientSearchName.toLowerCase())
+    );
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -211,7 +238,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
                             />
                         </div>
-                        <button onClick={() => { setClientForm({}); setClientModalOpen(true); }} className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-sky-700">
+                        <button onClick={handleOpenClientModal} className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold hover:bg-sky-700">
                             <Plus className="w-4 h-4" /> Novo {clientLabel}
                         </button>
                     </div>
@@ -268,25 +295,59 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
             {/* MODALS */}
             
-            {/* Client Modal */}
+            {/* Client Modal (Unified Contact/Client Creation) */}
             {isClientModalOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
                         <h2 className="text-lg font-bold mb-4">Novo {clientLabel}</h2>
                         <form onSubmit={handleSaveClient} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Contato Vinculado</label>
-                                <select 
-                                    className="w-full border rounded-lg p-2 text-sm"
-                                    value={clientForm.contactId || ''}
-                                    onChange={e => setClientForm({...clientForm, contactId: e.target.value})}
-                                    required
-                                >
-                                    <option value="">Selecione um contato...</option>
-                                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                                <p className="text-xs text-gray-400 mt-1">Crie o contato na aba "Contatos" antes de vincular.</p>
+                            <div className="relative" ref={contactDropdownRef}>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">Nome Completo</label>
+                                <div className="relative">
+                                    <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                                    <input 
+                                        type="text"
+                                        placeholder={`Nome do ${clientLabel.toLowerCase()}...`}
+                                        className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none"
+                                        value={clientSearchName}
+                                        onFocus={() => setShowContactDropdown(true)}
+                                        onChange={(e) => {
+                                            setClientSearchName(e.target.value);
+                                            setClientForm(prev => ({ ...prev, contactId: undefined })); // Reset link if typing
+                                            setShowContactDropdown(true);
+                                        }}
+                                        required
+                                    />
+                                </div>
+                                
+                                {showContactDropdown && clientSearchName && filteredContacts.length > 0 && (
+                                    <div className="absolute z-10 w-full bg-white mt-1 border border-gray-100 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                        <p className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase bg-gray-50 sticky top-0">Contatos Existentes</p>
+                                        {filteredContacts.map(c => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setClientSearchName(c.name);
+                                                    setClientForm(prev => ({ ...prev, contactId: c.id }));
+                                                    setShowContactDropdown(false);
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-sky-50 text-sm text-gray-700 flex items-center justify-between"
+                                            >
+                                                {c.name}
+                                                {clientForm.contactId === c.id && <CheckCircle className="w-3 h-3 text-sky-600"/>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {!clientForm.contactId && clientSearchName.length > 2 && !filteredContacts.find(c => c.name.toLowerCase() === clientSearchName.toLowerCase()) && (
+                                    <p className="text-xs text-sky-600 mt-1 flex items-center gap-1">
+                                        <Plus className="w-3 h-3" /> Um novo contato será criado automaticamente.
+                                    </p>
+                                )}
                             </div>
+
                             <div>
                                 <label className="block text-xs font-bold text-gray-700 mb-1">Data Nascimento</label>
                                 <input type="date" className="w-full border rounded-lg p-2" value={clientForm.birthDate || ''} onChange={e => setClientForm({...clientForm, birthDate: e.target.value})} />

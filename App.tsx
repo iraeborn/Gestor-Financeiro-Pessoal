@@ -421,20 +421,47 @@ const App: React.FC = () => {
   };
 
   // --- GENERIC MODULE HANDLERS ---
-  const handleSaveServiceClient = async (c: ServiceClient) => {
+  const handleSaveServiceClient = async (c: Partial<ServiceClient>) => {
       try {
-          await api.saveServiceClient(c);
+          let finalContactId = c.contactId;
+          let contactName = c.contactName;
+
+          // Se não tem ID mas tem nome, criar contato financeiro automaticamente
+          if (!finalContactId && contactName) {
+              const newContactId = crypto.randomUUID();
+              const newContact: Contact = { id: newContactId, name: contactName };
+              await api.saveContact(newContact);
+              
+              // Atualiza estado local de contatos
+              setState(prev => ({ ...prev, contacts: [...prev.contacts, newContact].sort((a,b) => a.name.localeCompare(b.name)) }));
+              
+              finalContactId = newContactId;
+          }
+
+          if (!finalContactId) throw new Error("Nome do contato é obrigatório.");
+
+          // Monta objeto final
+          const clientToSave: ServiceClient = {
+              id: c.id!,
+              contactId: finalContactId,
+              notes: c.notes,
+              birthDate: c.birthDate,
+              moduleTag: ODONTO_TAG
+          };
+
+          await api.saveServiceClient(clientToSave);
+          
           setState(prev => {
-              const exists = prev.serviceClients?.find(sc => sc.id === c.id);
-              const contact = prev.contacts.find(co => co.id === c.contactId);
-              const cWithContact = { ...c, contactName: contact?.name };
+              const exists = prev.serviceClients?.find(sc => sc.id === clientToSave.id);
+              const contact = prev.contacts.find(co => co.id === finalContactId) || (contactName ? { name: contactName } as Contact : undefined);
+              const cWithContact = { ...clientToSave, contactName: contact?.name };
               
               if(exists) {
-                  return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === c.id ? cWithContact : sc) };
+                  return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === clientToSave.id ? cWithContact : sc) };
               }
               return { ...prev, serviceClients: [...(prev.serviceClients || []), cWithContact] };
           });
-      } catch(e) { alert("Erro ao salvar cliente"); }
+      } catch(e: any) { alert("Erro ao salvar cliente: " + e.message); }
   };
   const handleDeleteServiceClient = async (id: string) => {
       if(!confirm("Excluir cliente?")) return;
@@ -608,8 +635,8 @@ const App: React.FC = () => {
                 appointments={odontoAppointments}
                 contacts={state.contacts}
                 
-                // Injeta a tag ODONTO ao salvar
-                onSaveClient={(c) => handleSaveServiceClient({ ...c, moduleTag: ODONTO_TAG })}
+                // Passa dados parciais (pode ser sem contactId se for novo)
+                onSaveClient={handleSaveServiceClient}
                 onDeleteClient={handleDeleteServiceClient}
                 onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
                 onDeleteService={handleDeleteServiceItem}
