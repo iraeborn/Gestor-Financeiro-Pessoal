@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode, Loader2 } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 import { useAlert } from './AlertSystem';
-import QRCodeScanner from './QRCodeScanner';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -59,10 +58,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
-
-  // QR Code State
-  const [showScanner, setShowScanner] = useState(false);
-  const [loadingQR, setLoadingQR] = useState(false);
 
   const hasAccounts = accounts && accounts.length > 0;
   const isPJ = userEntity === EntityType.BUSINESS;
@@ -147,77 +142,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           setFormData(prev => ({ ...prev, type: TransactionType.EXPENSE })); // Typically expense first
       }
   }, [formData.classification]);
-
-  const handleQRSuccess = async (decodedText: string) => {
-      setShowScanner(false);
-      setLoadingQR(true);
-      
-      try {
-          // Tentar buscar na API do backend que faz o scraping
-          const token = localStorage.getItem('token');
-          const res = await fetch('/api/scrape-nfce', {
-              method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': token ? `Bearer ${token}` : ''
-              },
-              body: JSON.stringify({ url: decodedText })
-          });
-
-          if (res.ok) {
-              const data = await res.json();
-              setFormData(prev => ({
-                  ...prev,
-                  description: data.merchant || 'Compra NFC-e',
-                  type: TransactionType.EXPENSE,
-                  amount: data.amount ? data.amount.toString() : prev.amount,
-                  date: data.date || prev.date
-              }));
-              showAlert(`Nota lida com sucesso! Valor: R$ ${data.amount}`, "success");
-          } else {
-              // Fallback para leitura heurística local se a API falhar
-              console.warn("Falha na API de scrape, tentando local...");
-              parseLocalQR(decodedText);
-          }
-      } catch (e) {
-          console.error("Erro parse QR", e);
-          parseLocalQR(decodedText);
-      } finally {
-          setLoadingQR(false);
-      }
-  };
-
-  const parseLocalQR = (text: string) => {
-      // Heurística básica de fallback
-      let amountFound = '';
-      if (text.startsWith('http')) {
-          const url = new URL(text);
-          const vNF = url.searchParams.get('vNF') || url.searchParams.get('v') || url.searchParams.get('valor');
-          if (vNF) amountFound = vNF;
-      }
-      
-      if (!amountFound && text.includes('|')) {
-          const parts = text.split('|');
-          if (parts[0].length >= 44 && parts.length > 4) {
-              if (!isNaN(parseFloat(parts[4])) && parts[4].includes('.')) {
-                  amountFound = parts[4];
-              }
-          }
-      }
-
-      setFormData(prev => ({
-          ...prev,
-          description: 'Compra NFC-e (QR Code)',
-          type: TransactionType.EXPENSE,
-          amount: amountFound ? amountFound : prev.amount,
-      }));
-
-      if (amountFound) {
-          showAlert(`QR Code lido (Offline)! Valor: R$ ${amountFound}`, "info");
-      } else {
-          showAlert("QR Code lido, mas valor não encontrado. Preencha manualmente.", "warning");
-      }
-  };
 
   if (!isOpen) return null;
 
@@ -359,28 +283,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
-        {loadingQR ? (
-            <div className="p-8 text-center flex flex-col items-center gap-2">
-                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-500 text-sm">Consultando dados da nota fiscal...</p>
-            </div>
-        ) : (
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           
-          {/* QR CODE BUTTON */}
-          {!initialData && (
-              <div className="mb-2">
-                  <button 
-                      type="button"
-                      onClick={() => setShowScanner(true)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-900 text-white rounded-xl font-semibold shadow-md hover:bg-black transition-all"
-                  >
-                      <QrCode className="w-5 h-5" /> Ler QR Code da Nota
-                  </button>
-                  <p className="text-[10px] text-center text-gray-400 mt-1">Preenchimento automático via NFC-e/SAT</p>
-              </div>
-          )}
-
           {/* PJ Classification Selector */}
           {isPJ && (
               <div className="mb-2">
@@ -860,15 +764,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
         </form>
-        )}
       </div>
-      
-      {showScanner && (
-          <QRCodeScanner 
-            onScanSuccess={handleQRSuccess} 
-            onClose={() => setShowScanner(false)} 
-          />
-      )}
     </div>
     </>
   );
