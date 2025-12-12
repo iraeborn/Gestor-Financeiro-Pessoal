@@ -2,8 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { getAdminStats, getAdminUsers, logout } from '../services/storageService';
 import { LogOut, Users, DollarSign, Activity, Briefcase } from 'lucide-react';
+import { useAlert } from './AlertSystem';
 
 const AdminDashboard: React.FC = () => {
+  const { showAlert } = useAlert();
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +22,7 @@ const AdminDashboard: React.FC = () => {
         setUsers(usersData);
     } catch (e) {
         console.error(e);
-        alert('Erro ao carregar dados administrativos');
+        showAlert('Erro ao carregar dados administrativos', 'error');
     } finally {
         setLoading(false);
     }

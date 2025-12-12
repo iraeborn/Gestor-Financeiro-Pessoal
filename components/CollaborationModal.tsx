@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase } from 'lucide-react';
 import { createInvite, joinFamily, getFamilyMembers } from '../services/storageService';
 import { User, EntityType, Member } from '../types';
+import { useAlert } from './AlertSystem';
 
 interface CollaborationModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface CollaborationModalProps {
 }
 
 const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose, currentUser, onUserUpdate }) => {
+  const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<'INVITE' | 'JOIN'>('INVITE');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
@@ -137,7 +139,7 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
                                 <div className="flex items-center justify-center gap-3">
                                     <span className="text-3xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
                                     <button 
-                                        onClick={() => { navigator.clipboard.writeText(inviteCode); alert('Copiado!'); }}
+                                        onClick={() => { navigator.clipboard.writeText(inviteCode); showAlert("Código copiado!", "info"); }}
                                         className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
                                         title="Copiar"
                                     >

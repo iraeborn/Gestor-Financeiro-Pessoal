@@ -19,8 +19,12 @@ import AccessView from './components/AccessView';
 import { loadInitialData, api, logout } from './services/storageService';
 import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment } from './types';
 import { Menu, Loader2 } from 'lucide-react';
+import { useAlert, useConfirm } from './components/AlertSystem';
 
 const App: React.FC = () => {
+  const { showAlert } = useAlert();
+  const { showConfirm } = useConfirm();
+
   // Auth & Routing States
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -106,6 +110,7 @@ const App: React.FC = () => {
   const handleUpdateSettings = (settings: AppSettings) => {
     if (currentUser) {
         setCurrentUser({ ...currentUser, settings });
+        showAlert("Configurações salvas com sucesso!", "success");
     }
   };
 
@@ -157,13 +162,23 @@ const App: React.FC = () => {
             transactions: [transaction, ...prevState.transactions]
           };
         });
+        showAlert("Transação salva com sucesso!", "success");
     } catch (e: any) {
-        alert("Erro ao salvar transação: " + e.message);
+        showAlert("Erro ao salvar transação: " + e.message, "error");
         console.error(e);
     }
   };
 
   const handleDeleteTransaction = async (id: string) => {
+    const confirm = await showConfirm({
+        title: "Excluir Transação",
+        message: "Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita e afetará o saldo se já estiver paga.",
+        variant: "danger",
+        confirmText: "Sim, Excluir"
+    });
+
+    if (!confirm) return;
+
     try {
         const target = state.transactions.find(t => t.id === id);
         if (!target) return;
@@ -196,8 +211,9 @@ const App: React.FC = () => {
             transactions: prevState.transactions.filter(t => t.id !== id)
           };
         });
+        showAlert("Transação excluída.", "success");
     } catch (e: any) {
-        alert("Erro ao excluir transação: " + e.message);
+        showAlert("Erro ao excluir transação: " + e.message, "error");
     }
   };
 
@@ -264,8 +280,9 @@ const App: React.FC = () => {
                 transactions: prevState.transactions.map(t => t.id === updatedT.id ? updatedT : t)
             };
         });
+        showAlert("Transação atualizada.", "success");
     } catch (e: any) {
-        alert("Erro ao editar transação: " + e.message);
+        showAlert("Erro ao editar transação: " + e.message, "error");
     }
   };
 
@@ -297,20 +314,29 @@ const App: React.FC = () => {
             };
           }
         });
+        showAlert("Conta salva com sucesso.", "success");
     } catch (e: any) {
-        alert("Erro ao salvar conta: " + e.message);
+        showAlert("Erro ao salvar conta: " + e.message, "error");
     }
   };
 
   const handleDeleteAccount = async (id: string) => {
+    const confirm = await showConfirm({
+        title: "Excluir Conta",
+        message: "Tem certeza que deseja excluir esta conta? Todas as transações vinculadas serão afetadas.",
+        variant: "danger"
+    });
+    if (!confirm) return;
+
     try {
         await api.deleteAccount(id);
         setState(prevState => ({
           ...prevState,
           accounts: prevState.accounts.filter(a => a.id !== id)
         }));
+        showAlert("Conta excluída.", "success");
     } catch (e: any) {
-        alert("Erro ao excluir conta: " + e.message);
+        showAlert("Erro ao excluir conta: " + e.message, "error");
     }
   };
 
@@ -325,17 +351,26 @@ const App: React.FC = () => {
               }
               return { ...prevState, contacts: [...prevState.contacts, contact].sort((a,b) => a.name.localeCompare(b.name)) };
           });
+          showAlert("Contato salvo.", "success");
       } catch (e: any) {
-          alert("Erro ao salvar contato: " + e.message);
+          showAlert("Erro ao salvar contato: " + e.message, "error");
       }
   };
 
   const handleDeleteContact = async (id: string) => {
+      const confirm = await showConfirm({
+          title: "Excluir Contato",
+          message: "Excluir contato? O histórico de transações não será perdido, mas o nome do contato será desvinculado.",
+          variant: "danger"
+      });
+      if(!confirm) return;
+
       try {
           await api.deleteContact(id);
           setState(prevState => ({ ...prevState, contacts: prevState.contacts.filter(c => c.id !== id) }));
+          showAlert("Contato excluído.", "success");
       } catch (e: any) {
-          alert("Erro ao excluir contato: " + e.message);
+          showAlert("Erro ao excluir contato: " + e.message, "error");
       }
   };
 
@@ -350,17 +385,26 @@ const App: React.FC = () => {
               }
               return { ...prev, categories: [...prev.categories, category].sort((a,b) => a.name.localeCompare(b.name)) }
           });
+          showAlert("Categoria salva.", "success");
       } catch (e: any) {
-          alert("Erro ao salvar categoria: " + e.message);
+          showAlert("Erro ao salvar categoria: " + e.message, "error");
       }
   };
 
   const handleDeleteCategory = async (id: string) => {
+      const confirm = await showConfirm({
+          title: "Excluir Categoria",
+          message: "Tem certeza que deseja excluir esta categoria?",
+          variant: "danger"
+      });
+      if(!confirm) return;
+
       try {
           await api.deleteCategory(id);
           setState(prev => ({ ...prev, categories: prev.categories.filter(c => c.id !== id) }));
+          showAlert("Categoria excluída.", "success");
       } catch (e: any) {
-          alert("Erro ao excluir categoria: " + e.message);
+          showAlert("Erro ao excluir categoria: " + e.message, "error");
       }
   };
 
@@ -395,13 +439,20 @@ const App: React.FC = () => {
                   return { ...prev, projects: exists ? prev.projects.map(i => i.id === data.id ? data : i) : [...prev.projects, data] };
               });
           }
+          showAlert("Dados salvos com sucesso.", "success");
       } catch (e: any) {
-          alert(`Erro ao salvar ${type}: ` + e.message);
+          showAlert(`Erro ao salvar ${type}: ` + e.message, "error");
       }
   };
 
   const handleDeletePJEntity = async (type: 'branch' | 'costCenter' | 'department' | 'project', id: string) => {
-      if(!confirm("Deseja confirmar a exclusão deste item corporativo?")) return;
+      const confirm = await showConfirm({
+          title: "Excluir Item Corporativo",
+          message: "Deseja confirmar a exclusão deste item corporativo?",
+          variant: "danger"
+      });
+      if(!confirm) return;
+
       try {
           if (type === 'branch') {
               await api.deleteBranch(id);
@@ -416,8 +467,9 @@ const App: React.FC = () => {
               await api.deleteProject(id);
               setState(prev => ({ ...prev, projects: prev.projects.filter(i => i.id !== id) }));
           }
+          showAlert("Item excluído.", "success");
       } catch (e: any) {
-          alert(`Erro ao excluir ${type}: ` + e.message);
+          showAlert(`Erro ao excluir ${type}: ` + e.message, "error");
       }
   };
 
@@ -462,12 +514,19 @@ const App: React.FC = () => {
               }
               return { ...prev, serviceClients: [...(prev.serviceClients || []), cWithContact] };
           });
-      } catch(e: any) { alert("Erro ao salvar cliente: " + e.message); }
+          showAlert("Cliente salvo com sucesso.", "success");
+      } catch(e: any) { showAlert("Erro ao salvar cliente: " + e.message, "error"); }
   };
   const handleDeleteServiceClient = async (id: string) => {
-      if(!confirm("Excluir cliente?")) return;
+      const confirm = await showConfirm({
+          title: "Excluir Cliente",
+          message: "Deseja excluir este cliente?",
+          variant: "danger"
+      });
+      if(!confirm) return;
       await api.deleteServiceClient(id);
       setState(prev => ({ ...prev, serviceClients: prev.serviceClients?.filter(c => c.id !== id) }));
+      showAlert("Cliente excluído.", "success");
   };
   const handleSaveServiceItem = async (s: ServiceItem) => {
       try {
@@ -477,12 +536,19 @@ const App: React.FC = () => {
               if(exists) return { ...prev, serviceItems: prev.serviceItems?.map(si => si.id === s.id ? s : si) };
               return { ...prev, serviceItems: [...(prev.serviceItems || []), s] };
           });
-      } catch(e) { alert("Erro ao salvar serviço"); }
+          showAlert("Serviço salvo.", "success");
+      } catch(e) { showAlert("Erro ao salvar serviço", "error"); }
   };
   const handleDeleteServiceItem = async (id: string) => {
-      if(!confirm("Excluir serviço?")) return;
+      const confirm = await showConfirm({
+          title: "Excluir Serviço",
+          message: "Deseja excluir este serviço?",
+          variant: "danger"
+      });
+      if(!confirm) return;
       await api.deleteServiceItem(id);
       setState(prev => ({ ...prev, serviceItems: prev.serviceItems?.filter(s => s.id !== id) }));
+      showAlert("Serviço excluído.", "success");
   };
   const handleSaveServiceAppointment = async (a: ServiceAppointment) => {
       try {
@@ -497,12 +563,19 @@ const App: React.FC = () => {
               if(exists) return { ...prev, serviceAppointments: prev.serviceAppointments?.map(sa => sa.id === a.id ? resolvedA : sa) };
               return { ...prev, serviceAppointments: [...(prev.serviceAppointments || []), resolvedA] };
           });
-      } catch(e) { alert("Erro ao salvar agendamento"); }
+          showAlert("Agendamento salvo.", "success");
+      } catch(e) { showAlert("Erro ao salvar agendamento", "error"); }
   };
   const handleDeleteServiceAppointment = async (id: string) => {
-      if(!confirm("Excluir agendamento?")) return;
+      const confirm = await showConfirm({
+          title: "Excluir Agendamento",
+          message: "Deseja excluir este agendamento?",
+          variant: "danger"
+      });
+      if(!confirm) return;
       await api.deleteServiceAppointment(id);
       setState(prev => ({ ...prev, serviceAppointments: prev.serviceAppointments?.filter(a => a.id !== id) }));
+      showAlert("Agendamento excluído.", "success");
   };
 
   // --- VIEW RENDERING ---
@@ -546,15 +619,11 @@ const App: React.FC = () => {
             settings={currentUser.settings}
             userEntity={currentUser.entityType} 
             onAddTransaction={handleAddTransaction}
-            onDeleteTransaction={(id) => {
-                if (window.confirm("Confirmar exclusão da transação?")) handleDeleteTransaction(id);
-            }}
+            onDeleteTransaction={handleDeleteTransaction}
             onEditTransaction={handleEditTransaction}
             onUpdateStatus={handleUpdateStatus}
             onSaveAccount={handleSaveAccount}
-            onDeleteAccount={(id) => {
-                if (window.confirm("Confirmar exclusão da conta?")) handleDeleteAccount(id);
-            }}
+            onDeleteAccount={handleDeleteAccount}
             onChangeView={setCurrentView}
           />
         );
@@ -598,9 +667,7 @@ const App: React.FC = () => {
                 categories={state.categories}
                 transactions={state.transactions}
                 onSaveAccount={handleSaveAccount}
-                onDeleteAccount={(id) => {
-                    if (window.confirm("Confirmar exclusão do cartão?")) handleDeleteAccount(id);
-                }}
+                onDeleteAccount={handleDeleteAccount}
                 onAddTransaction={handleAddTransaction}
             />
         );

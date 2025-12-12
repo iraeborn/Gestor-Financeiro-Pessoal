@@ -3,8 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { AuditLog } from '../types';
 import { getAuditLogs, restoreRecord, revertLogChange } from '../services/storageService';
 import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight } from 'lucide-react';
+import { useAlert, useConfirm } from './AlertSystem';
 
 const LogsView: React.FC = () => {
+  const { showAlert } = useAlert();
+  const { showConfirm } = useConfirm();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -28,17 +31,23 @@ const LogsView: React.FC = () => {
   const handleRestore = async (log: AuditLog) => {
       const isTransaction = log.entity === 'transaction';
       const msg = `Deseja restaurar este registro: "${log.details}"?` + 
-                  (isTransaction ? "\n\nO saldo da conta será ajustado automaticamente para refletir esta transação." : "");
+                  (isTransaction ? " O saldo da conta será ajustado automaticamente para refletir esta transação." : "");
       
-      if (!window.confirm(msg)) return;
+      const confirm = await showConfirm({
+          title: "Restaurar Registro",
+          message: msg,
+          confirmText: "Sim, Restaurar"
+      });
+      
+      if (!confirm) return;
       
       setProcessingId(log.id);
       try {
           await restoreRecord(log.entity, log.entityId);
           await loadLogs(); 
-          alert("Registro restaurado com sucesso.");
+          showAlert("Registro restaurado com sucesso.", "success");
       } catch (e: any) {
-          alert("Erro ao restaurar: " + e.message);
+          showAlert("Erro ao restaurar: " + e.message, "error");
       } finally {
           setProcessingId(null);
       }
@@ -47,17 +56,23 @@ const LogsView: React.FC = () => {
   const handleRevert = async (log: AuditLog) => {
       const isTransaction = log.entity === 'transaction';
       const msg = `Deseja desfazer as alterações deste registro? O estado anterior será reaplicado.` +
-                  (isTransaction ? "\n\nO sistema tentará ajustar a diferença de valores no saldo da conta, se aplicável." : "");
+                  (isTransaction ? " O sistema tentará ajustar a diferença de valores no saldo da conta, se aplicável." : "");
 
-      if (!window.confirm(msg)) return;
+      const confirm = await showConfirm({
+          title: "Reverter Alteração",
+          message: msg,
+          confirmText: "Sim, Reverter"
+      });
+
+      if (!confirm) return;
 
       setProcessingId(log.id);
       try {
           await revertLogChange(log.id);
           await loadLogs();
-          alert("Alteração revertida com sucesso.");
+          showAlert("Alteração revertida com sucesso.", "success");
       } catch (e: any) {
-          alert("Erro ao reverter: " + e.message);
+          showAlert("Erro ao reverter: " + e.message, "error");
       } finally {
           setProcessingId(null);
       }

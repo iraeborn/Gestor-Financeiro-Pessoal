@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
 import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight } from 'lucide-react';
+import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
     currentUser: User;
@@ -40,6 +41,8 @@ const PERMISSION_GROUPS = [
 ];
 
 const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
+    const { showAlert } = useAlert();
+    const { showConfirm } = useConfirm();
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -85,7 +88,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             setInviteCode(data.code);
         } catch (e) {
             console.error(e);
-            alert("Erro ao gerar convite");
+            showAlert("Erro ao gerar convite.", "error");
         } finally {
             setGeneratingInvite(false);
         }
@@ -97,22 +100,29 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         setJoining(true);
         try {
             await joinFamily(joinCode);
-            alert("Você entrou na nova equipe com sucesso! A página será recarregada.");
-            window.location.reload();
+            showAlert("Você entrou na nova equipe com sucesso! A página será recarregada.", "success");
+            setTimeout(() => window.location.reload(), 1500);
         } catch (e: any) {
-            alert("Erro ao entrar: " + e.message);
+            showAlert("Erro ao entrar: " + e.message, "error");
         } finally {
             setJoining(false);
         }
     };
 
     const handleRemoveMember = async (memberId: string) => {
-        if (!confirm("Tem certeza que deseja remover este membro? Ele perderá o acesso imediatamente.")) return;
+        const confirm = await showConfirm({
+            title: "Remover Membro",
+            message: "Tem certeza que deseja remover este membro? Ele perderá o acesso imediatamente.",
+            variant: "danger"
+        });
+        if (!confirm) return;
+
         try {
             await removeMember(memberId);
             setMembers(members.filter(m => m.id !== memberId));
+            showAlert("Membro removido com sucesso.", "success");
         } catch (e: any) {
-            alert(e.message || "Erro ao remover membro");
+            showAlert(e.message || "Erro ao remover membro", "error");
         }
     };
 
@@ -128,8 +138,9 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             await updateMemberRole(editingMember.id, editRole, editPermissions);
             setMembers(members.map(m => m.id === editingMember.id ? { ...m, role: editRole, permissions: editPermissions } : m));
             setEditingMember(null);
+            showAlert("Permissões atualizadas.", "success");
         } catch (e: any) {
-            alert(e.message || "Erro ao atualizar permissões");
+            showAlert(e.message || "Erro ao atualizar permissões", "error");
         }
     };
 
@@ -191,7 +202,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                         <div className="flex items-center justify-center gap-3 mb-2">
                                             <span className="text-3xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
                                             <button 
-                                                onClick={() => { navigator.clipboard.writeText(inviteCode); alert('Copiado!'); }}
+                                                onClick={() => { navigator.clipboard.writeText(inviteCode); showAlert("Código copiado!", "info"); }}
                                                 className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
                                                 title="Copiar"
                                             >
@@ -337,7 +348,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             {/* Edit Permissions Modal */}
             {editingMember && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-scale-up flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
                             <h2 className="text-lg font-bold text-gray-800">
                                 Editar Membro: {editingMember.name}

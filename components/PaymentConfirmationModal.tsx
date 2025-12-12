@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertCircle, TrendingUp, CheckCircle } from 'lucide-react';
 import { Transaction, TransactionStatus } from '../types';
+import { useAlert } from './AlertSystem';
 
 interface PaymentConfirmationModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface PaymentConfirmationModalProps {
 }
 
 const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({ isOpen, onClose, onConfirm, transaction }) => {
+  const { showAlert } = useAlert();
   const [finalAmount, setFinalAmount] = useState<string>('');
   const [calculatedInterest, setCalculatedInterest] = useState<number>(0);
   const [daysLate, setDaysLate] = useState<number>(0);
@@ -46,7 +48,7 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({ isO
   const handleConfirm = () => {
     const val = parseFloat(finalAmount);
     if (isNaN(val) || val < 0) {
-        alert("Valor inválido");
+        showAlert("Valor inválido para o pagamento.", "warning");
         return;
     }
     onConfirm(transaction, val);
@@ -58,7 +60,7 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({ isO
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-scale-up">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-emerald-600" />

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, TransactionType, TransactionStatus, Transaction } from '../types';
 import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign, CheckCircle } from 'lucide-react';
+import { useConfirm } from './AlertSystem';
 
 // Sections map to the sub-items in sidebar
 export type ServiceModuleSection = 'CALENDAR' | 'CLIENTS' | 'SERVICES';
@@ -35,6 +36,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     onSaveClient, onDeleteClient, onSaveService, onDeleteService,
     onSaveAppointment, onDeleteAppointment, onAddTransaction
 }) => {
+    const { showConfirm } = useConfirm();
     const [searchTerm, setSearchTerm] = useState('');
 
     // --- FORMS STATES ---
@@ -114,12 +116,18 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         setApptModalOpen(false);
     };
 
-    const handleGenerateTransaction = (appt: ServiceAppointment) => {
+    const handleGenerateTransaction = async (appt: ServiceAppointment) => {
         const srv = services.find(s => s.id === appt.serviceId);
         const amount = srv ? srv.defaultPrice : 0;
         const client = clients.find(c => c.id === appt.clientId);
         
-        if (confirm(`Gerar cobrança de R$ ${amount} para ${appt.clientName}?`)) {
+        const confirm = await showConfirm({
+            title: "Gerar Cobrança",
+            message: `Gerar cobrança de R$ ${amount.toFixed(2)} para ${appt.clientName}?`,
+            confirmText: "Sim, Gerar"
+        });
+
+        if (confirm) {
             const transId = crypto.randomUUID();
             onAddTransaction({
                 description: `${moduleTitle}: ${appt.serviceName}`,

@@ -4,6 +4,7 @@ import { Account, AccountType, Transaction, TransactionType, TransactionStatus, 
 import { Plus, CreditCard, Calendar, TrendingUp, AlertCircle, Edit2, Trash2, ArrowRightLeft, AlertTriangle, CheckCircle, ShoppingCart } from 'lucide-react';
 import AccountModal from './AccountModal';
 import TransactionModal from './TransactionModal';
+import { useConfirm } from './AlertSystem';
 
 interface CreditCardsViewProps {
   accounts: Account[];
@@ -24,6 +25,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     onDeleteAccount,
     onAddTransaction 
 }) => {
+  const { showConfirm } = useConfirm();
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isTransModalOpen, setIsTransModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -39,6 +41,15 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const handleEdit = (card: Account) => {
     setEditingAccount(card);
     setIsAccountModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+      // Nota: A lógica de confirmação já está em App.tsx -> handleDeleteAccount, mas o botão aqui chama onDeleteAccount direto.
+      // Se App.tsx faz o confirm, aqui não precisa.
+      // Porém, em App.tsx `handleDeleteAccount` chama `showConfirm`. Então só chamamos onDeleteAccount.
+      // Ops, `CreditCardsView` chama `onDeleteAccount` que é `handleDeleteAccount` do App.tsx.
+      // Então é só chamar a prop.
+      onDeleteAccount(id);
   };
 
   const handleCloseAccountModal = () => {
@@ -211,9 +222,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                     <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button 
-                                    onClick={() => {
-                                        if(confirm("Tem certeza que deseja excluir este cartão?")) onDeleteAccount(card.id);
-                                    }} 
+                                    onClick={() => handleDelete(card.id)} 
                                     className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded backdrop-blur-sm"
                                 >
                                     <Trash2 className="w-4 h-4" />

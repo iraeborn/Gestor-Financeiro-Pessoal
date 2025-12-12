@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
+import { useAlert } from './AlertSystem';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     isOpen, onClose, onSave, accounts, contacts, categories = [], initialData, 
     userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
 }) => {
+  const { showAlert } = useAlert();
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -147,27 +149,27 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     
     if (!formData.accountId) {
-        alert("Atenção: Você precisa selecionar uma conta.");
+        showAlert("Atenção: Você precisa selecionar uma conta.", "warning");
         return;
     }
 
     if (formData.type === TransactionType.TRANSFER) {
         if (!formData.destinationAccountId) {
-            alert("Selecione a conta de destino para a transferência.");
+            showAlert("Selecione a conta de destino para a transferência.", "warning");
             return;
         }
         if (formData.accountId === formData.destinationAccountId) {
-            alert("A conta de origem e destino não podem ser a mesma.");
+            showAlert("A conta de origem e destino não podem ser a mesma.", "warning");
             return;
         }
         
         if (formData.classification === TransactionClassification.INTER_BRANCH) {
             if (!formData.branchId || !formData.destinationBranchId) {
-                alert("Para transferências entre filiais, selecione a filial de origem e a de destino.");
+                showAlert("Para transferências entre filiais, selecione a filial de origem e a de destino.", "warning");
                 return;
             }
             if (formData.branchId === formData.destinationBranchId) {
-                alert("A filial de origem e destino devem ser diferentes.");
+                showAlert("A filial de origem e destino devem ser diferentes.", "warning");
                 return;
             }
         }
@@ -270,7 +272,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto animate-scale-up">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h2 className="text-lg font-bold text-gray-800">
             {initialData && initialData.id ? 'Editar Transação' : 'Nova Transação'}

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
+import { useAlert } from './AlertSystem';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -30,6 +31,7 @@ interface ModuleGroup {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser }) => {
+  const { showAlert } = useAlert();
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
@@ -53,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           await switchContext(ws.id);
           window.location.reload(); 
       } catch (e) {
-          alert("Erro ao trocar de conta.");
+          showAlert("Erro ao trocar de conta.", "error");
           setSwitching(false);
       }
   };

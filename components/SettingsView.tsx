@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User, AppSettings, Category, TransactionType, EntityType, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
 import { CreditCard, Shield, Tag, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users } from 'lucide-react';
 import { updateSettings } from '../services/storageService';
+import { useAlert } from './AlertSystem';
 
 interface SettingsViewProps {
   user: User;
@@ -27,6 +28,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     user, categories, pjData, onUpdateSettings, onSaveCategory, onDeleteCategory,
     onSavePJEntity, onDeletePJEntity
 }) => {
+  const { showAlert } = useAlert();
   const settings = user.settings || { includeCreditCardsInTotal: true, activeModules: {} };
   const [newCatName, setNewCatName] = useState('');
   const [newCatType, setNewCatType] = useState<TransactionType>(TransactionType.EXPENSE);
@@ -43,7 +45,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         await updateSettings(newSettings);
         onUpdateSettings(newSettings);
     } catch (e) {
-        alert("Erro ao salvar configuração.");
+        showAlert("Erro ao salvar configuração.", "error");
     }
   };
 
@@ -56,9 +58,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          if (!isActive) alert("Módulo Odonto ativado com sucesso! Acesse-o no menu lateral.");
+          if (!isActive) showAlert("Módulo Odonto ativado com sucesso!", "success");
       } catch (e) {
-          alert("Erro ao alterar módulo.");
+          showAlert("Erro ao alterar módulo.", "error");
       }
   };
 
@@ -76,7 +78,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const handleSaveCompany = (e: React.FormEvent) => {
       e.preventDefault();
       onSavePJEntity('company', { ...companyForm, id: pjData.companyProfile?.id || crypto.randomUUID() });
-      alert('Dados da empresa salvos!');
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -346,7 +347,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <div key={cat.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-50 group border border-transparent hover:border-gray-200">
                                     <span className="text-gray-700">{cat.name}</span>
                                     <button 
-                                        onClick={() => { if(confirm('Excluir categoria?')) onDeleteCategory(cat.id); }}
+                                        onClick={() => onDeleteCategory(cat.id)}
                                         className="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -366,7 +367,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <div key={cat.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-50 group border border-transparent hover:border-gray-200">
                                     <span className="text-gray-700">{cat.name}</span>
                                     <button 
-                                        onClick={() => { if(confirm('Excluir categoria?')) onDeleteCategory(cat.id); }}
+                                        onClick={() => onDeleteCategory(cat.id)}
                                         className="text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
                                     >
                                         <Trash2 className="w-4 h-4" />

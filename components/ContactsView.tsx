@@ -104,11 +104,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
                                 <Pencil className="w-4 h-4" />
                             </button>
                             <button 
-                                onClick={() => {
-                                    if(confirm('Excluir contato? O histórico de transações não será perdido, mas o nome do contato será desvinculado.')) {
-                                        onDeleteContact(contact.id);
-                                    }
-                                }}
+                                onClick={() => onDeleteContact(contact.id)}
                                 className="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg"
                                 title="Excluir"
                             >
@@ -124,7 +120,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
       {/* Modal de Cadastro/Edição */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-scale-up">
                 <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <h2 className="text-lg font-bold text-gray-800">
                         {editingContact ? 'Editar Contato' : 'Novo Contato'}

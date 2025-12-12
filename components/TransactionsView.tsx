@@ -6,6 +6,7 @@ import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
 import StatCard from './StatCard';
 import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, TrendingDown } from 'lucide-react';
+import { useConfirm } from './AlertSystem';
 
 interface TransactionsViewProps {
   transactions: Transaction[];
@@ -35,6 +36,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   onToggleStatus,
   onAdd
 }) => {
+  const { showConfirm } = useConfirm();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | TransactionType>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TransactionStatus>('ALL');
@@ -165,10 +167,10 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
      onEdit(updatedTransaction);
   };
 
-  const handleDelete = (id: string) => {
-      if (window.confirm("Tem certeza que deseja excluir esta transação?")) {
-          onDelete(id);
-      }
+  const handleDelete = async (id: string) => {
+      // Nota: `onDelete` (que é handleDeleteTransaction do App.tsx) já implementa o useConfirm.
+      // Portanto, aqui só chamamos a função.
+      onDelete(id);
   };
 
   return (
