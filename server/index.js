@@ -911,6 +911,26 @@ app.get('/api/admin/invite/create', authenticateToken, async (req, res) => {
     res.json({ code, expiresAt });
 });
 
+// --- NEW ROUTE: Get Family Members ---
+app.get('/api/family/members', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const activeFamilyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        const familyId = activeFamilyIdRes.rows[0]?.family_id || userId;
+
+        const members = await pool.query(`
+            SELECT u.id, u.name, u.email, m.role, u.entity_type
+            FROM users u
+            JOIN memberships m ON u.id = m.user_id
+            WHERE m.family_id = $1
+        `, [familyId]);
+
+        res.json(members.rows);
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });

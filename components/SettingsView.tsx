@@ -326,27 +326,30 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
         </div>
 
-        {/* Seção de Família */}
+        {/* Seção de Colaboração (Dinâmica PF/PJ) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
              <div className="p-6 border-b border-gray-50 bg-gray-50/50">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-600" />
-                    Família e Colaboração
+                    {isPJ ? <Briefcase className="w-5 h-5 text-indigo-600" /> : <Users className="w-5 h-5 text-indigo-600" />}
+                    {isPJ ? "Gestão de Acesso" : "Colaboração Familiar"}
                 </h2>
             </div>
             <div className="p-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h3 className="font-semibold text-gray-900">Gerenciar Grupo Familiar</h3>
+                        <h3 className="font-semibold text-gray-900">{isPJ ? "Gerenciar Sócios e Equipe" : "Gerenciar Grupo Familiar"}</h3>
                         <p className="text-sm text-gray-500 max-w-md mt-1">
-                            Convide pessoas para visualizar e gerenciar as mesmas finanças que você ou entre em um grupo existente.
+                            {isPJ 
+                                ? "Convide sócios ou contadores para visualizar e auditar as finanças da empresa em tempo real."
+                                : "Convide pessoas para visualizar e gerenciar as mesmas finanças que você ou entre em um grupo existente."
+                            }
                         </p>
                     </div>
                     <button 
                         onClick={onOpenCollab}
                         className="px-5 py-2.5 bg-indigo-50 text-indigo-700 font-semibold rounded-xl hover:bg-indigo-100 transition-colors border border-indigo-200"
                     >
-                        Abrir Colaboração
+                        {isPJ ? "Gerenciar Acessos" : "Abrir Colaboração"}
                     </button>
                 </div>
             </div>
