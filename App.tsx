@@ -454,6 +454,7 @@ const App: React.FC = () => {
           <Dashboard 
             state={state}
             settings={currentUser.settings}
+            userEntity={currentUser.entityType} // Pass current context type
             onAddTransaction={handleAddTransaction}
             onDeleteTransaction={(id) => {
                 if (window.confirm("Confirmar exclusão da transação?")) handleDeleteTransaction(id);
@@ -475,6 +476,13 @@ const App: React.FC = () => {
             contacts={state.contacts}
             categories={state.categories}
             settings={currentUser.settings}
+            userEntity={currentUser.entityType}
+            pjData={{
+                branches: state.branches,
+                costCenters: state.costCenters,
+                departments: state.departments,
+                projects: state.projects
+            }}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
             onToggleStatus={handleUpdateStatus}
@@ -563,7 +571,8 @@ const App: React.FC = () => {
                 onChangeView={(view) => {
                     setCurrentView(view);
                     setIsMobileMenuOpen(false);
-                }} 
+                }}
+                currentUser={currentUser} 
             />
           </div>
         </div>
@@ -572,7 +581,8 @@ const App: React.FC = () => {
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
         <Sidebar 
             currentView={currentView} 
-            onChangeView={setCurrentView} 
+            onChangeView={setCurrentView}
+            currentUser={currentUser} 
         />
       </div>
 

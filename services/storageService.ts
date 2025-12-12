@@ -81,6 +81,21 @@ export const logout = () => {
   localStorage.removeItem('user');
 };
 
+export const switchContext = async (targetFamilyId: string): Promise<User> => {
+    const res = await fetch(`${API_URL}/switch-context`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ targetFamilyId })
+    });
+    const data = await handleResponse(res);
+    
+    // Update local storage with new token (if backend rotates it) and user state
+    if (data.token) localStorage.setItem('token', data.token);
+    if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+    
+    return data.user;
+};
+
 export const updateSettings = async (settings: AppSettings) => {
     const res = await fetch(`${API_URL}/settings`, {
         method: 'POST',
@@ -111,8 +126,10 @@ export const getAdminUsers = async () => {
 // --- Collab (Family) ---
 
 export const createInvite = async () => {
-    const res = await fetch(`${API_URL}/invite/create`, {
-        method: 'POST',
+    // Note: The logic for createInvite is actually in server/index.js under /api/admin/invite/create in the new code, 
+    // but the old code pointed to /invite/create. Let's align with the previous structure but ensure headers.
+    const res = await fetch(`${API_URL}/admin/invite/create`, {
+        method: 'GET',
         headers: getHeaders()
     });
     return await handleResponse(res);

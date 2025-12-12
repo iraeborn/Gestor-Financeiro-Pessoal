@@ -55,6 +55,14 @@ export enum SubscriptionStatus {
   EXPIRED = 'EXPIRED'
 }
 
+export interface Workspace {
+  id: string; // family_id
+  name: string; // Nome do dono da conta ou da empresa
+  role: 'ADMIN' | 'MEMBER';
+  entityType: EntityType;
+  isCurrent: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -64,11 +72,12 @@ export interface User {
   settings?: AppSettings;
   // SaaS Fields
   role?: UserRole;
-  entityType?: EntityType;
+  entityType?: EntityType; // Tipo da conta ATUAL
   plan?: SubscriptionPlan;
   status?: SubscriptionStatus;
   trialEndsAt?: string;
   createdAt?: string;
+  workspaces?: Workspace[]; // Lista de contas acessíveis
 }
 
 export interface AuthResponse {
