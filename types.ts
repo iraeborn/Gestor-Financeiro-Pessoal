@@ -237,8 +237,13 @@ export interface ServiceClient {
     contactEmail?: string;
     contactPhone?: string;
     
+    // Module Specific (Clinical Data)
     notes?: string; // Anamnese, Histórico, Prontuário, etc.
     birthDate?: string;
+    insurance?: string; // Convênio
+    allergies?: string;
+    medications?: string;
+    
     moduleTag: string; // 'ODONTO', 'PHYSIO', etc. (MANDATORY for filtering)
     createdAt?: string;
 }

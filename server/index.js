@@ -203,6 +203,11 @@ pool.connect()
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Clinical Columns
+        await client.query(`ALTER TABLE module_clients ADD COLUMN IF NOT EXISTS insurance TEXT;`);
+        await client.query(`ALTER TABLE module_clients ADD COLUMN IF NOT EXISTS allergies TEXT;`);
+        await client.query(`ALTER TABLE module_clients ADD COLUMN IF NOT EXISTS medications TEXT;`);
+
         await client.query(`
             CREATE TABLE IF NOT EXISTS module_services (
                 id TEXT PRIMARY KEY,
@@ -614,6 +619,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 id: r.id, contactId: r.contact_id, contactName: r.contact_name, 
                 contactEmail: r.contact_email, contactPhone: r.contact_phone,
                 notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined,
+                insurance: r.insurance, allergies: r.allergies, medications: r.medications,
                 moduleTag: r.module_tag
             })),
             serviceItems: servicesRes.rows.map(r => ({
@@ -1084,14 +1090,17 @@ app.delete('/api/family/members/:memberId', authenticateToken, async (req, res) 
 // --- GENERIC MODULE ROUTES (Replaced Odonto) ---
 
 app.post('/api/modules/clients', authenticateToken, async (req, res) => {
-    const { id, contactId, notes, birthDate, moduleTag } = req.body;
+    const { id, contactId, notes, birthDate, moduleTag, insurance, allergies, medications } = req.body;
     const userId = req.user.id;
     try {
         await pool.query(
-            `INSERT INTO module_clients (id, contact_id, notes, birth_date, module_tag, user_id) 
-             VALUES ($1, $2, $3, $4, $5, $6) 
-             ON CONFLICT (id) DO UPDATE SET contact_id=$2, notes=$3, birth_date=$4, module_tag=$5, deleted_at=NULL`,
-            [id, contactId, notes || '', sanitizeValue(birthDate), moduleTag || 'GENERAL', userId]
+            `INSERT INTO module_clients (id, contact_id, notes, birth_date, module_tag, insurance, allergies, medications, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+             ON CONFLICT (id) DO UPDATE SET contact_id=$2, notes=$3, birth_date=$4, module_tag=$5, insurance=$6, allergies=$7, medications=$8, deleted_at=NULL`,
+            [
+                id, contactId, notes || '', sanitizeValue(birthDate), moduleTag || 'GENERAL', 
+                sanitizeValue(insurance), sanitizeValue(allergies), sanitizeValue(medications), userId
+            ]
         );
         res.json({ success: true });
     } catch(err) { res.status(500).json({ error: err.message }); }

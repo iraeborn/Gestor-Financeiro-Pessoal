@@ -506,7 +506,11 @@ const App: React.FC = () => {
               contactId: finalContactId,
               notes: c.notes,
               birthDate: c.birthDate,
-              moduleTag: ODONTO_TAG
+              moduleTag: ODONTO_TAG,
+              // Novos campos clínicos
+              insurance: c.insurance,
+              allergies: c.allergies,
+              medications: c.medications
           };
 
           await api.saveServiceClient(clientToSave);
@@ -515,7 +519,12 @@ const App: React.FC = () => {
               const exists = prev.serviceClients?.find(sc => sc.id === clientToSave.id);
               // Resolve Contact Info
               const contact = prev.contacts.find(co => co.id === finalContactId) || (contactName ? { name: contactName } as Contact : undefined);
-              const cWithContact = { ...clientToSave, contactName: contact?.name, contactEmail: contact?.email, contactPhone: contact?.phone };
+              const cWithContact = { 
+                  ...clientToSave, 
+                  contactName: contact?.name, 
+                  contactEmail: contact?.email, 
+                  contactPhone: contact?.phone 
+              };
               
               if(exists) {
                   return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === clientToSave.id ? cWithContact : sc) };
