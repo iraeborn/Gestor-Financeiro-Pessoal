@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import pg from 'pg';
@@ -143,24 +144,74 @@ const detectPaymentMethod = (html) => {
     return null;
 };
 
+// Função unificada de parsing robusto
+const robustParser = (html) => {
+    // 1. Valor Total
+    // Regex ajustado para pegar class="... totalNumb ..." ou class="... txtMax ..." mesmo com outras classes
+    let amount = null;
+    const amountPatterns = [
+        /class=["'][^"']*(?:totalNumb|txtMax)[^"']*["'][^>]*>(?:R\$\s*)?([\d\.,]+)/i, // Prioridade do usuário
+        /id=["']lblValorTotal["'][^>]*>(?:R\$\s*)?([\d\.,]+)/i,
+        /Valor\s*Total[^>]*>([\d\.,]+)/i,
+        /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i
+    ];
+    for (const p of amountPatterns) {
+        const m = html.match(p);
+        if (m) { amount = m[1]; break; }
+    }
+
+    // 2. Estabelecimento (Favorecido)
+    // Regex ajustado para txtTopo
+    let merchant = null;
+    const merchantPatterns = [
+        /class=["'][^"']*txtTopo[^"']*["'][^>]*>([^<]+)/i, // Prioridade do usuário
+        /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
+        /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
+        /<div[^>]*class="txtTopo"[^>]*>([^<]+)<\/div>/i,
+        /<h4[^>]*>([^<]+)<\/h4>/i 
+    ];
+    for (const p of merchantPatterns) {
+        const m = html.match(p);
+        if (m) { 
+            merchant = m[1].replace(/<[^>]+>/g, '').trim(); 
+            break; 
+        }
+    }
+
+    // 3. Data
+    // Prioridade para a estrutura <strong> Emissão: </strong> ...
+    let date = null;
+    const datePatterns = [
+        /<strong>\s*Emiss[ãa]o:\s*<\/strong>\s*(\d{2}\/\d{2}\/\d{4})/i, // Prioridade do usuário
+        /(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/,
+        /Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i
+    ];
+    for (const p of datePatterns) {
+        const m = html.match(p);
+        if (m) { date = m[1]; break; }
+    }
+
+    return {
+        amount,
+        merchant,
+        date,
+        paymentType: detectPaymentMethod(html)
+    };
+};
+
 const parsers = {
     // São Paulo (35)
-    '35': (html) => {
-        const amountMatch = html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)<\/span>/i);
-        const merchantMatch = html.match(/class=["']txtTopo["'][^>]*>([^<]+)<\/div>/i);
-        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/);
-        
-        return {
-            amount: amountMatch ? amountMatch[1] : null,
-            merchant: merchantMatch ? merchantMatch[1].trim() : null,
-            date: dateMatch ? dateMatch[1] : null,
-            paymentType: detectPaymentMethod(html)
-        };
-    },
-    // Paraná (41)
+    // Usamos o robustParser pois ele cobre as classes txtMax e totalNumb especificadas
+    '35': robustParser,
+    
+    // Paraná (41) - Mantemos específico ou fallback
     '41': (html) => {
-        const amountMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i) || html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)/i);
-        const merchantMatch = html.match(/id=["']u20["'][^>]*>([^<]+)<\/span>/i) || html.match(/class=["']txtTopo["'][^>]*>([^<]+)/i);
+        const p = robustParser(html);
+        if (p.amount) return p; // Se o robusto funcionou, retorna ele
+        
+        // Fallback antigo específico do PR se necessário
+        const amountMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i);
+        const merchantMatch = html.match(/id=["']u20["'][^>]*>([^<]+)<\/span>/i);
         const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+[\d:]+/);
         return {
             amount: amountMatch ? amountMatch[1] : null,
@@ -169,62 +220,9 @@ const parsers = {
             paymentType: detectPaymentMethod(html)
         };
     },
-    // Genérico (Fallback e Outros Estados)
-    'default': (html) => {
-        // 1. Valor Total
-        // Prioridade: classes "totalNumb" e "txtMax" solicitadas
-        let amount = null;
-        const totalPatterns = [
-            /class=["'][^"']*totalNumb[^"']*["'][^>]*>([\d\.,]+)/i, 
-            /class=["'][^"']*txtMax[^"']*["'][^>]*>([\d\.,]+)/i,
-            /Valor\s*Total.*?R\$\s*([\d\.,]+)/i,
-            /id=["']lblValorTotal["'][^>]*>([\d\.,]+)/i,
-            /Total\s*R\$\s*([\d\.,]+)/i,
-            /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i
-        ];
-        for (const p of totalPatterns) {
-            const m = html.match(p);
-            if (m) { amount = m[1]; break; }
-        }
-
-        // 2. Estabelecimento (Favorecido)
-        // Prioridade: class "txtTopo" solicitada
-        let merchant = null;
-        const merchantPatterns = [
-            /class=["'][^"']*txtTopo[^"']*["'][^>]*>([^<]+)/i,
-            /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
-            /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
-            /<div[^>]*class="txtTopo"[^>]*>([^<]+)<\/div>/i,
-            /<h4[^>]*>([^<]+)<\/h4>/i 
-        ];
-        for (const p of merchantPatterns) {
-            const m = html.match(p);
-            if (m) { 
-                merchant = m[1].replace(/<[^>]+>/g, '').trim(); 
-                break; 
-            }
-        }
-
-        // 3. Data
-        // Prioridade: Estrutura <strong> Emissão: </strong> DD/MM/YYYY
-        let date = null;
-        const datePatterns = [
-            /<strong>\s*Emiss[ãa]o:\s*<\/strong>\s*(\d{2}\/\d{2}\/\d{4})/i,
-            /(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/,
-            /Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i
-        ];
-        for (const p of datePatterns) {
-            const m = html.match(p);
-            if (m) { date = m[1]; break; }
-        }
-
-        return {
-            amount,
-            merchant,
-            date,
-            paymentType: detectPaymentMethod(html)
-        };
-    }
+    
+    // Genérico
+    'default': robustParser
 };
 
 pool.connect()
