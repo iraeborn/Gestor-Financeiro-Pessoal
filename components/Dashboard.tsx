@@ -221,121 +221,123 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Left Column: Recent Activity */}
-          <div className="xl:col-span-2 space-y-6">
-             <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-800">Últimas Movimentações</h3>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={recentLimit}
-                      onChange={(e) => setRecentLimit(Number(e.target.value))}
-                      className="text-sm bg-white border border-gray-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600"
-                    >
-                      <option value={5}>5 itens</option>
-                      <option value={10}>10 itens</option>
-                      <option value={15}>15 itens</option>
-                      <option value={20}>20 itens</option>
-                    </select>
-                    <button 
-                      onClick={() => onChangeView('FIN_TRANSACTIONS')}
-                      className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                    >
-                      Ver todas <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <TransactionList 
-                  transactions={state.transactions.slice(0, recentLimit)} 
-                  accounts={state.accounts} 
-                  contacts={state.contacts} 
-                  onDelete={onDeleteTransaction}
-                  onEdit={handleEditTrans}
-                  onToggleStatus={handleStatusToggle}
-                />
-             </div>
-          </div>
+      {/* SEÇÃO 1: ÚLTIMAS MOVIMENTAÇÕES (FULL WIDTH) */}
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-800">Últimas Movimentações</h3>
+            <div className="flex items-center gap-3">
+            <select
+                value={recentLimit}
+                onChange={(e) => setRecentLimit(Number(e.target.value))}
+                className="text-sm bg-white border border-gray-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 text-gray-600"
+            >
+                <option value={5}>5 itens</option>
+                <option value={10}>10 itens</option>
+                <option value={15}>15 itens</option>
+                <option value={20}>20 itens</option>
+            </select>
+            <button 
+                onClick={() => onChangeView('FIN_TRANSACTIONS')}
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            >
+                Ver todas <ArrowRight className="w-4 h-4" />
+            </button>
+            </div>
+        </div>
+        <TransactionList 
+            transactions={state.transactions.slice(0, recentLimit)} 
+            accounts={state.accounts} 
+            contacts={state.contacts} 
+            onDelete={onDeleteTransaction}
+            onEdit={handleEditTrans}
+            onToggleStatus={handleStatusToggle}
+        />
+      </div>
 
-          {/* Right Column: Accounts & Goals */}
-          <div className="space-y-6">
-            {/* Accounts Panel */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
+      {/* SEÇÃO 2: CONTAS (70%) E METAS (30%) */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        
+        {/* Painel Contas - 70% */}
+        <div className="lg:w-[70%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
+            <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-gray-400"/> Contas
+                    <Wallet className="w-5 h-5 text-gray-400"/> Contas
                 </h3>
                 <button 
-                  onClick={() => setAccModalOpen(true)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-indigo-600 transition-colors"
-                  title="Adicionar Conta"
+                    onClick={() => setAccModalOpen(true)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-indigo-600 transition-colors"
+                    title="Adicionar Conta"
                 >
-                  <Plus className="w-5 h-5" />
+                    <Plus className="w-5 h-5" />
                 </button>
-              </div>
-              <div className="space-y-3">
+            </div>
+            <div className="space-y-3">
                 {state.accounts.map(acc => (
-                  <div key={acc.id} className="group relative p-3 bg-gray-50 hover:bg-white border border-transparent hover:border-gray-200 rounded-xl transition-all shadow-sm">
+                    <div key={acc.id} className="group relative p-3 bg-gray-50 hover:bg-white border border-transparent hover:border-gray-200 rounded-xl transition-all shadow-sm">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                         <div className="p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
-                            {getAccountIcon(acc.type)}
-                         </div>
-                         <div>
-                            <p className="font-semibold text-gray-800">{acc.name}</p>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">{getAccountLabel(acc.type)}</p>
-                         </div>
-                      </div>
-                      <span className={`font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.balance)}
-                      </span>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                {getAccountIcon(acc.type)}
+                            </div>
+                            <div>
+                                <p className="font-semibold text-gray-800">{acc.name}</p>
+                                <p className="text-xs text-gray-500 uppercase tracking-wide">{getAccountLabel(acc.type)}</p>
+                            </div>
+                        </div>
+                        <span className={`font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.balance)}
+                        </span>
                     </div>
-                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-md shadow-sm">
-                      <button 
-                        onClick={() => handleEditAccount(acc)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={() => onDeleteAccount(acc.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-md shadow-sm">
+                        <button 
+                            onClick={() => handleEditAccount(acc)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                            <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                            onClick={() => onDeleteAccount(acc.id)}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     </div>
-                  </div>
+                    </div>
                 ))}
-              </div>
             </div>
-
-            {/* Goals Panel */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-gray-400"/> Metas
-              </h3>
-              <div className="space-y-4">
-                {state.goals.map(goal => {
-                   const percent = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);
-                   return (
-                    <div key={goal.id}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-gray-700">{goal.name}</span>
-                        <span className="text-gray-500">{Math.round(percent)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div 
-                          className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
-                          style={{ width: `${percent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                   );
-                })}
-              </div>
-            </div>
-          </div>
         </div>
+
+        {/* Painel Metas - 30% */}
+        <div className="lg:w-[30%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5 text-gray-400"/> Metas
+            </h3>
+            <div className="space-y-4">
+                {state.goals.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">Nenhuma meta definida.</p>
+                ) : (
+                    state.goals.map(goal => {
+                        const percent = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);
+                        return (
+                        <div key={goal.id}>
+                            <div className="flex justify-between text-sm mb-1">
+                            <span className="font-medium text-gray-700 truncate max-w-[150px]" title={goal.name}>{goal.name}</span>
+                            <span className="text-gray-500 text-xs">{Math.round(percent)}%</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2">
+                            <div 
+                                className="bg-indigo-600 h-2 rounded-full transition-all duration-500" 
+                                style={{ width: `${percent}%` }}
+                            ></div>
+                            </div>
+                        </div>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+
+      </div>
 
       <TransactionModal 
         isOpen={isTransModalOpen} 
@@ -370,4 +372,3 @@ const Dashboard: React.FC<DashboardProps> = ({
 };
 
 export default Dashboard;
-    
