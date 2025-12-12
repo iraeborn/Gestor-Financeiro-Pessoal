@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuditLog } from '../types';
 import { getAuditLogs, restoreRecord, revertLogChange } from '../services/storageService';
-import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle } from 'lucide-react';
+import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight } from 'lucide-react';
 
 const LogsView: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -96,6 +96,23 @@ const LogsView: React.FC = () => {
       }
   };
 
+  // Helper para formatar o nome dos campos alterados
+  const formatFieldName = (key: string) => {
+      const map: Record<string, string> = {
+          amount: 'Valor',
+          description: 'Descrição',
+          date: 'Data',
+          status: 'Status',
+          type: 'Tipo',
+          category: 'Categoria',
+          accountId: 'Conta',
+          name: 'Nome',
+          balance: 'Saldo',
+          contactId: 'Contato',
+      };
+      return map[key] || key;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
         <div className="flex justify-between items-center">
@@ -132,37 +149,54 @@ const LogsView: React.FC = () => {
                             <tr>
                                 <th className="px-6 py-4">Ação</th>
                                 <th className="px-6 py-4">Registro</th>
-                                <th className="px-6 py-4">Usuário</th>
-                                <th className="px-6 py-4">Data/Hora</th>
+                                <th className="px-6 py-4">Detalhes da Alteração</th>
+                                <th className="px-6 py-4">Usuário / Data</th>
                                 <th className="px-6 py-4 text-right">Opções</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {logs.map(log => (
                                 <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                                    <td className="px-6 py-4">
+                                    <td className="px-6 py-4 w-24">
                                         <span className={`px-2 py-1 rounded-md text-xs font-bold ${getActionColor(log.action)}`}>
                                             {getActionLabel(log.action)}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-6 py-4 w-48">
                                         <div className="flex flex-col">
-                                            <span className="font-semibold text-gray-800">{log.details || 'Sem detalhes'}</span>
+                                            <span className="font-semibold text-gray-800 truncate max-w-[200px]" title={log.details}>{log.details || 'Sem detalhes'}</span>
                                             <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                                                 <FileText className="w-3 h-3" /> {getEntityLabel(log.entity)} #{log.entityId.slice(0,8)}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2 text-gray-600">
-                                            <User className="w-4 h-4 text-gray-400" />
-                                            {log.userName}
-                                        </div>
+                                        {/* Render Diff Changes */}
+                                        {log.changes ? (
+                                            <div className="space-y-1">
+                                                {Object.entries(log.changes).map(([key, val]) => (
+                                                    <div key={key} className="flex items-center gap-2 text-xs">
+                                                        <span className="font-semibold text-gray-500 w-20 truncate">{formatFieldName(key)}:</span>
+                                                        <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">{String(val.old)}</span>
+                                                        <ArrowRight className="w-3 h-3 text-gray-400" />
+                                                        <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">{String(val.new)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs italic">-</span>
+                                        )}
                                     </td>
-                                    <td className="px-6 py-4 text-gray-500">
-                                        <div className="flex items-center gap-2">
-                                            <Clock className="w-4 h-4 text-gray-300" />
-                                            {new Date(log.timestamp).toLocaleString('pt-BR')}
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2 text-gray-600">
+                                                <User className="w-3 h-3 text-gray-400" />
+                                                {log.userName}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-gray-500 text-xs">
+                                                <Clock className="w-3 h-3 text-gray-300" />
+                                                {new Date(log.timestamp).toLocaleString('pt-BR')}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">

@@ -45,11 +45,43 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
 const pool = new Pool(poolConfig);
 
 // Helper para Auditoria
-const logAudit = async (client, userId, action, entity, entityId, details, previousState = null) => {
+const logAudit = async (client, userId, action, entity, entityId, details, previousState = null, changes = null) => {
     await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [userId, action, entity, entityId, details, previousState]
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [userId, action, entity, entityId, details, previousState, changes]
     );
+};
+
+// Helper para calcular Diff entre objeto antigo (DB SnakeCase) e novo (Req Body CamelCase)
+const calculateChanges = (oldObj, newObj, keyMap) => {
+    if (!oldObj) return null;
+    const changes = {};
+    let hasChanges = false;
+
+    for (const [bodyKey, dbKey] of Object.entries(keyMap)) {
+        if (newObj[bodyKey] !== undefined) {
+            // Normalização básica para comparação (datas e números)
+            let valOld = oldObj[dbKey];
+            let valNew = newObj[bodyKey];
+
+            // Tratar datas (DB vem como Date obj, Body vem como string YYYY-MM-DD)
+            if (valOld instanceof Date) valOld = valOld.toISOString().split('T')[0];
+            
+            // Tratar números (DB vem como string ou number dependendo do driver, Body vem como string ou number)
+            if (typeof valOld === 'number' || !isNaN(Number(valOld))) valOld = String(valOld);
+            if (typeof valNew === 'number' || !isNaN(Number(valNew))) valNew = String(valNew);
+            
+            // Ignorar null vs undefined se for vazio
+            if (!valOld && !valNew) continue;
+
+            if (valOld != valNew) {
+                // Salva o nome amigável (chave do frontend)
+                changes[bodyKey] = { old: valOld, new: valNew };
+                hasChanges = true;
+            }
+        }
+    }
+    return hasChanges ? changes : null;
 };
 
 // Helper para Atualizar Saldo da Conta (Backend Side)
@@ -121,6 +153,8 @@ pool.connect()
                 previous_state JSONB
             );
         `);
+        // Add changes column for diffs
+        await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS changes JSONB;`);
 
         // --- NEW: MEMBERSHIPS FOR MULTI-TENANCY ---
         await client.query(`
@@ -417,20 +451,8 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Use active family_id from current user record (set via middleware token or fresh DB query)
-        // Note: req.user from token might be stale if context switched. 
-        // Best practice: Query active family_id from DB for data fetching.
-        
         const currentUserRes = await pool.query('SELECT family_id, entity_type FROM users WHERE id = $1', [userId]);
         const activeFamilyId = currentUserRes.rows[0]?.family_id || userId;
-        
-        // Overwrite token's familyId logic with DB source of truth for queries
-        // Update condition: user_id is activeFamilyId (owner) OR belongs to family
-        // Actually, the schema uses `user_id` as owner in accounts table? 
-        // No, accounts has `user_id`. But in Family mode, we filter by family relation.
-        
-        // Correct Filter: Data belonging to users who are in the same family ID group.
-        // `user_id IN (SELECT id FROM users WHERE family_id = $1)`
         
         const familyFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`;
         
@@ -510,11 +532,6 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
     }
 });
 
-// Generic Insert/Update Routes needs to fetch active family ID too to verify permission and insert correctly
-// For brevity, assuming the `getFamilyCondition` logic in existing routes (which uses subselect on users) handles reads correctly.
-// For WRITES (Insert), we must ensure we use the user's ID (who is logged in). The family relation is established via `users.family_id`.
-// So standard inserts (like `accounts`, `transactions`) which use `req.user.id` are correct, because that user is linked to the active family.
-
 app.post('/api/accounts', authenticateToken, async (req, res) => {
     const { id, name, type, balance, creditLimit, closingDay, dueDay } = req.body;
     const userId = req.user.id;
@@ -523,6 +540,15 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
         const existing = existingRes.rows[0];
         const action = existing ? 'UPDATE' : 'CREATE';
         
+        const changes = calculateChanges(existing, req.body, {
+            name: 'name',
+            type: 'type',
+            balance: 'balance',
+            creditLimit: 'credit_limit',
+            closingDay: 'closing_day',
+            dueDay: 'due_day'
+        });
+
         await pool.query(
             `INSERT INTO accounts (id, name, type, balance, user_id, credit_limit, closing_day, due_day) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
@@ -530,15 +556,11 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
             [id, name, type, balance, userId, creditLimit || null, closingDay || null, dueDay || null]
         );
         
-        await logAudit(pool, userId, action, 'account', id, `Conta: ${name}`, existing);
+        await logAudit(pool, userId, action, 'account', id, `Conta: ${name}`, existing, changes);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ... (Maintain all other routes - they rely on `req.user.id` which is correct, or filtering by family which is also correct via SQL subquery) ...
-// The only critical update was login/register/invite to handle memberships and `switch-context`.
-
-// Existing routes for consistency
 app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
@@ -560,8 +582,10 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
         const existing = existingRes.rows[0];
         const action = existing ? 'UPDATE' : 'CREATE';
 
+        const changes = calculateChanges(existing, req.body, { name: 'name' });
+
         await pool.query(`INSERT INTO contacts (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at = NULL`, [id, name, userId]);
-        await logAudit(pool, userId, action, 'contact', id, `Contato: ${name}`, existing);
+        await logAudit(pool, userId, action, 'contact', id, `Contato: ${name}`, existing, changes);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -587,6 +611,26 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         const existing = existingRes.rows[0];
         const action = existing ? 'UPDATE' : 'CREATE';
 
+        // Map CamelCase Body to SnakeCase DB
+        const changes = calculateChanges(existing, t, {
+            description: 'description',
+            amount: 'amount',
+            type: 'type',
+            category: 'category',
+            date: 'date',
+            status: 'status',
+            accountId: 'account_id',
+            destinationAccountId: 'destination_account_id',
+            interestRate: 'interest_rate',
+            contactId: 'contact_id',
+            branchId: 'branch_id',
+            costCenterId: 'cost_center_id',
+            departmentId: 'department_id',
+            projectId: 'project_id',
+            classification: 'classification',
+            destinationBranchId: 'destination_branch_id'
+        });
+
         await pool.query(
             `INSERT INTO transactions (
                 id, description, amount, type, category, date, status, account_id, destination_account_id, 
@@ -609,7 +653,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
                 userId
             ]
         );
-        await logAudit(pool, userId, action, 'transaction', t.id, `${t.type}: ${t.description} (R$ ${t.amount})`, existing);
+        await logAudit(pool, userId, action, 'transaction', t.id, `${t.type}: ${t.description} (R$ ${t.amount})`, existing, changes);
         res.json({ success: true });
     } catch (err) {
         console.error('Error inserting transaction:', err);
@@ -660,7 +704,8 @@ app.get('/api/audit-logs', authenticateToken, async (req, res) => {
             userId: r.user_id,
             userName: r.user_name,
             isDeleted: r.is_deleted,
-            previousState: r.previous_state
+            previousState: r.previous_state,
+            changes: r.changes
         })));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -773,12 +818,14 @@ const createPjEndpoints = (pathName, tableName, entityName) => {
             const existing = existingRes.rows[0];
             const action = existing ? 'UPDATE' : 'CREATE';
             
+            const changes = calculateChanges(existing, req.body, { name: 'name', code: 'code' });
+
             if (code !== undefined) {
                 await pool.query(`INSERT INTO ${tableName} (id, name, code, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, deleted_at=NULL`, [id, name, code, userId]);
             } else {
                 await pool.query(`INSERT INTO ${tableName} (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at=NULL`, [id, name, userId]);
             }
-            await logAudit(pool, userId, action, entityName, id, `${name}`, existing);
+            await logAudit(pool, userId, action, entityName, id, `${name}`, existing, changes);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -807,11 +854,13 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
         const existing = existingRes.rows[0];
         const action = existing ? 'UPDATE' : 'CREATE';
         
+        const changes = calculateChanges(existing, req.body, { name: 'name', type: 'type' });
+
         await pool.query(
             `INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`,
             [id, name, type || null, userId]
         );
-        await logAudit(pool, userId, action, 'category', id, name, existing);
+        await logAudit(pool, userId, action, 'category', id, name, existing, changes);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

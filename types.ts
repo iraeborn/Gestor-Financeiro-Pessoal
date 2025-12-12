@@ -189,6 +189,11 @@ export interface FinancialGoal {
   userId?: string;
 }
 
+export interface ChangeDiff {
+  old: any;
+  new: any;
+}
+
 export interface AuditLog {
   id: number;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
@@ -200,6 +205,7 @@ export interface AuditLog {
   userName: string;
   isDeleted: boolean; // Se o registro atual está deletado (para saber se exibe botão restaurar)
   previousState?: any; // JSON com o estado anterior
+  changes?: Record<string, ChangeDiff>; // JSON com o diff das alterações
 }
 
 export interface AppState {
