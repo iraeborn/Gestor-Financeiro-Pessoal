@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 
 interface TransactionModalProps {
@@ -726,6 +726,26 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Audit Footer */}
+          {initialData && initialData.id && (
+              <div className="bg-gray-50 p-2 rounded-lg text-[10px] text-gray-400 mt-2 flex flex-col gap-1 border border-gray-100">
+                  {initialData.createdByName && (
+                      <div className="flex items-center gap-1">
+                          <History className="w-3 h-3" />
+                          <span>Criado por <strong>{initialData.createdByName}</strong></span>
+                      </div>
+                  )}
+                  {initialData.updatedByName && initialData.updatedAt && (
+                      <div className="flex items-center gap-1">
+                          <History className="w-3 h-3" />
+                          <span>
+                              Alterado por <strong>{initialData.updatedByName}</strong> em {new Date(initialData.updatedAt).toLocaleDateString('pt-BR')} às {new Date(initialData.updatedAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                      </div>
+                  )}
+              </div>
+          )}
 
           <div className="pt-2">
             <button

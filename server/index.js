@@ -87,6 +87,11 @@ pool.connect()
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'STANDARD';`);
         await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_branch_id TEXT REFERENCES branches(id) ON DELETE SET NULL;`);
 
+        // Auditing Fields
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_by TEXT REFERENCES users(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_by TEXT REFERENCES users(id) ON DELETE SET NULL;`);
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;`);
+
         // Updates to Accounts
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2);`);
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS closing_day INTEGER;`);
@@ -389,23 +394,35 @@ app.get('/api/family/members', authenticateToken, async (req, res) => {
 });
 
 // Helper for Family Query
-const getFamilyCondition = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
+const getFamilyCondition = `transactions.user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`;
 
 app.get('/api/initial-data', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        const accs = await pool.query(`SELECT * FROM accounts WHERE ${getFamilyCondition}`, [userId]);
-        const trans = await pool.query(`SELECT * FROM transactions WHERE ${getFamilyCondition} ORDER BY date DESC`, [userId]);
-        const goals = await pool.query(`SELECT * FROM goals WHERE ${getFamilyCondition}`, [userId]);
-        const contacts = await pool.query(`SELECT * FROM contacts WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
-        let categories = await pool.query(`SELECT * FROM categories WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+        const accs = await pool.query(`SELECT * FROM accounts WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
+        
+        // JOIN to get Audit Names
+        const trans = await pool.query(`
+            SELECT transactions.*, 
+                   uc.name as created_by_name, 
+                   uu.name as updated_by_name 
+            FROM transactions 
+            LEFT JOIN users uc ON transactions.created_by = uc.id
+            LEFT JOIN users uu ON transactions.updated_by = uu.id
+            WHERE ${getFamilyCondition} 
+            ORDER BY transactions.date DESC
+        `, [userId]);
+        
+        const goals = await pool.query(`SELECT * FROM goals WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
+        const contacts = await pool.query(`SELECT * FROM contacts WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1)) ORDER BY name ASC`, [userId]);
+        let categories = await pool.query(`SELECT * FROM categories WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1)) ORDER BY name ASC`, [userId]);
 
         // PJ Data Fetch
         const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [userId]);
-        const branchesRes = await pool.query(`SELECT * FROM branches WHERE ${getFamilyCondition}`, [userId]);
-        const costCentersRes = await pool.query(`SELECT * FROM cost_centers WHERE ${getFamilyCondition}`, [userId]);
-        const departmentsRes = await pool.query(`SELECT * FROM departments WHERE ${getFamilyCondition}`, [userId]);
-        const projectsRes = await pool.query(`SELECT * FROM projects WHERE ${getFamilyCondition}`, [userId]);
+        const branchesRes = await pool.query(`SELECT * FROM branches WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
+        const costCentersRes = await pool.query(`SELECT * FROM cost_centers WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
+        const departmentsRes = await pool.query(`SELECT * FROM departments WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
+        const projectsRes = await pool.query(`SELECT * FROM projects WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1))`, [userId]);
 
         if (categories.rows.length === 0) {
             const defaults = [
@@ -425,7 +442,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                     [newId, c.name, c.type, userId]
                 );
             }
-            categories = await pool.query(`SELECT * FROM categories WHERE ${getFamilyCondition} ORDER BY name ASC`, [userId]);
+            categories = await pool.query(`SELECT * FROM categories WHERE user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $1)) ORDER BY name ASC`, [userId]);
         }
 
         res.json({
@@ -447,7 +464,11 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 departmentId: r.department_id,
                 projectId: r.project_id,
                 classification: r.classification,
-                destinationBranchId: r.destination_branch_id
+                destinationBranchId: r.destination_branch_id,
+                createdByName: r.created_by_name,
+                updatedByName: r.updated_by_name,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at
             })),
             goals: goals.rows.map(r => ({ 
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
@@ -662,19 +683,22 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
             `INSERT INTO transactions (
                 id, description, amount, type, category, date, status, account_id, destination_account_id, 
                 is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, 
-                user_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id
+                user_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id,
+                created_by, updated_by, updated_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $22, NOW())
              ON CONFLICT (id) DO UPDATE SET 
                 description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, 
                 is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, 
-                branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19, classification=$20, destination_branch_id=$21`,
+                branch_id=$16, cost_center_id=$17, department_id=$18, project_id=$19, classification=$20, destination_branch_id=$21,
+                updated_by=$22, updated_at=NOW()`,
             [
                 t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, 
                 sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, 
                 t.recurrenceEndDate, t.interestRate || 0, sanitizeValue(t.contactId), userId,
                 sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId),
-                t.classification || 'STANDARD', sanitizeValue(t.destinationBranchId)
+                t.classification || 'STANDARD', sanitizeValue(t.destinationBranchId),
+                userId // created_by/updated_by ID
             ]
         );
         res.json({ success: true });

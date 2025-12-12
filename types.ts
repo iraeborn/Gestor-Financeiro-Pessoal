@@ -164,6 +164,11 @@ export interface Transaction {
   departmentId?: string;
   projectId?: string;
   classification?: TransactionClassification;
+  // Audit Fields
+  createdByName?: string;
+  updatedByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface FinancialGoal {
