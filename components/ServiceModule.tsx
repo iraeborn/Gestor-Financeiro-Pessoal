@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, TransactionType, TransactionStatus, Transaction } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign, CheckCircle } from 'lucide-react';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Clock, DollarSign, CheckCircle, Mail, Phone } from 'lucide-react';
 import { useConfirm } from './AlertSystem';
 
 // Sections map to the sub-items in sidebar
@@ -85,7 +85,9 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         onSaveClient({
             id: clientForm.id || crypto.randomUUID(),
             contactId: resolvedContactId,
-            contactName: exactMatch ? exactMatch.name : clientSearchName.trim(), 
+            contactName: exactMatch ? exactMatch.name : clientSearchName.trim(),
+            contactEmail: clientForm.contactEmail,
+            contactPhone: clientForm.contactPhone, 
             notes: clientForm.notes,
             birthDate: clientForm.birthDate
         });
@@ -319,7 +321,12 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                 type="button"
                                                 onClick={() => {
                                                     setClientSearchName(c.name);
-                                                    setClientForm(prev => ({ ...prev, contactId: c.id }));
+                                                    setClientForm(prev => ({ 
+                                                        ...prev, 
+                                                        contactId: c.id,
+                                                        contactPhone: c.phone,
+                                                        contactEmail: c.email
+                                                    }));
                                                     setShowContactDropdown(false);
                                                 }}
                                                 className="w-full text-left px-4 py-2 hover:bg-sky-50 text-sm text-gray-700 flex items-center justify-between"
@@ -336,6 +343,36 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         <Plus className="w-3 h-3" /> Um novo contato será criado automaticamente.
                                     </p>
                                 )}
+                            </div>
+
+                            {/* Base Contact Info (Optional for new contacts) */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Telefone</label>
+                                    <div className="relative">
+                                        <Phone className="w-3 h-3 text-gray-400 absolute left-2.5 top-3" />
+                                        <input 
+                                            type="text" 
+                                            className="w-full pl-8 border rounded-lg p-2 text-sm" 
+                                            value={clientForm.contactPhone || ''} 
+                                            onChange={e => setClientForm({...clientForm, contactPhone: e.target.value})}
+                                            placeholder="(00) 00000-0000"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Email</label>
+                                    <div className="relative">
+                                        <Mail className="w-3 h-3 text-gray-400 absolute left-2.5 top-3" />
+                                        <input 
+                                            type="email" 
+                                            className="w-full pl-8 border rounded-lg p-2 text-sm" 
+                                            value={clientForm.contactEmail || ''} 
+                                            onChange={e => setClientForm({...clientForm, contactEmail: e.target.value})}
+                                            placeholder="email@exemplo.com"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div>

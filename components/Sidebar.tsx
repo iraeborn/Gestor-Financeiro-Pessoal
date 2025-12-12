@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
@@ -91,6 +91,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
               { id: 'FIN_CALENDAR', label: 'Calendário', icon: CalendarDays },
               { id: 'FIN_CARDS', label: 'Meus Cartões', icon: CreditCard },
               { id: 'FIN_REPORTS', label: 'Relatórios', icon: PieChart },
+              { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
+              { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos', icon: Users },
               { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
           ]
       },
@@ -111,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           icon: Settings,
           isVisible: true,
           items: [
-              { id: 'SYS_CONTACTS', label: 'Contatos', icon: Users },
+              { id: 'SYS_CONTACTS', label: 'Todos Contatos', icon: Users },
               { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
               { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
               { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },

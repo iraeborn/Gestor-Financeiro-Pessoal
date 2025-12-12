@@ -18,6 +18,8 @@ const PERMISSION_GROUPS = [
             { id: 'FIN_CALENDAR', label: 'Calendário' },
             { id: 'FIN_CARDS', label: 'Cartões' },
             { id: 'FIN_REPORTS', label: 'Relatórios' },
+            { id: 'FIN_CATEGORIES', label: 'Categorias' },
+            { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos' },
             { id: 'FIN_ADVISOR', label: 'Consultor IA' },
         ]
     },
@@ -32,7 +34,7 @@ const PERMISSION_GROUPS = [
     {
         name: 'Gestão',
         items: [
-            { id: 'SYS_CONTACTS', label: 'Contatos' },
+            { id: 'SYS_CONTACTS', label: 'Todos Contatos' },
             { id: 'SYS_ACCESS', label: 'Acesso & Equipe' },
             { id: 'SYS_LOGS', label: 'Logs & Auditoria' },
             { id: 'SYS_SETTINGS', label: 'Configurações' },

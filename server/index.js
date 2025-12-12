@@ -111,6 +111,12 @@ pool.connect()
     try {
         // Base Tables
         await client.query(`CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+        // Contacts Columns Extension (Centralized Info)
+        await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email TEXT;`);
+        await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS phone TEXT;`);
+        await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS document TEXT;`); // CPF/CNPJ
+        await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS pix_key TEXT;`);
+
         await client.query(`CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
         await client.query(`CREATE TABLE IF NOT EXISTS company_profiles (id TEXT PRIMARY KEY, trade_name TEXT, legal_name TEXT, cnpj TEXT, user_id TEXT REFERENCES users(id) UNIQUE);`);
         await client.query(`CREATE TABLE IF NOT EXISTS branches (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
@@ -522,7 +528,10 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         `, [activeFamilyId]);
         
         const goals = await pool.query(`SELECT * FROM goals WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+        
+        // Contacts now have extended fields
         const contacts = await pool.query(`SELECT * FROM contacts WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+        
         let categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
 
         const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]); // Company profile linked to Family Owner (Family ID)
@@ -533,7 +542,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
 
         // Generic Module Data (renamed from Odonto)
         const clientsRes = await pool.query(`
-            SELECT mc.*, c.name as contact_name 
+            SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone
             FROM module_clients mc 
             JOIN contacts c ON mc.contact_id = c.id
             WHERE mc.${familyFilter} AND mc.deleted_at IS NULL
@@ -586,7 +595,9 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 id: r.id, name: r.name, targetAmount: parseFloat(r.target_amount), 
                 currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined 
             })),
-            contacts: contacts.rows.map(r => ({ id: r.id, name: r.name })),
+            contacts: contacts.rows.map(r => ({ 
+                id: r.id, name: r.name, email: r.email, phone: r.phone, document: r.document, pixKey: r.pix_key 
+            })),
             categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type })),
             
             companyProfile: companyRes.rows[0] ? {
@@ -601,6 +612,7 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
             // Generic Module Mapping
             serviceClients: clientsRes.rows.map(r => ({
                 id: r.id, contactId: r.contact_id, contactName: r.contact_name, 
+                contactEmail: r.contact_email, contactPhone: r.contact_phone,
                 notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined,
                 moduleTag: r.module_tag
             })),
@@ -663,16 +675,23 @@ app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/contacts', authenticateToken, async (req, res) => {
-    const { id, name } = req.body;
+    const { id, name, email, phone, document, pixKey } = req.body;
     const userId = req.user.id;
     try {
         const existingRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [id]);
         const existing = existingRes.rows[0];
         const action = existing ? 'UPDATE' : 'CREATE';
 
-        const changes = calculateChanges(existing, req.body, { name: 'name' });
+        const changes = calculateChanges(existing, req.body, { 
+            name: 'name', email: 'email', phone: 'phone', document: 'document', pixKey: 'pix_key' 
+        });
 
-        await pool.query(`INSERT INTO contacts (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at = NULL`, [id, name, userId]);
+        await pool.query(
+            `INSERT INTO contacts (id, name, user_id, email, phone, document, pix_key) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7) 
+             ON CONFLICT (id) DO UPDATE SET name=$2, email=$4, phone=$5, document=$6, pix_key=$7, deleted_at = NULL`, 
+            [id, name, userId, sanitizeValue(email), sanitizeValue(phone), sanitizeValue(document), sanitizeValue(pixKey)]
+        );
         await logAudit(pool, userId, action, 'contact', id, `Contato: ${name}`, existing, changes);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -690,6 +709,8 @@ app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ... (Transactions and other routes mostly unchanged) ...
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;

@@ -16,6 +16,7 @@ import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import ServiceModule from './components/ServiceModule';
 import AccessView from './components/AccessView';
+import CategoriesView from './components/CategoriesView'; 
 import { loadInitialData, api, logout } from './services/storageService';
 import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment } from './types';
 import { Menu, Loader2 } from 'lucide-react';
@@ -480,9 +481,15 @@ const App: React.FC = () => {
           let contactName = c.contactName;
 
           // Se não tem ID mas tem nome, criar contato financeiro automaticamente
+          // Agora suporta email e telefone vindos do modal do paciente
           if (!finalContactId && contactName) {
               const newContactId = crypto.randomUUID();
-              const newContact: Contact = { id: newContactId, name: contactName };
+              const newContact: Contact = { 
+                  id: newContactId, 
+                  name: contactName,
+                  email: c.contactEmail,
+                  phone: c.contactPhone
+              };
               await api.saveContact(newContact);
               
               // Atualiza estado local de contatos
@@ -506,8 +513,9 @@ const App: React.FC = () => {
           
           setState(prev => {
               const exists = prev.serviceClients?.find(sc => sc.id === clientToSave.id);
+              // Resolve Contact Info
               const contact = prev.contacts.find(co => co.id === finalContactId) || (contactName ? { name: contactName } as Contact : undefined);
-              const cWithContact = { ...clientToSave, contactName: contact?.name };
+              const cWithContact = { ...clientToSave, contactName: contact?.name, contactEmail: contact?.email, contactPhone: contact?.phone };
               
               if(exists) {
                   return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === clientToSave.id ? cWithContact : sc) };
@@ -675,6 +683,23 @@ const App: React.FC = () => {
         return <Reports transactions={state.transactions} />;
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={state} />;
+      case 'FIN_CATEGORIES':
+        return (
+            <CategoriesView 
+                categories={state.categories}
+                onSaveCategory={handleSaveCategory}
+                onDeleteCategory={handleDeleteCategory}
+            />
+        );
+      case 'FIN_CONTACTS':
+        return (
+            <ContactsView 
+                contacts={state.contacts}
+                onAddContact={handleSaveContact}
+                onEditContact={handleSaveContact}
+                onDeleteContact={handleDeleteContact}
+            />
+        );
       
       // --- SYSTEM/MANAGEMENT MODULE ---
       case 'SYS_CONTACTS':
@@ -692,7 +717,6 @@ const App: React.FC = () => {
         return (
             <SettingsView 
                 user={currentUser} 
-                categories={state.categories}
                 pjData={{
                     companyProfile: state.companyProfile,
                     branches: state.branches,
@@ -702,8 +726,6 @@ const App: React.FC = () => {
                 }}
                 onUpdateSettings={handleUpdateSettings}
                 onOpenCollab={() => setIsCollabModalOpen(true)}
-                onSaveCategory={handleSaveCategory}
-                onDeleteCategory={handleDeleteCategory}
                 onSavePJEntity={handleSavePJEntity}
                 onDeletePJEntity={handleDeletePJEntity}
             />

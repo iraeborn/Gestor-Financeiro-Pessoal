@@ -120,6 +120,11 @@ export interface Contact {
   id: string;
   name: string;
   userId?: string;
+  // Extended Fields (Centralized Info)
+  email?: string;
+  phone?: string;
+  document?: string; // CPF/CNPJ
+  pixKey?: string;
 }
 
 export interface Category {
@@ -228,6 +233,10 @@ export interface ServiceClient {
     id: string;
     contactId: string; // Link to core Contacts table
     contactName?: string; // Resolved name
+    // Fields passed during creation but stored in Contacts table
+    contactEmail?: string;
+    contactPhone?: string;
+    
     notes?: string; // Anamnese, Histórico, Prontuário, etc.
     birthDate?: string;
     moduleTag: string; // 'ODONTO', 'PHYSIO', etc. (MANDATORY for filtering)
@@ -282,12 +291,14 @@ export type ViewMode =
   | 'FIN_CARDS' 
   | 'FIN_REPORTS' 
   | 'FIN_ADVISOR'
+  | 'FIN_CATEGORIES'
+  | 'FIN_CONTACTS' // Novo: Contatos com viés financeiro
   // Odonto
   | 'ODONTO_AGENDA'
   | 'ODONTO_PATIENTS'
   | 'ODONTO_PROCEDURES'
   // Gestão / Sistema
-  | 'SYS_CONTACTS'
+  | 'SYS_CONTACTS' // Contatos com viés administrativo (Master)
   | 'SYS_LOGS'
   | 'SYS_SETTINGS'
   | 'SYS_ACCESS';
