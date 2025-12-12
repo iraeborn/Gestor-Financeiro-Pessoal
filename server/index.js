@@ -45,10 +45,30 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
 const pool = new Pool(poolConfig);
 
 // Helper para Auditoria
-const logAudit = async (client, userId, action, entity, entityId, details) => {
+const logAudit = async (client, userId, action, entity, entityId, details, previousState = null) => {
     await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity, entity_id, details) VALUES ($1, $2, $3, $4, $5)`,
-        [userId, action, entity, entityId, details]
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, action, entity, entityId, details, previousState]
+    );
+};
+
+// Helper para Atualizar Saldo da Conta (Backend Side)
+const updateAccountBalance = async (client, accountId, amount, type, isReversal = false) => {
+    if (!accountId) return;
+    
+    // Se for estorno (reversal), inverte a lógica
+    // INCOME normal: +saldo. Reversal: -saldo.
+    // EXPENSE normal: -saldo. Reversal: +saldo.
+    
+    let multiplier = 1;
+    if (type === 'EXPENSE') multiplier = -1;
+    if (isReversal) multiplier *= -1; // Inverte o sinal
+
+    const finalChange = amount * multiplier;
+
+    await client.query(
+        `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
+        [finalChange, accountId]
     );
 };
 
@@ -96,8 +116,6 @@ pool.connect()
         await client.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS due_day INTEGER;`);
 
         // --- NEW: AUDIT & SOFT DELETE ---
-        
-        // 1. Audit Logs Table
         await client.query(`
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id SERIAL PRIMARY KEY,
@@ -109,6 +127,8 @@ pool.connect()
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        
+        await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_state JSONB;`);
 
         // 2. Add deleted_at to ALL entities
         const tables = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'branches', 'cost_centers', 'departments', 'projects'];
@@ -142,14 +162,6 @@ const authenticateToken = (req, res, next) => {
     req.user = user;
     next();
   });
-};
-
-const requireAdmin = (req, res, next) => {
-    if (req.user && req.user.role === 'ADMIN') {
-        next();
-    } else {
-        res.status(403).json({ error: 'Acesso negado: Requer privilégios de Administrador' });
-    }
 };
 
 const ensureFamilyId = async (userId) => {
@@ -208,7 +220,6 @@ app.post('/api/auth/register', async (req, res) => {
     };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     
-    // Log User Creation
     await logAudit(pool, id, 'CREATE', 'user', id, `Novo usuário: ${name}`);
 
     res.json({ token, user });
@@ -317,7 +328,6 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const departmentsRes = await pool.query(`SELECT * FROM departments WHERE ${getFamilyCondition} AND deleted_at IS NULL`, [userId]);
         const projectsRes = await pool.query(`SELECT * FROM projects WHERE ${getFamilyCondition} AND deleted_at IS NULL`, [userId]);
 
-        // Default Categories
         if (categories.rows.length === 0) {
             const defaults = [
                 { name: 'Alimentação', type: 'EXPENSE' }, { name: 'Moradia', type: 'EXPENSE' },
@@ -372,13 +382,13 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
     }
 });
 
-// Generic Insert/Update with Audit
 app.post('/api/accounts', authenticateToken, async (req, res) => {
     const { id, name, type, balance, creditLimit, closingDay, dueDay } = req.body;
     const userId = req.user.id;
     try {
-        const existing = await pool.query('SELECT * FROM accounts WHERE id = $1', [id]);
-        const action = existing.rows.length > 0 ? 'UPDATE' : 'CREATE';
+        const existingRes = await pool.query('SELECT * FROM accounts WHERE id = $1', [id]);
+        const existing = existingRes.rows[0];
+        const action = existing ? 'UPDATE' : 'CREATE';
         
         await pool.query(
             `INSERT INTO accounts (id, name, type, balance, user_id, credit_limit, closing_day, due_day) 
@@ -387,7 +397,7 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
             [id, name, type, balance, userId, creditLimit || null, closingDay || null, dueDay || null]
         );
         
-        await logAudit(pool, userId, action, 'account', id, `Conta: ${name}`);
+        await logAudit(pool, userId, action, 'account', id, `Conta: ${name}`, existing);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -395,11 +405,12 @@ app.post('/api/accounts', authenticateToken, async (req, res) => {
 app.delete('/api/accounts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        const acc = await pool.query(`SELECT name FROM accounts WHERE id = $1`, [req.params.id]);
-        const name = acc.rows[0]?.name || 'Desconhecida';
+        const acc = await pool.query(`SELECT * FROM accounts WHERE id = $1`, [req.params.id]);
+        const previousState = acc.rows[0];
+        const name = previousState?.name || 'Desconhecida';
         
         await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
-        await logAudit(pool, userId, 'DELETE', 'account', req.params.id, `Conta: ${name}`);
+        await logAudit(pool, userId, 'DELETE', 'account', req.params.id, `Conta: ${name}`, previousState);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -408,11 +419,12 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
     const { id, name } = req.body;
     const userId = req.user.id;
     try {
-        const existing = await pool.query('SELECT * FROM contacts WHERE id = $1', [id]);
-        const action = existing.rows.length > 0 ? 'UPDATE' : 'CREATE';
+        const existingRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+        const existing = existingRes.rows[0];
+        const action = existing ? 'UPDATE' : 'CREATE';
 
         await pool.query(`INSERT INTO contacts (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at = NULL`, [id, name, userId]);
-        await logAudit(pool, userId, action, 'contact', id, `Contato: ${name}`);
+        await logAudit(pool, userId, action, 'contact', id, `Contato: ${name}`, existing);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -420,11 +432,12 @@ app.post('/api/contacts', authenticateToken, async (req, res) => {
 app.delete('/api/contacts/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        const ct = await pool.query(`SELECT name FROM contacts WHERE id = $1`, [req.params.id]);
-        const name = ct.rows[0]?.name || 'Desconhecido';
+        const ct = await pool.query(`SELECT * FROM contacts WHERE id = $1`, [req.params.id]);
+        const previousState = ct.rows[0];
+        const name = previousState?.name || 'Desconhecido';
 
         await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
-        await logAudit(pool, userId, 'DELETE', 'contact', req.params.id, `Contato: ${name}`);
+        await logAudit(pool, userId, 'DELETE', 'contact', req.params.id, `Contato: ${name}`, previousState);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -433,8 +446,9 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     const t = req.body;
     const userId = req.user.id;
     try {
-        const existing = await pool.query('SELECT * FROM transactions WHERE id = $1', [t.id]);
-        const action = existing.rows.length > 0 ? 'UPDATE' : 'CREATE';
+        const existingRes = await pool.query('SELECT * FROM transactions WHERE id = $1', [t.id]);
+        const existing = existingRes.rows[0];
+        const action = existing ? 'UPDATE' : 'CREATE';
 
         await pool.query(
             `INSERT INTO transactions (
@@ -458,7 +472,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
                 userId
             ]
         );
-        await logAudit(pool, userId, action, 'transaction', t.id, `${t.type}: ${t.description} (R$ ${t.amount})`);
+        await logAudit(pool, userId, action, 'transaction', t.id, `${t.type}: ${t.description} (R$ ${t.amount})`, existing);
         res.json({ success: true });
     } catch (err) {
         console.error('Error inserting transaction:', err);
@@ -469,11 +483,12 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        const tx = await pool.query(`SELECT description, amount FROM transactions WHERE id = $1`, [req.params.id]);
-        const desc = tx.rows[0] ? `${tx.rows[0].description} (R$ ${tx.rows[0].amount})` : 'Transação';
+        const tx = await pool.query(`SELECT * FROM transactions WHERE id = $1`, [req.params.id]);
+        const previousState = tx.rows[0];
+        const desc = previousState ? `${previousState.description} (R$ ${previousState.amount})` : 'Transação';
 
         await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
-        await logAudit(pool, userId, 'DELETE', 'transaction', req.params.id, desc);
+        await logAudit(pool, userId, 'DELETE', 'transaction', req.params.id, desc, previousState);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -482,7 +497,6 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
 app.get('/api/audit-logs', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Fetch logs for family
         const logs = await pool.query(`
             SELECT al.*, u.name as user_name,
             CASE 
@@ -508,7 +522,8 @@ app.get('/api/audit-logs', authenticateToken, async (req, res) => {
             timestamp: r.timestamp,
             userId: r.user_id,
             userName: r.user_name,
-            isDeleted: r.is_deleted
+            isDeleted: r.is_deleted,
+            previousState: r.previous_state
         })));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -532,30 +547,128 @@ app.post('/api/restore', authenticateToken, async (req, res) => {
     if (!tableName) return res.status(400).json({ error: 'Entidade inválida' });
 
     try {
+        // Fetch current (deleted) state for log
+        const current = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+        const record = current.rows[0];
+
         // Restore
         await pool.query(`UPDATE ${tableName} SET deleted_at = NULL WHERE id = $1 AND ${familyCheckParam2}`, [id, userId]);
         
-        // Log Restoration
-        await logAudit(pool, userId, 'RESTORE', entity, id, `Registro restaurado via Auditoria`);
-        
+        // --- LOGIC: RESTORE BALANCE IF TRANSACTION ---
+        if (entity === 'transaction' && record && record.status === 'PAID') {
+            if (record.type === 'TRANSFER') {
+                if (record.account_id) await updateAccountBalance(pool, record.account_id, -record.amount, 'INCOME'); // Remove from Source? No, wait. Transfer out = Expense behavior. Balance -= Amount. Restore -> Balance -= Amount.
+                // Logic: Transfer Out was deducted. Restore means deduct again? No. Restore means "Bring back the transaction".
+                // If I deleted a transfer, the balance was reversed (frontend logic).
+                // If I restore it, I need to re-apply the transfer.
+                
+                // Original Logic:
+                // Transfer: Source -= Amount, Dest += Amount.
+                // Delete: Source += Amount, Dest -= Amount.
+                // Restore: Source -= Amount, Dest += Amount.
+                if (record.account_id) await updateAccountBalance(pool, record.account_id, record.amount, 'EXPENSE'); 
+                if (record.destination_account_id) await updateAccountBalance(pool, record.destination_account_id, record.amount, 'INCOME');
+            } else {
+                // Income: +Amount. Expense: -Amount.
+                await updateAccountBalance(pool, record.account_id, record.amount, record.type);
+            }
+        }
+
+        await logAudit(pool, userId, 'RESTORE', entity, id, `Registro restaurado via Auditoria`, record);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Simple Generic PJ Routes (Update to Soft Delete)
+// Endpoint to Revert an UPDATE change
+app.post('/api/revert-change', authenticateToken, async (req, res) => {
+    const { logId } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const logRes = await pool.query('SELECT * FROM audit_logs WHERE id = $1', [logId]);
+        const log = logRes.rows[0];
+        if (!log || !log.previous_state) return res.status(400).json({ error: 'Log inválido ou sem estado anterior.' });
+
+        const tableMap = {
+            'transaction': 'transactions',
+            'account': 'accounts',
+            'contact': 'contacts',
+            'category': 'categories',
+            'branch': 'branches',
+            'costCenter': 'cost_centers',
+            'department': 'departments',
+            'project': 'projects'
+        };
+        const tableName = tableMap[log.entity];
+        if (!tableName) return res.status(400).json({ error: 'Entidade desconhecida.' });
+
+        const currentRes = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [log.entity_id]);
+        const currentState = currentRes.rows[0];
+
+        // --- SECURITY: Filter allowed keys ---
+        const previousState = log.previous_state;
+        const protectedColumns = ['id', 'user_id', 'created_at', 'updated_at', 'created_by'];
+        const keys = Object.keys(previousState).filter(k => !protectedColumns.includes(k));
+        
+        if (keys.length === 0) return res.status(400).json({ error: 'Estado anterior vazio ou protegido.' });
+
+        const setClause = keys.map((key, idx) => `"${key}" = $${idx + 2}`).join(', ');
+        const values = keys.map(key => previousState[key]);
+        
+        const query = `UPDATE ${tableName} SET ${setClause}, updated_at = NOW() WHERE id = $1`;
+        
+        await pool.query(query, [log.entity_id, ...values]);
+
+        // --- LOGIC: REVERT BALANCE IF TRANSACTION ---
+        if (log.entity === 'transaction' && currentState && previousState.status === 'PAID') {
+            // Logic: Reverse the CURRENT state effect, Apply the PREVIOUS state effect.
+            // Simplified: Calculate Delta.
+            // Assumption: Account ID did not change (too complex if it did).
+            
+            if (currentState.account_id === previousState.account_id) {
+                const oldAmount = parseFloat(previousState.amount);
+                const newAmount = parseFloat(currentState.amount); // The one being reverted FROM
+                
+                // If Expense: Balance was decreased by NewAmount. Needs to be increased by NewAmount, decreased by OldAmount.
+                // Net change: Balance += (NewAmount - OldAmount).
+                
+                // If Income: Balance was increased by NewAmount. Needs to be decreased by NewAmount, increased by OldAmount.
+                // Net change: Balance -= (NewAmount - OldAmount).
+                
+                if (previousState.type === 'EXPENSE') {
+                    const diff = newAmount - oldAmount;
+                    await updateAccountBalance(pool, previousState.account_id, diff, 'INCOME'); // Treat recovery as income
+                } else if (previousState.type === 'INCOME') {
+                    const diff = newAmount - oldAmount;
+                    await updateAccountBalance(pool, previousState.account_id, diff, 'EXPENSE'); // Treat loss as expense
+                }
+            }
+        }
+
+        await logAudit(pool, userId, 'REVERT', log.entity, log.entity_id, `Reversão de alteração (Log #${logId})`, currentState);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Revert Error", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const createPjEndpoints = (pathName, tableName, entityName) => {
     app.post(`/api/${pathName}`, authenticateToken, async (req, res) => {
         const { id, name, code } = req.body;
         const userId = req.user.id;
         try {
-            const existing = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
-            const action = existing.rows.length > 0 ? 'UPDATE' : 'CREATE';
+            const existingRes = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+            const existing = existingRes.rows[0];
+            const action = existing ? 'UPDATE' : 'CREATE';
+            
             if (code !== undefined) {
                 await pool.query(`INSERT INTO ${tableName} (id, name, code, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, deleted_at=NULL`, [id, name, code, userId]);
             } else {
                 await pool.query(`INSERT INTO ${tableName} (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at=NULL`, [id, name, userId]);
             }
-            await logAudit(pool, userId, action, entityName, id, `${name}`);
+            await logAudit(pool, userId, action, entityName, id, `${name}`, existing);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -563,8 +676,9 @@ const createPjEndpoints = (pathName, tableName, entityName) => {
     app.delete(`/api/${pathName}/:id`, authenticateToken, async (req, res) => {
         const userId = req.user.id;
         try {
+            const row = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1`, [req.params.id]);
             await pool.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id=$1 AND user_id=$2`, [req.params.id, userId]);
-            await logAudit(pool, userId, 'DELETE', entityName, req.params.id, 'Item corporativo');
+            await logAudit(pool, userId, 'DELETE', entityName, req.params.id, 'Item corporativo', row.rows[0]);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -575,18 +689,19 @@ createPjEndpoints('cost-centers', 'cost_centers', 'costCenter');
 createPjEndpoints('departments', 'departments', 'department');
 createPjEndpoints('projects', 'projects', 'project');
 
-// Categories Logic Updated
 app.post('/api/categories', authenticateToken, async (req, res) => {
     const { id, name, type } = req.body;
     const userId = req.user.id;
     try {
-        const existing = await pool.query('SELECT * FROM categories WHERE id = $1', [id]);
-        const action = existing.rows.length > 0 ? 'UPDATE' : 'CREATE';
+        const existingRes = await pool.query('SELECT * FROM categories WHERE id = $1', [id]);
+        const existing = existingRes.rows[0];
+        const action = existing ? 'UPDATE' : 'CREATE';
+        
         await pool.query(
             `INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`,
             [id, name, type || null, userId]
         );
-        await logAudit(pool, userId, action, 'category', id, name);
+        await logAudit(pool, userId, action, 'category', id, name, existing);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -594,9 +709,9 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
 app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        const cat = await pool.query(`SELECT name FROM categories WHERE id = $1`, [req.params.id]);
+        const cat = await pool.query(`SELECT * FROM categories WHERE id = $1`, [req.params.id]);
         await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, userId]);
-        await logAudit(pool, userId, 'DELETE', 'category', req.params.id, cat.rows[0]?.name);
+        await logAudit(pool, userId, 'DELETE', 'category', req.params.id, cat.rows[0]?.name, cat.rows[0]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

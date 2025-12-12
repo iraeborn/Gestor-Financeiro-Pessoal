@@ -182,7 +182,7 @@ export interface FinancialGoal {
 
 export interface AuditLog {
   id: number;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
   entity: string; // 'transaction', 'account', etc.
   entityId: string;
   details?: string; // Nome ou descrição resumida do item
@@ -190,6 +190,7 @@ export interface AuditLog {
   userId: string;
   userName: string;
   isDeleted: boolean; // Se o registro atual está deletado (para saber se exibe botão restaurar)
+  previousState?: any; // JSON com o estado anterior
 }
 
 export interface AppState {

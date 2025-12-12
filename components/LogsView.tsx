@@ -1,13 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { AuditLog } from '../types';
-import { getAuditLogs, restoreRecord } from '../services/storageService';
-import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle } from 'lucide-react';
+import { getAuditLogs, restoreRecord, revertLogChange } from '../services/storageService';
+import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle } from 'lucide-react';
 
 const LogsView: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [processingId, setProcessingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadLogs();
@@ -26,17 +26,40 @@ const LogsView: React.FC = () => {
   };
 
   const handleRestore = async (log: AuditLog) => {
-      if (!window.confirm(`Deseja restaurar este registro: ${log.details}?`)) return;
+      const isTransaction = log.entity === 'transaction';
+      const msg = `Deseja restaurar este registro: "${log.details}"?` + 
+                  (isTransaction ? "\n\nO saldo da conta será ajustado automaticamente para refletir esta transação." : "");
       
-      setRestoringId(log.id);
+      if (!window.confirm(msg)) return;
+      
+      setProcessingId(log.id);
       try {
           await restoreRecord(log.entity, log.entityId);
-          await loadLogs(); // Reload to show new state
-          alert("Registro restaurado com sucesso. Recarregue a página para ver os dados restaurados nas outras telas.");
+          await loadLogs(); 
+          alert("Registro restaurado com sucesso.");
       } catch (e: any) {
           alert("Erro ao restaurar: " + e.message);
       } finally {
-          setRestoringId(null);
+          setProcessingId(null);
+      }
+  };
+
+  const handleRevert = async (log: AuditLog) => {
+      const isTransaction = log.entity === 'transaction';
+      const msg = `Deseja desfazer as alterações deste registro? O estado anterior será reaplicado.` +
+                  (isTransaction ? "\n\nO sistema tentará ajustar a diferença de valores no saldo da conta, se aplicável." : "");
+
+      if (!window.confirm(msg)) return;
+
+      setProcessingId(log.id);
+      try {
+          await revertLogChange(log.id);
+          await loadLogs();
+          alert("Alteração revertida com sucesso.");
+      } catch (e: any) {
+          alert("Erro ao reverter: " + e.message);
+      } finally {
+          setProcessingId(null);
       }
   };
 
@@ -46,9 +69,21 @@ const LogsView: React.FC = () => {
           case 'UPDATE': return 'bg-blue-100 text-blue-700';
           case 'DELETE': return 'bg-rose-100 text-rose-700';
           case 'RESTORE': return 'bg-amber-100 text-amber-700';
+          case 'REVERT': return 'bg-purple-100 text-purple-700';
           default: return 'bg-gray-100 text-gray-700';
       }
   };
+
+  const getActionLabel = (action: string) => {
+      switch (action) {
+          case 'CREATE': return 'CRIAÇÃO';
+          case 'UPDATE': return 'EDIÇÃO';
+          case 'DELETE': return 'EXCLUSÃO';
+          case 'RESTORE': return 'RESTAURAÇÃO';
+          case 'REVERT': return 'REVERSÃO';
+          default: return action;
+      }
+  }
 
   const getEntityLabel = (entity: string) => {
       switch(entity) {
@@ -69,7 +104,7 @@ const LogsView: React.FC = () => {
                     <ScrollText className="w-6 h-6 text-indigo-600" />
                     Auditoria & Logs
                 </h1>
-                <p className="text-gray-500">Histórico completo de alterações e restauração de dados.</p>
+                <p className="text-gray-500">Histórico completo de alterações, exclusões e restaurações.</p>
             </div>
             <button 
                 onClick={loadLogs} 
@@ -78,6 +113,13 @@ const LogsView: React.FC = () => {
             >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <p className="text-sm text-amber-800">
+                <strong>Atenção:</strong> Reverter ou Restaurar transações antigas afeta o saldo atual das contas. O sistema tentará ajustar automaticamente, mas recomendamos conferir seus saldos após realizar estas operações.
+            </p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -100,9 +142,7 @@ const LogsView: React.FC = () => {
                                 <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded-md text-xs font-bold ${getActionColor(log.action)}`}>
-                                            {log.action === 'CREATE' ? 'CRIAÇÃO' : 
-                                             log.action === 'UPDATE' ? 'EDIÇÃO' : 
-                                             log.action === 'DELETE' ? 'EXCLUSÃO' : 'RESTAURAÇÃO'}
+                                            {getActionLabel(log.action)}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
@@ -126,23 +166,39 @@ const LogsView: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
+                                        {/* Botão de Restaurar (para DELETED) */}
                                         {log.action === 'DELETE' && log.isDeleted && (
                                             <button 
                                                 onClick={() => handleRestore(log)}
-                                                disabled={restoringId === log.id}
+                                                disabled={processingId === log.id}
                                                 className="inline-flex items-center gap-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                                             >
-                                                {restoringId === log.id ? (
-                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                                ) : (
-                                                    <RotateCcw className="w-3.5 h-3.5" />
-                                                )}
+                                                {processingId === log.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                                                 Restaurar
                                             </button>
                                         )}
+                                        
+                                        {/* Botão de Desfazer (para UPDATE) */}
+                                        {log.action === 'UPDATE' && log.previousState && !log.isDeleted && (
+                                            <button 
+                                                onClick={() => handleRevert(log)}
+                                                disabled={processingId === log.id}
+                                                className="inline-flex items-center gap-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                {processingId === log.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <History className="w-3.5 h-3.5" />}
+                                                Desfazer
+                                            </button>
+                                        )}
+
+                                        {/* Indicadores de Sucesso */}
                                         {log.action === 'RESTORE' && (
                                             <span className="text-emerald-600 text-xs flex items-center justify-end gap-1">
                                                 <CheckCircle className="w-3.5 h-3.5" /> Restaurado
+                                            </span>
+                                        )}
+                                        {log.action === 'REVERT' && (
+                                            <span className="text-purple-600 text-xs flex items-center justify-end gap-1">
+                                                <RotateCcw className="w-3.5 h-3.5" /> Revertido
                                             </span>
                                         )}
                                     </td>

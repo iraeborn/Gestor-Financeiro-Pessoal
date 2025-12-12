@@ -164,6 +164,15 @@ export const restoreRecord = async (entity: string, id: string) => {
     return await handleResponse(res);
 };
 
+export const revertLogChange = async (logId: number) => {
+    const res = await fetch(`${API_URL}/revert-change`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ logId })
+    });
+    return await handleResponse(res);
+};
+
 export const api = {
   saveAccount: async (account: Account) => {
     const res = await fetch(`${API_URL}/accounts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(account) });
