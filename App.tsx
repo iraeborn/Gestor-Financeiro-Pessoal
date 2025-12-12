@@ -9,6 +9,7 @@ import CalendarView from './components/CalendarView';
 import SettingsView from './components/SettingsView';
 import ContactsView from './components/ContactsView';
 import CreditCardsView from './components/CreditCardsView';
+import AccountsView from './components/AccountsView';
 import LogsView from './components/LogsView';
 import Auth from './components/Auth';
 import CollaborationModal from './components/CollaborationModal';
@@ -363,13 +364,9 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAccount = async (id: string) => {
-    const confirm = await showConfirm({
-        title: "Excluir Conta",
-        message: "Tem certeza que deseja excluir esta conta? Todas as transações vinculadas serão afetadas.",
-        variant: "danger"
-    });
-    if (!confirm) return;
-
+    // Note: The confirmation dialog is handled inside the views (AccountsView, Dashboard) before calling this
+    // OR we can move it here. For now, views call showConfirm then call this.
+    // Actually, AccountsView calls showConfirm then calls this. Dashboard calls this directly but I removed delete button from dashboard.
     try {
         await api.deleteAccount(id);
         setState(prevState => ({
@@ -699,8 +696,6 @@ const App: React.FC = () => {
             onDeleteTransaction={handleDeleteTransaction}
             onEditTransaction={handleEditTransaction}
             onUpdateStatus={handleUpdateStatus}
-            onSaveAccount={handleSaveAccount}
-            onDeleteAccount={handleDeleteAccount}
             onChangeView={setCurrentView}
           />
         );
@@ -735,6 +730,14 @@ const App: React.FC = () => {
             onAdd={handleAddTransaction}
             onEdit={handleEditTransaction}
           />
+        );
+      case 'FIN_ACCOUNTS':
+        return (
+            <AccountsView 
+                accounts={state.accounts}
+                onSaveAccount={handleSaveAccount}
+                onDeleteAccount={handleDeleteAccount}
+            />
         );
       case 'FIN_GOALS':
         return (

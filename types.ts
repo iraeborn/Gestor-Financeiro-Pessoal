@@ -294,7 +294,8 @@ export type ViewMode =
   | 'FIN_DASHBOARD' 
   | 'FIN_TRANSACTIONS' 
   | 'FIN_CALENDAR' 
-  | 'FIN_CARDS' 
+  | 'FIN_CARDS'
+  | 'FIN_ACCOUNTS' // Novo: Lista de Contas
   | 'FIN_REPORTS' 
   | 'FIN_ADVISOR'
   | 'FIN_CATEGORIES'

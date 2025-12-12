@@ -4,10 +4,9 @@ import { AppState, Transaction, TransactionType, TransactionStatus, Account, Vie
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
-import AccountModal from './AccountModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
 import { CashFlowChart, ExpensesByCategory, BalanceDistributionChart } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, Pencil, Trash2, ArrowRight, PieChart, BarChart3, Coins, Building, CreditCard, Utensils } from 'lucide-react';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, PieChart, BarChart3, Coins, Building, CreditCard, Utensils, Landmark } from 'lucide-react';
 
 interface DashboardProps {
   state: AppState;
@@ -18,8 +17,6 @@ interface DashboardProps {
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (t: Transaction, newContact?: Contact) => void;
   onUpdateStatus: (t: Transaction) => void;
-  onSaveAccount: (a: Account) => void;
-  onDeleteAccount: (id: string) => void;
   onChangeView: (view: ViewMode) => void;
 }
 
@@ -31,19 +28,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   onDeleteTransaction, 
   onEditTransaction, 
   onUpdateStatus, 
-  onSaveAccount, 
-  onDeleteAccount,
   onChangeView
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
-  const [isAccModalOpen, setAccModalOpen] = useState(false);
   
   // Payment Confirmation Modal State
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [transactionToPay, setTransactionToPay] = useState<Transaction | null>(null);
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [recentLimit, setRecentLimit] = useState(5); 
 
   const includeCards = settings?.includeCreditCardsInTotal ?? true;
@@ -88,26 +81,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     setEditingTransaction(null);
   };
 
-  const handleEditAccount = (a: Account) => {
-    setEditingAccount(a);
-    setAccModalOpen(true);
-  };
-
-  const handleSaveAcc = (a: Account) => {
-    onSaveAccount(a);
-    setEditingAccount(null);
-  };
-
   const closeTransModal = () => {
       setTransModalOpen(false);
       setEditingTransaction(null);
   };
   
-  const closeAccModal = () => {
-    setAccModalOpen(false);
-    setEditingAccount(null);
-  };
-
   const handleStatusToggle = (t: Transaction) => {
     if (t.status !== TransactionStatus.PAID) {
         setTransactionToPay(t);
@@ -129,12 +107,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Helper para ícones de conta
   const getAccountIcon = (type: AccountType) => {
     switch (type) {
-      case AccountType.WALLET: return <Wallet className="w-5 h-5 text-indigo-500" />;
-      case AccountType.BANK: return <Building className="w-5 h-5 text-blue-500" />;
-      case AccountType.CARD: return <CreditCard className="w-5 h-5 text-rose-500" />;
-      case AccountType.INVESTMENT: return <TrendingUp className="w-5 h-5 text-emerald-500" />;
-      case AccountType.MEAL_VOUCHER: return <Utensils className="w-5 h-5 text-orange-500" />;
-      default: return <Wallet className="w-5 h-5 text-gray-400" />;
+      case AccountType.WALLET: return <Wallet className="w-4 h-4 text-indigo-500" />;
+      case AccountType.BANK: return <Building className="w-4 h-4 text-blue-500" />;
+      case AccountType.CARD: return <CreditCard className="w-4 h-4 text-rose-500" />;
+      case AccountType.INVESTMENT: return <TrendingUp className="w-4 h-4 text-emerald-500" />;
+      case AccountType.MEAL_VOUCHER: return <Utensils className="w-4 h-4 text-orange-500" />;
+      default: return <Wallet className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -148,6 +126,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           default: return type;
       }
   };
+
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -254,69 +235,80 @@ const Dashboard: React.FC<DashboardProps> = ({
         />
       </div>
 
-      {/* SEÇÃO 2: CONTAS (70%) E METAS (30%) */}
+      {/* SEÇÃO 2: RELATÓRIO DE SALDOS (70%) E METAS (30%) */}
       <div className="flex flex-col lg:flex-row gap-6">
         
-        {/* Painel Contas - 70% */}
+        {/* Relatório de Contas (Read-Only) - 70% */}
         <div className="lg:w-[70%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Wallet className="w-5 h-5 text-gray-400"/> Contas
+                    <Landmark className="w-5 h-5 text-gray-400"/> Relatório de Saldos
                 </h3>
                 <button 
-                    onClick={() => setAccModalOpen(true)}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 text-indigo-600 transition-colors"
-                    title="Adicionar Conta"
+                    onClick={() => onChangeView('FIN_ACCOUNTS')}
+                    className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
                 >
-                    <Plus className="w-5 h-5" />
+                    Gerenciar Contas
                 </button>
             </div>
-            <div className="space-y-3">
-                {state.accounts.map(acc => (
-                    <div key={acc.id} className="group relative p-3 bg-gray-50 hover:bg-white border border-transparent hover:border-gray-200 rounded-xl transition-all shadow-sm">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
-                                {getAccountIcon(acc.type)}
-                            </div>
-                            <div>
-                                <p className="font-semibold text-gray-800">{acc.name}</p>
-                                <p className="text-xs text-gray-500 uppercase tracking-wide">{getAccountLabel(acc.type)}</p>
-                            </div>
-                        </div>
-                        <span className={`font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(acc.balance)}
-                        </span>
-                    </div>
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-md shadow-sm">
-                        <button 
-                            onClick={() => handleEditAccount(acc)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                            <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button 
-                            onClick={() => onDeleteAccount(acc.id)}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                        >
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
-                    </div>
-                ))}
-            </div>
+            
+            {state.accounts.length === 0 ? (
+                <p className="text-center text-gray-400 py-6 text-sm">Nenhuma conta encontrada.</p>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-gray-500 uppercase font-medium">
+                            <tr>
+                                <th className="px-4 py-3 rounded-tl-lg">Conta</th>
+                                <th className="px-4 py-3">Tipo</th>
+                                <th className="px-4 py-3 text-right rounded-tr-lg">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {state.accounts.map(acc => (
+                                <tr key={acc.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2">
+                                        <div className="p-1.5 bg-gray-100 rounded-lg">{getAccountIcon(acc.type)}</div>
+                                        {acc.name}
+                                    </td>
+                                    <td className="px-4 py-3 text-gray-500">{getAccountLabel(acc.type)}</td>
+                                    <td className={`px-4 py-3 text-right font-bold ${acc.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                        {formatCurrency(acc.balance)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot className="border-t border-gray-100">
+                            <tr className="bg-gray-50/50">
+                                <td colSpan={2} className="px-4 py-3 font-bold text-gray-700 text-right">Saldo Total</td>
+                                <td className={`px-4 py-3 text-right font-extrabold ${currentRealBalance < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>
+                                    {formatCurrency(currentRealBalance)}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            )}
         </div>
 
         {/* Painel Metas - 30% */}
         <div className="lg:w-[30%] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-gray-400"/> Metas
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-gray-400"/> Metas
+                </h3>
+                <button 
+                    onClick={() => onChangeView('FIN_GOALS')}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                    Ver todas
+                </button>
+            </div>
             <div className="space-y-4">
                 {state.goals.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4">Nenhuma meta definida.</p>
                 ) : (
-                    state.goals.map(goal => {
+                    state.goals.slice(0, 3).map(goal => {
                         const percent = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);
                         return (
                         <div key={goal.id}>
@@ -345,7 +337,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         onSave={handleSaveTrans}
         accounts={state.accounts}
         contacts={state.contacts}
-        categories={state.categories}
+        categories={state.categories || []}
         initialData={editingTransaction}
         userEntity={userEntity}
         branches={state.branches}
@@ -354,13 +346,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         projects={state.projects}
       />
       
-      <AccountModal 
-        isOpen={isAccModalOpen} 
-        onClose={closeAccModal} 
-        onSave={handleSaveAcc}
-        initialData={editingAccount}
-      />
-
       <PaymentConfirmationModal
         isOpen={isPaymentModalOpen}
         onClose={() => setPaymentModalOpen(false)}
