@@ -704,6 +704,7 @@ const App: React.FC = () => {
         return (
             <ContactsView 
                 contacts={state.contacts}
+                serviceClients={state.serviceClients}
                 onAddContact={handleSaveContact}
                 onEditContact={handleSaveContact}
                 onDeleteContact={handleDeleteContact}
@@ -715,6 +716,7 @@ const App: React.FC = () => {
         return (
             <ContactsView 
                 contacts={state.contacts}
+                serviceClients={state.serviceClients}
                 onAddContact={handleSaveContact}
                 onEditContact={handleSaveContact}
                 onDeleteContact={handleDeleteContact}
