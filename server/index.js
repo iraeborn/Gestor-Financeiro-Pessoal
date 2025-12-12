@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import pg from 'pg';
@@ -172,26 +171,27 @@ const parsers = {
     },
     // Genérico (Fallback e Outros Estados)
     'default': (html) => {
-        // Tenta padrões comuns nacionais
-        // Valor Total
+        // 1. Valor Total
+        // Prioridade: classes "totalNumb" e "txtMax" solicitadas
         let amount = null;
         const totalPatterns = [
+            /class=["'][^"']*totalNumb[^"']*["'][^>]*>([\d\.,]+)/i, 
+            /class=["'][^"']*txtMax[^"']*["'][^>]*>([\d\.,]+)/i,
             /Valor\s*Total.*?R\$\s*([\d\.,]+)/i,
-            /class=["']txtMax["'][^>]*>([\d\.,]+)/i,
             /id=["']lblValorTotal["'][^>]*>([\d\.,]+)/i,
             /Total\s*R\$\s*([\d\.,]+)/i,
-            /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i,
-            /Valor\s*a\s*Pagar.*?([\d\.,]+)/i
+            /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i
         ];
         for (const p of totalPatterns) {
             const m = html.match(p);
             if (m) { amount = m[1]; break; }
         }
 
-        // Estabelecimento
+        // 2. Estabelecimento (Favorecido)
+        // Prioridade: class "txtTopo" solicitada
         let merchant = null;
         const merchantPatterns = [
-            /class=["']txtTopo["'][^>]*>([^<]+)/i,
+            /class=["'][^"']*txtTopo[^"']*["'][^>]*>([^<]+)/i,
             /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
             /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
             /<div[^>]*class="txtTopo"[^>]*>([^<]+)<\/div>/i,
@@ -200,19 +200,28 @@ const parsers = {
         for (const p of merchantPatterns) {
             const m = html.match(p);
             if (m) { 
-                // Remove tags HTML se vierem junto
                 merchant = m[1].replace(/<[^>]+>/g, '').trim(); 
                 break; 
             }
         }
 
-        // Data
-        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/) || html.match(/Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i);
+        // 3. Data
+        // Prioridade: Estrutura <strong> Emissão: </strong> DD/MM/YYYY
+        let date = null;
+        const datePatterns = [
+            /<strong>\s*Emiss[ãa]o:\s*<\/strong>\s*(\d{2}\/\d{2}\/\d{4})/i,
+            /(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/,
+            /Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i
+        ];
+        for (const p of datePatterns) {
+            const m = html.match(p);
+            if (m) { date = m[1]; break; }
+        }
 
         return {
             amount,
             merchant,
-            date: dateMatch ? dateMatch[1] : null,
+            date,
             paymentType: detectPaymentMethod(html)
         };
     }
