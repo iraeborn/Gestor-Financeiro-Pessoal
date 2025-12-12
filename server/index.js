@@ -147,13 +147,22 @@ const detectPaymentMethod = (html) => {
 // Função unificada de parsing robusto
 const robustParser = (html) => {
     // 1. Valor Total
-    // Regex ajustado para pegar class="... totalNumb ..." ou class="... txtMax ..." mesmo com outras classes
+    // Regex ajustado para permitir espaços (\s*) entre o fechamento da tag > e o número.
+    // Também permite tags aninhadas opcionais (?:<[^>]+>)* antes do número.
     let amount = null;
     const amountPatterns = [
-        /class=["'][^"']*(?:totalNumb|txtMax)[^"']*["'][^>]*>(?:R\$\s*)?([\d\.,]+)/i, // Prioridade do usuário
-        /id=["']lblValorTotal["'][^>]*>(?:R\$\s*)?([\d\.,]+)/i,
-        /Valor\s*Total[^>]*>([\d\.,]+)/i,
-        /<span[^>]*class="totalNumb"[^>]*>([\d\.,]+)<\/span>/i
+        // Prioridade SP: class "totalNumb" ou "txtMax"
+        // Ex: <span class="totalNumb txtMax">\n 24,14</span>
+        /class=["'][^"']*(?:totalNumb|txtMax)[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i, 
+        
+        // ID comum
+        /id=["']lblValorTotal["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
+        
+        // Texto "Valor a Pagar" seguido de número
+        /Valor\s*a\s*Pagar[\s\S]*?(?:R\$\s*)?([\d\.,]+)/i,
+        
+        // Fallback simples span totalNumb
+        /<span[^>]*class="totalNumb"[^>]*>\s*([\d\.,]+)/i
     ];
     for (const p of amountPatterns) {
         const m = html.match(p);
@@ -161,14 +170,14 @@ const robustParser = (html) => {
     }
 
     // 2. Estabelecimento (Favorecido)
-    // Regex ajustado para txtTopo
+    // Regex ajustado para txtTopo com suporte a quebras de linha
     let merchant = null;
     const merchantPatterns = [
-        /class=["'][^"']*txtTopo[^"']*["'][^>]*>([^<]+)/i, // Prioridade do usuário
-        /id=["']lblNomeEmitente["'][^>]*>([^<]+)/i,
+        /class=["'][^"']*txtTopo[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*([^<]+)/i, // Prioridade do usuário
+        /id=["']lblNomeEmitente["'][^>]*>\s*([^<]+)/i,
         /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
-        /<div[^>]*class="txtTopo"[^>]*>([^<]+)<\/div>/i,
-        /<h4[^>]*>([^<]+)<\/h4>/i 
+        /<div[^>]*class="txtTopo"[^>]*>\s*([^<]+)<\/div>/i,
+        /<h4[^>]*>\s*([^<]+)<\/h4>/i 
     ];
     for (const p of merchantPatterns) {
         const m = html.match(p);
@@ -200,16 +209,15 @@ const robustParser = (html) => {
 };
 
 const parsers = {
-    // São Paulo (35)
-    // Usamos o robustParser pois ele cobre as classes txtMax e totalNumb especificadas
+    // São Paulo (35) - Usa robustParser agora
     '35': robustParser,
     
-    // Paraná (41) - Mantemos específico ou fallback
+    // Paraná (41) - Mantemos específico com fallback
     '41': (html) => {
         const p = robustParser(html);
-        if (p.amount) return p; // Se o robusto funcionou, retorna ele
+        if (p.amount) return p;
         
-        // Fallback antigo específico do PR se necessário
+        // Fallback antigo específico do PR
         const amountMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i);
         const merchantMatch = html.match(/id=["']u20["'][^>]*>([^<]+)<\/span>/i);
         const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+[\d:]+/);
