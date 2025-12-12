@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { X, Camera, RefreshCw } from 'lucide-react';
 
 interface QRCodeScannerProps {
@@ -16,39 +16,63 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScanSuccess, onClose })
   const readerId = "qr-reader-container";
 
   useEffect(() => {
+    let mounted = true;
+
     // Inicializar e listar câmeras
     const init = async () => {
       try {
         const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length) {
-          setCameras(devices);
-          // Prefira a câmera traseira (environment) se houver mais de uma
-          const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('traseira'));
-          setActiveCameraId(backCamera ? backCamera.id : devices[0].id);
-        } else {
-          setError('Nenhuma câmera encontrada.');
+        if (mounted) {
+            if (devices && devices.length) {
+                setCameras(devices);
+                // Prefira a câmera traseira (environment) se houver mais de uma
+                const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('traseira') || d.label.toLowerCase().includes('environment'));
+                setActiveCameraId(backCamera ? backCamera.id : devices[0].id);
+            } else {
+                setError('Nenhuma câmera encontrada.');
+            }
         }
       } catch (err) {
-        setError('Erro ao acessar a câmera. Verifique as permissões.');
+        if (mounted) setError('Erro ao acessar a câmera. Verifique as permissões.');
       }
     };
     init();
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(console.error);
-      }
+      mounted = false;
+      cleanupScanner();
     };
   }, []);
 
+  const cleanupScanner = () => {
+      if (scannerRef.current) {
+          try {
+              // Só tenta parar se estiver escaneando ou pausado
+              const state = scannerRef.current.getState();
+              if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+                  scannerRef.current.stop().then(() => {
+                      scannerRef.current?.clear();
+                  }).catch(console.error);
+              } else {
+                  scannerRef.current.clear();
+              }
+          } catch (e) {
+              console.error("Erro ao limpar scanner", e);
+          }
+      }
+  };
+
   useEffect(() => {
-    if (activeCameraId && !scannerRef.current) {
+    if (activeCameraId) {
       startScanner(activeCameraId);
     }
   }, [activeCameraId]);
 
   const startScanner = (cameraId: string) => {
-    const html5QrCode = new Html5Qrcode(readerId);
+    // Se já tiver um rodando, para antes de iniciar o novo
+    cleanupScanner();
+
+    const html5QrCode = new Html5Qrcode(readerId, { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] });
     scannerRef.current = html5QrCode;
 
     html5QrCode.start(
@@ -57,13 +81,16 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScanSuccess, onClose })
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
       },
       (decodedText) => {
         // Sucesso
         html5QrCode.stop().then(() => {
+            html5QrCode.clear();
             onScanSuccess(decodedText);
-        }).catch(console.error);
+        }).catch((err) => {
+            console.error("Erro ao parar após sucesso", err);
+            onScanSuccess(decodedText); // Chama mesmo assim
+        });
       },
       (errorMessage) => {
         // Falha na leitura do frame (muito comum, ignorar erros de console)
@@ -79,13 +106,7 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScanSuccess, onClose })
           const currentIndex = cameras.findIndex(c => c.id === activeCameraId);
           const nextIndex = (currentIndex + 1) % cameras.length;
           const nextId = cameras[nextIndex].id;
-          
-          if (scannerRef.current) {
-              scannerRef.current.stop().then(() => {
-                  scannerRef.current = null;
-                  setActiveCameraId(nextId);
-              });
-          }
+          setActiveCameraId(nextId);
       }
   };
 

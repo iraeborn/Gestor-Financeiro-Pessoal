@@ -150,57 +150,43 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const handleQRSuccess = (decodedText: string) => {
       setShowScanner(false);
       
-      // Lógica de Parsing da URL/String do QR Code da NFC-e
-      // Padrão 1: URL com parametros v (versão 2.0+ frequentemente tem o valor no parametro 'v' ou 'vNF')
-      // Padrão 2: String separada por pipe '|' (Modelo antigo/contingência) -> ...|VALOR|...
-      
       let amountFound = '';
-      let dateFound = '';
-
-      // Tentar extrair valor via URL Params (comum em muitos estados)
+      
       try {
-          // Se for URL completa
+          // Tentar extrair valor via URL Params
           if (decodedText.startsWith('http')) {
               const url = new URL(decodedText);
-              // Tenta parâmetros comuns de valor
               const vNF = url.searchParams.get('vNF') || url.searchParams.get('v') || url.searchParams.get('valor');
               if (vNF) amountFound = vNF;
           }
           
-          // Fallback: Tentar extrair de string pipe-separated (ex: chNFe|...|vNF|...)
-          // O QR code da NFC-e versão 2.0 geralmente é:
-          // URL?p=CHAVE|2|1|1|VALOR|DIGEST|...
+          // Fallback: Pipe separated string (NFC-e contingência / Versão 2.0 compacta)
           if (!amountFound && decodedText.includes('|')) {
               const parts = decodedText.split('|');
-              // Heurística: Procurar um valor numérico com ponto (ex: 50.00) que não seja 1 ou 2 (índices comuns)
-              // Geralmente o valor total é o 5º ou 6º elemento após a chave
-              // Exemplo string parâmetro p: 3524...|2|1|1|10.50|...
-              
-              // Vamos tentar pegar especificamente o índice 4 (5º elemento) se a string começar com chave numérica grande
-              if (parts[0].length > 40 && parts.length > 4) {
-                  const valCandidate = parts[4];
-                  if (!isNaN(parseFloat(valCandidate))) {
-                      amountFound = valCandidate;
+              // Heurística básica:
+              // Index 4 ou 5 costuma ser o valor se a string começa com a chave de 44 digitos
+              if (parts[0].length >= 44 && parts.length > 4) {
+                  // Tenta indice 4
+                  if (!isNaN(parseFloat(parts[4])) && parts[4].includes('.')) {
+                      amountFound = parts[4];
                   }
               }
           }
       } catch (e) {
-          console.error("Erro ao fazer parse do QR", e);
+          console.error("Erro parse QR", e);
       }
 
       setFormData(prev => ({
           ...prev,
-          description: 'Compra via QR Code',
-          type: TransactionType.EXPENSE, // NFC-e é sempre despesa
-          // Se achou valor, usa. Se não, mantém o atual.
+          description: 'Compra NFC-e (QR Code)',
+          type: TransactionType.EXPENSE,
           amount: amountFound ? amountFound : prev.amount,
-          date: dateFound || prev.date
       }));
 
       if (amountFound) {
-          showAlert(`QR Code lido! Valor identificado: R$ ${amountFound}`, "success");
+          showAlert(`QR Code lido! Valor: R$ ${amountFound}`, "success");
       } else {
-          showAlert("QR Code lido, mas o valor não pôde ser extraído automaticamente desta versão de nota.", "info");
+          showAlert("QR Code lido. Preencha o valor manualmente.", "info");
       }
   };
 
