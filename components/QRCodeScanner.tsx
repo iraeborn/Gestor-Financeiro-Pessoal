@@ -72,7 +72,11 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScanSuccess, onClose })
     // Se já tiver um rodando, para antes de iniciar o novo
     cleanupScanner();
 
-    const html5QrCode = new Html5Qrcode(readerId, { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] });
+    // Fix: Passar configuração no construtor com verbose: false
+    const html5QrCode = new Html5Qrcode(readerId, { 
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+        verbose: false 
+    });
     scannerRef.current = html5QrCode;
 
     html5QrCode.start(
@@ -81,6 +85,7 @@ const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ onScanSuccess, onClose })
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
+        // formatsToSupport removido daqui, pois pertence ao construtor
       },
       (decodedText) => {
         // Sucesso
