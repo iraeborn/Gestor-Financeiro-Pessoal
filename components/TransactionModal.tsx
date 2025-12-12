@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode, Loader2 } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
@@ -62,6 +62,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   // QR Code State
   const [showScanner, setShowScanner] = useState(false);
+  const [loadingQR, setLoadingQR] = useState(false);
 
   const hasAccounts = accounts && accounts.length > 0;
   const isPJ = userEntity === EntityType.BUSINESS;
@@ -147,33 +148,61 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       }
   }, [formData.classification]);
 
-  const handleQRSuccess = (decodedText: string) => {
+  const handleQRSuccess = async (decodedText: string) => {
       setShowScanner(false);
-      
-      let amountFound = '';
+      setLoadingQR(true);
       
       try {
-          // Tentar extrair valor via URL Params
-          if (decodedText.startsWith('http')) {
-              const url = new URL(decodedText);
-              const vNF = url.searchParams.get('vNF') || url.searchParams.get('v') || url.searchParams.get('valor');
-              if (vNF) amountFound = vNF;
-          }
-          
-          // Fallback: Pipe separated string (NFC-e contingência / Versão 2.0 compacta)
-          if (!amountFound && decodedText.includes('|')) {
-              const parts = decodedText.split('|');
-              // Heurística básica:
-              // Index 4 ou 5 costuma ser o valor se a string começa com a chave de 44 digitos
-              if (parts[0].length >= 44 && parts.length > 4) {
-                  // Tenta indice 4
-                  if (!isNaN(parseFloat(parts[4])) && parts[4].includes('.')) {
-                      amountFound = parts[4];
-                  }
-              }
+          // Tentar buscar na API do backend que faz o scraping
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/scrape-nfce', {
+              method: 'POST',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': token ? `Bearer ${token}` : ''
+              },
+              body: JSON.stringify({ url: decodedText })
+          });
+
+          if (res.ok) {
+              const data = await res.json();
+              setFormData(prev => ({
+                  ...prev,
+                  description: data.merchant || 'Compra NFC-e',
+                  type: TransactionType.EXPENSE,
+                  amount: data.amount ? data.amount.toString() : prev.amount,
+                  date: data.date || prev.date
+              }));
+              showAlert(`Nota lida com sucesso! Valor: R$ ${data.amount}`, "success");
+          } else {
+              // Fallback para leitura heurística local se a API falhar
+              console.warn("Falha na API de scrape, tentando local...");
+              parseLocalQR(decodedText);
           }
       } catch (e) {
           console.error("Erro parse QR", e);
+          parseLocalQR(decodedText);
+      } finally {
+          setLoadingQR(false);
+      }
+  };
+
+  const parseLocalQR = (text: string) => {
+      // Heurística básica de fallback
+      let amountFound = '';
+      if (text.startsWith('http')) {
+          const url = new URL(text);
+          const vNF = url.searchParams.get('vNF') || url.searchParams.get('v') || url.searchParams.get('valor');
+          if (vNF) amountFound = vNF;
+      }
+      
+      if (!amountFound && text.includes('|')) {
+          const parts = text.split('|');
+          if (parts[0].length >= 44 && parts.length > 4) {
+              if (!isNaN(parseFloat(parts[4])) && parts[4].includes('.')) {
+                  amountFound = parts[4];
+              }
+          }
       }
 
       setFormData(prev => ({
@@ -184,9 +213,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       }));
 
       if (amountFound) {
-          showAlert(`QR Code lido! Valor: R$ ${amountFound}`, "success");
+          showAlert(`QR Code lido (Offline)! Valor: R$ ${amountFound}`, "info");
       } else {
-          showAlert("QR Code lido. Preencha o valor manualmente.", "info");
+          showAlert("QR Code lido, mas valor não encontrado. Preencha manualmente.", "warning");
       }
   };
 
@@ -330,6 +359,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
+        {loadingQR ? (
+            <div className="p-8 text-center flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                <p className="text-gray-500 text-sm">Consultando dados da nota fiscal...</p>
+            </div>
+        ) : (
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           
           {/* QR CODE BUTTON */}
@@ -825,6 +860,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
         </form>
+        )}
       </div>
       
       {showScanner && (

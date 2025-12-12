@@ -300,6 +300,82 @@ app.get('/api/health', async (req, res) => {
     res.json({ status: 'OK' });
 });
 
+// --- NEW SCRAPER ROUTE ---
+app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
+    const { url } = req.body;
+    
+    if (!url) return res.status(400).json({ error: 'URL é obrigatória' });
+
+    // Validação básica para evitar SSRF malicioso
+    if (!url.includes('fazenda.sp.gov.br') && !url.includes('nfce')) {
+        // Permitir URLs de NFC-e de outros estados se necessário, mas filtrar genéricos
+        // return res.status(400).json({ error: 'URL inválida ou não suportada' });
+    }
+
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erro ao acessar SEFAZ: ${response.status}`);
+        }
+
+        const html = await response.text();
+
+        // Estratégia Regex para SP e Padrão Nacional
+        // Procura por "Valor Total R$ X,XX" ou elementos com classe txtMax (comum em SP)
+        let amount = null;
+        let date = null;
+        let merchant = null;
+
+        // 1. Tentar capturar Valor Total (SP usa class="txtMax", outros usam id="lblValorTotal" ou texto "Valor a Pagar")
+        const spTotalMatch = html.match(/class=["']txtMax["'][^>]*>([\d\.,]+)<\/span>/i);
+        const genericTotalMatch = html.match(/Valor\s*Total.*?R\$\s*([\d\.,]+)/i);
+        
+        if (spTotalMatch && spTotalMatch[1]) {
+            amount = spTotalMatch[1];
+        } else if (genericTotalMatch && genericTotalMatch[1]) {
+            amount = genericTotalMatch[1];
+        }
+
+        // 2. Tentar capturar Nome do Estabelecimento (txtTopo)
+        const merchantMatch = html.match(/class=["']txtTopo["'][^>]*>([^<]+)<\/div>/i);
+        if (merchantMatch && merchantMatch[1]) {
+            merchant = merchantMatch[1].trim();
+        }
+
+        // 3. Tentar Data de Emissão (Strong pattern for DD/MM/YYYY)
+        const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/);
+        if (dateMatch && dateMatch[1]) {
+            // Convert DD/MM/YYYY to YYYY-MM-DD
+            const parts = dateMatch[1].split('/');
+            date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+
+        // Normalização do valor (trocar vírgula por ponto)
+        if (amount) {
+            amount = amount.replace('.', '').replace(',', '.');
+        }
+
+        if (!amount) {
+            return res.status(404).json({ error: 'Não foi possível ler o valor total da nota. O site pode estar protegido por CAPTCHA.' });
+        }
+
+        res.json({
+            amount: parseFloat(amount),
+            date: date || new Date().toISOString().split('T')[0],
+            merchant: merchant || 'Estabelecimento'
+        });
+
+    } catch (error) {
+        console.error("Scraping Error:", error);
+        res.status(500).json({ error: 'Erro ao processar link da nota fiscal. Tente inserir manualmente.' });
+    }
+});
+
 // --- Auth Routes ---
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, entityType, plan } = req.body;
