@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { AppState, TransactionType, TransactionStatus } from "../types";
 
@@ -82,4 +83,50 @@ export const analyzeFinances = async (data: AppState): Promise<string> => {
     console.error("Gemini API Error:", error);
     return "Erro ao conectar com o consultor inteligente. Verifique sua conexão ou tente novamente mais tarde.";
   }
+};
+
+export const extractReceiptData = async (base64Image: string): Promise<any> => {
+    if (!process.env.API_KEY) {
+        throw new Error("API Key não encontrada.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+    const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, "");
+
+    const prompt = `
+        Analise a imagem desta nota fiscal/recibo. Extraia os seguintes dados e retorne APENAS um JSON válido, sem markdown:
+        {
+            "amount": number (valor total, use ponto para decimal),
+            "date": string (data no formato YYYY-MM-DD, se não encontrar use a data de hoje),
+            "description": string (nome do estabelecimento ou descrição resumida),
+            "category": string (sugira uma categoria curta ex: Alimentação, Transporte, Saúde, Mercado)
+        }
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [
+                {
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }
+                    ]
+                }
+            ],
+            config: {
+                responseMimeType: "application/json"
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("Sem resposta da IA");
+        
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Erro ao ler nota fiscal:", error);
+        throw new Error("Não foi possível ler os dados da imagem.");
+    }
 };

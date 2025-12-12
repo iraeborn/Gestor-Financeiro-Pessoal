@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, AlertCircle, ArrowRightLeft, Percent, User, Plus, Search, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History } from 'lucide-react';
-import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, User as UserType, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode } from 'lucide-react';
+import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 import { useAlert } from './AlertSystem';
+import QRCodeScanner from './QRCodeScanner';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -58,6 +59,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // QR Code State
+  const [showScanner, setShowScanner] = useState(false);
 
   const hasAccounts = accounts && accounts.length > 0;
   const isPJ = userEntity === EntityType.BUSINESS;
@@ -142,6 +146,63 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           setFormData(prev => ({ ...prev, type: TransactionType.EXPENSE })); // Typically expense first
       }
   }, [formData.classification]);
+
+  const handleQRSuccess = (decodedText: string) => {
+      setShowScanner(false);
+      
+      // Lógica de Parsing da URL/String do QR Code da NFC-e
+      // Padrão 1: URL com parametros v (versão 2.0+ frequentemente tem o valor no parametro 'v' ou 'vNF')
+      // Padrão 2: String separada por pipe '|' (Modelo antigo/contingência) -> ...|VALOR|...
+      
+      let amountFound = '';
+      let dateFound = '';
+
+      // Tentar extrair valor via URL Params (comum em muitos estados)
+      try {
+          // Se for URL completa
+          if (decodedText.startsWith('http')) {
+              const url = new URL(decodedText);
+              // Tenta parâmetros comuns de valor
+              const vNF = url.searchParams.get('vNF') || url.searchParams.get('v') || url.searchParams.get('valor');
+              if (vNF) amountFound = vNF;
+          }
+          
+          // Fallback: Tentar extrair de string pipe-separated (ex: chNFe|...|vNF|...)
+          // O QR code da NFC-e versão 2.0 geralmente é:
+          // URL?p=CHAVE|2|1|1|VALOR|DIGEST|...
+          if (!amountFound && decodedText.includes('|')) {
+              const parts = decodedText.split('|');
+              // Heurística: Procurar um valor numérico com ponto (ex: 50.00) que não seja 1 ou 2 (índices comuns)
+              // Geralmente o valor total é o 5º ou 6º elemento após a chave
+              // Exemplo string parâmetro p: 3524...|2|1|1|10.50|...
+              
+              // Vamos tentar pegar especificamente o índice 4 (5º elemento) se a string começar com chave numérica grande
+              if (parts[0].length > 40 && parts.length > 4) {
+                  const valCandidate = parts[4];
+                  if (!isNaN(parseFloat(valCandidate))) {
+                      amountFound = valCandidate;
+                  }
+              }
+          }
+      } catch (e) {
+          console.error("Erro ao fazer parse do QR", e);
+      }
+
+      setFormData(prev => ({
+          ...prev,
+          description: 'Compra via QR Code',
+          type: TransactionType.EXPENSE, // NFC-e é sempre despesa
+          // Se achou valor, usa. Se não, mantém o atual.
+          amount: amountFound ? amountFound : prev.amount,
+          date: dateFound || prev.date
+      }));
+
+      if (amountFound) {
+          showAlert(`QR Code lido! Valor identificado: R$ ${amountFound}`, "success");
+      } else {
+          showAlert("QR Code lido, mas o valor não pôde ser extraído automaticamente desta versão de nota.", "info");
+      }
+  };
 
   if (!isOpen) return null;
 
@@ -271,6 +332,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       : accounts.filter(a => a.id !== formData.accountId);
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto animate-scale-up">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -284,6 +346,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           
+          {/* QR CODE BUTTON */}
+          {!initialData && (
+              <div className="mb-2">
+                  <button 
+                      type="button"
+                      onClick={() => setShowScanner(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-900 text-white rounded-xl font-semibold shadow-md hover:bg-black transition-all"
+                  >
+                      <QrCode className="w-5 h-5" /> Ler QR Code da Nota
+                  </button>
+                  <p className="text-[10px] text-center text-gray-400 mt-1">Preenchimento automático via NFC-e/SAT</p>
+              </div>
+          )}
+
           {/* PJ Classification Selector */}
           {isPJ && (
               <div className="mb-2">
@@ -764,7 +840,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
         </form>
       </div>
+      
+      {showScanner && (
+          <QRCodeScanner 
+            onScanSuccess={handleQRSuccess} 
+            onClose={() => setShowScanner(false)} 
+          />
+      )}
     </div>
+    </>
   );
 };
 
