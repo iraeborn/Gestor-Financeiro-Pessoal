@@ -147,23 +147,30 @@ const detectPaymentMethod = (html) => {
 // Função unificada de parsing robusto
 const robustParser = (html) => {
     // 1. Valor Total
-    // Regex ajustado para permitir espaços (\s*) entre o fechamento da tag > e o número.
-    // Também permite tags aninhadas opcionais (?:<[^>]+>)* antes do número.
     let amount = null;
     const amountPatterns = [
-        // Prioridade SP: class "totalNumb" ou "txtMax"
-        // Ex: <span class="totalNumb txtMax">\n 24,14</span>
-        /class=["'][^"']*(?:totalNumb|txtMax)[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i, 
+        // Prioridade MÁXIMA (Estrutura Completa SP):
+        // Container "txtRight" -> Linha "linhaShade" -> Span "txtMax"
+        // Regex explicado:
+        // 1. Encontra class="...txtRight..."
+        // 2. Avança ([\s\S]*?) até encontrar class="...linhaShade..."
+        // 3. Avança até encontrar class="...txtMax..."
+        // 4. Pega o conteúdo após o fechamento da tag >
+        /class=["'][^"']*txtRight[^"']*["'][\s\S]*?class=["'][^"']*linhaShade[^"']*["'][\s\S]*?class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
+
+        // Prioridade 2: Hierarquia "linhaShade" -> "txtMax" (Caso txtRight tenha mudado)
+        /class=["'][^"']*linhaShade[^"']*["'][\s\S]*?class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
+
+        // Prioridade 3: Apenas "txtMax" (Geralmente única para o total final)
+        /class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
         
-        // ID comum
-        /id=["']lblValorTotal["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
+        // Fallback: Label "Valor a pagar" explícito
+        /Valor\s*a\s*Pagar[\s\S]*?class=["'][^"']*totalNumb[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
         
-        // Texto "Valor a Pagar" seguido de número
-        /Valor\s*a\s*Pagar[\s\S]*?(?:R\$\s*)?([\d\.,]+)/i,
-        
-        // Fallback simples span totalNumb
-        /<span[^>]*class="totalNumb"[^>]*>\s*([\d\.,]+)/i
+        // Fallbacks Genéricos (menos confiáveis)
+        /id=["']lblValorTotal["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i
     ];
+
     for (const p of amountPatterns) {
         const m = html.match(p);
         if (m) { amount = m[1]; break; }
