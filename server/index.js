@@ -147,28 +147,18 @@ const detectPaymentMethod = (html) => {
 // Função unificada de parsing robusto
 const robustParser = (html) => {
     // 1. Valor Total
+    // Estrutura alvo: <div class="linhaShade"> ... <span class="totalNumb txtMax">24,14</span>
     let amount = null;
     const amountPatterns = [
-        // Prioridade MÁXIMA (Estrutura Completa SP):
-        // Container "txtRight" -> Linha "linhaShade" -> Span "txtMax"
-        // Regex explicado:
-        // 1. Encontra class="...txtRight..."
-        // 2. Avança ([\s\S]*?) até encontrar class="...linhaShade..."
-        // 3. Avança até encontrar class="...txtMax..."
-        // 4. Pega o conteúdo após o fechamento da tag >
-        /class=["'][^"']*txtRight[^"']*["'][\s\S]*?class=["'][^"']*linhaShade[^"']*["'][\s\S]*?class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
-
-        // Prioridade 2: Hierarquia "linhaShade" -> "txtMax" (Caso txtRight tenha mudado)
+        // Prioridade 1: Busca EXATA pela estrutura linhaShade -> txtMax (SP)
+        // Isso evita pegar 'Qtd total de itens' ou 'Valor total bruto' que usam apenas 'totalNumb'
         /class=["'][^"']*linhaShade[^"']*["'][\s\S]*?class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
 
-        // Prioridade 3: Apenas "txtMax" (Geralmente única para o total final)
+        // Prioridade 2: Busca por 'txtMax' direto (Geralmente único para o total final)
         /class=["'][^"']*txtMax[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
         
-        // Fallback: Label "Valor a pagar" explícito
-        /Valor\s*a\s*Pagar[\s\S]*?class=["'][^"']*totalNumb[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i,
-        
-        // Fallbacks Genéricos (menos confiáveis)
-        /id=["']lblValorTotal["'][^>]*>\s*(?:<[^>]+>)*\s*(?:R\$\s*)?([\d\.,]+)/i
+        // Prioridade 3: Label "Valor a pagar"
+        /Valor\s*a\s*Pagar[\s\S]*?(?:R\$\s*)?([\d\.,]+)/i
     ];
 
     for (const p of amountPatterns) {
@@ -177,13 +167,12 @@ const robustParser = (html) => {
     }
 
     // 2. Estabelecimento (Favorecido)
-    // Regex ajustado para txtTopo com suporte a quebras de linha
+    // Regex ajustado para txtTopo com suporte a quebras de linha e spans
     let merchant = null;
     const merchantPatterns = [
-        /class=["'][^"']*txtTopo[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*([^<]+)/i, // Prioridade do usuário
+        /class=["'][^"']*txtTopo[^"']*["'][^>]*>\s*(?:<[^>]+>)*\s*([^<]+)/i, // Padrão SP
         /id=["']lblNomeEmitente["'][^>]*>\s*([^<]+)/i,
         /Razão\s*Social[:\s]*<\/label>\s*<span>([^<]+)/i,
-        /<div[^>]*class="txtTopo"[^>]*>\s*([^<]+)<\/div>/i,
         /<h4[^>]*>\s*([^<]+)<\/h4>/i 
     ];
     for (const p of merchantPatterns) {
@@ -195,10 +184,9 @@ const robustParser = (html) => {
     }
 
     // 3. Data
-    // Prioridade para a estrutura <strong> Emissão: </strong> ...
     let date = null;
     const datePatterns = [
-        /<strong>\s*Emiss[ãa]o:\s*<\/strong>\s*(\d{2}\/\d{2}\/\d{4})/i, // Prioridade do usuário
+        /<strong>\s*Emiss[ãa]o:\s*<\/strong>\s*(\d{2}\/\d{2}\/\d{4})/i,
         /(\d{2}\/\d{2}\/\d{4})\s+\d{2}:\d{2}:\d{2}/,
         /Data\s*de\s*Emissão.*?(\d{2}\/\d{2}\/\d{4})/i
     ];
@@ -216,7 +204,7 @@ const robustParser = (html) => {
 };
 
 const parsers = {
-    // São Paulo (35) - Usa robustParser agora
+    // São Paulo (35) - Usa robustParser
     '35': robustParser,
     
     // Paraná (41) - Mantemos específico com fallback
