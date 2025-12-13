@@ -385,6 +385,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+// WhatsApp Configs (Hardcoded as per request, but ideally env vars)
+const WHATSAPP_API_URL = "https://graph.facebook.com/v22.0/934237103105071/messages";
+const WHATSAPP_TOKEN = "EAFpabmZBi0U0BQKRhGRsH8eVtgUPLNUoDi2mg2r8bDAj9vfBcolZC9CONlSdqFVug7FXrCKZCGsgxPiIUZBc2kIdnZBbnZAVZAJFOFRk4f3ZA3bsOwEyO87bzZBGwUY0Aj0aQTHq1mcYxHaebickk8ubQsz6G4Y0hnlIxcmj0WQFKasRy8KFLobi0torRxc2NzYE5Q17KToe24ngyadf2PdbRmfKahoO26mALs6yAMUTyiZBm9ufcIod9fipU8ZCzP0mBIqgmzClQtbonxa43kQ11CGTh7f1ZAxuDPwLlZCZCTZA8c3";
+
 // --- Middleware ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -418,10 +422,131 @@ const getUserWorkspaces = async (userId) => {
     return res.rows;
 };
 
+// --- WHATSAPP LOGIC ---
+
+const sendWhatsappMessage = async (to, templateName = 'jaspers_market_plain_text_v1') => {
+    if (!to) return;
+    
+    // Remove chars that are not numbers
+    const cleanPhone = to.replace(/\D/g, '');
+    
+    try {
+        const response = await fetch(WHATSAPP_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: cleanPhone,
+                type: "template",
+                template: {
+                    name: templateName,
+                    language: { code: "en_US" }
+                }
+            })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) {
+            console.error("WhatsApp API Error:", data);
+            throw new Error(data.error?.message || "Failed to send message");
+        }
+        return data;
+    } catch (e) {
+        console.error("Send WhatsApp Exception:", e);
+        throw e;
+    }
+};
+
+// Scheduler: Run every hour to check for due dates
+// In a real app, use 'node-cron' or similar. Here we use setInterval.
+setInterval(async () => {
+    const now = new Date();
+    // Only run at 9 AM server time to avoid spamming
+    if (now.getHours() !== 9) return; 
+
+    console.log("[Scheduler] Checking for bill notifications...");
+    
+    try {
+        // 1. Get users with WhatsApp enabled
+        const usersRes = await pool.query(`
+            SELECT id, settings FROM users 
+            WHERE settings->'whatsapp'->>'enabled' = 'true' 
+            AND settings->'whatsapp'->>'phoneNumber' IS NOT NULL
+        `);
+
+        for (const user of usersRes.rows) {
+            const waConfig = user.settings.whatsapp;
+            const phone = waConfig.phoneNumber;
+            if (!phone) continue;
+
+            // Dates
+            const todayStr = now.toISOString().split('T')[0];
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+            let shouldNotify = false;
+
+            // Check Today
+            if (waConfig.notifyDueToday) {
+                const dueToday = await pool.query(`
+                    SELECT count(*) FROM transactions 
+                    WHERE user_id = $1 AND type = 'EXPENSE' AND status = 'PENDING' AND date = $2 AND deleted_at IS NULL
+                `, [user.id, todayStr]);
+                if (parseInt(dueToday.rows[0].count) > 0) shouldNotify = true;
+            }
+
+            // Check Tomorrow
+            if (!shouldNotify && waConfig.notifyDueTomorrow) {
+                const dueTom = await pool.query(`
+                    SELECT count(*) FROM transactions 
+                    WHERE user_id = $1 AND type = 'EXPENSE' AND status = 'PENDING' AND date = $2 AND deleted_at IS NULL
+                `, [user.id, tomorrowStr]);
+                if (parseInt(dueTom.rows[0].count) > 0) shouldNotify = true;
+            }
+
+            // Check Overdue
+            if (!shouldNotify && waConfig.notifyOverdue) {
+                const overdue = await pool.query(`
+                    SELECT count(*) FROM transactions 
+                    WHERE user_id = $1 AND type = 'EXPENSE' AND status = 'OVERDUE' AND deleted_at IS NULL
+                `, [user.id]);
+                if (parseInt(overdue.rows[0].count) > 0) shouldNotify = true;
+            }
+
+            if (shouldNotify) {
+                console.log(`[Scheduler] Sending notification to ${user.id} (${phone})`);
+                await sendWhatsappMessage(phone);
+                // Sleep 1s to avoid rate limits
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+    } catch (e) {
+        console.error("[Scheduler] Error:", e);
+    }
+
+}, 3600000); // Run every hour (3600000 ms)
+
 // --- Routes ---
 
 app.get('/api/health', async (req, res) => {
     res.json({ status: 'OK' });
+});
+
+// Test WhatsApp Endpoint
+app.post('/api/test-whatsapp', authenticateToken, async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: "Phone number required" });
+    
+    try {
+        const result = await sendWhatsappMessage(phone);
+        res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // --- SCRAPER ROUTE (Enhanced) ---

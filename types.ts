@@ -28,6 +28,14 @@ export enum AccountType {
 
 export type RecurrenceFrequency = 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
+export interface WhatsappConfig {
+  enabled: boolean;
+  phoneNumber: string; // Ex: 5566997193196
+  notifyDueToday: boolean;
+  notifyDueTomorrow: boolean;
+  notifyOverdue: boolean;
+}
+
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
   activeModules?: {
@@ -35,6 +43,7 @@ export interface AppSettings {
       physio?: boolean;
       consulting?: boolean;
   };
+  whatsapp?: WhatsappConfig;
 }
 
 export enum UserRole {

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send } from 'lucide-react';
 import { updateSettings } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -27,6 +27,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const { showAlert } = useAlert();
   const settings = user.settings || { includeCreditCardsInTotal: true, activeModules: {} };
+
+  // Whatsapp Form State
+  const [waConfig, setWaConfig] = useState(settings.whatsapp || {
+      enabled: false,
+      phoneNumber: '',
+      notifyDueToday: true,
+      notifyDueTomorrow: true,
+      notifyOverdue: false
+  });
+  const [testingWa, setTestingWa] = useState(false);
 
   // PJ Forms State
   const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { tradeName: '', legalName: '', cnpj: '' });
@@ -56,6 +66,47 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           if (!isActive) showAlert("Módulo Odonto ativado com sucesso!", "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
+      }
+  };
+
+  // WhatsApp Handlers
+  const handleSaveWhatsApp = async () => {
+      const newSettings = { ...settings, whatsapp: waConfig };
+      try {
+          await updateSettings(newSettings);
+          onUpdateSettings(newSettings);
+          showAlert("Configurações de notificação salvas!", "success");
+      } catch (e) {
+          showAlert("Erro ao salvar notificações.", "error");
+      }
+  };
+
+  const handleTestWhatsApp = async () => {
+      if (!waConfig.phoneNumber) {
+          showAlert("Informe um número de telefone.", "warning");
+          return;
+      }
+      setTestingWa(true);
+      try {
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/test-whatsapp', {
+              method: 'POST',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': token ? `Bearer ${token}` : ''
+              },
+              body: JSON.stringify({ phone: waConfig.phoneNumber })
+          });
+          const data = await res.json();
+          if (res.ok) {
+              showAlert("Mensagem de teste enviada!", "success");
+          } else {
+              showAlert("Erro: " + data.error, "error");
+          }
+      } catch (e) {
+          showAlert("Erro de conexão.", "error");
+      } finally {
+          setTestingWa(false);
       }
   };
 
@@ -124,6 +175,90 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
+                </div>
+            </div>
+        </div>
+
+        {/* --- NOTIFICAÇÕES WHATSAPP --- */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-emerald-600" />
+                    Notificações e Alertas (WhatsApp)
+                </h2>
+            </div>
+            <div className="p-6 space-y-6">
+                <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                            <Smartphone className="w-4 h-4 text-gray-400" />
+                            Número do WhatsApp
+                        </label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="text"
+                                placeholder="5511999999999 (com código país e DDD)"
+                                value={waConfig.phoneNumber}
+                                onChange={e => setWaConfig({ ...waConfig, phoneNumber: e.target.value.replace(/\D/g, '') })}
+                                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                            />
+                            <button 
+                                onClick={handleTestWhatsApp}
+                                disabled={testingWa || !waConfig.phoneNumber}
+                                className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {testingWa ? 'Enviando...' : <><Send className="w-3 h-3" /> Testar</>}
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2">
+                            Insira apenas números. Certifique-se de incluir o código do país (55 para Brasil).
+                        </p>
+                    </div>
+                    
+                    <div className="flex-1 bg-emerald-50/50 p-4 rounded-xl space-y-3 border border-emerald-100/50">
+                        <p className="text-xs font-bold text-emerald-800 uppercase mb-2 flex items-center gap-1">
+                            <Bell className="w-3 h-3" /> Configurar Alertas Automáticos
+                        </p>
+                        
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Contas Vencendo Hoje</span>
+                            <input 
+                                type="checkbox"
+                                checked={waConfig.notifyDueToday}
+                                onChange={e => setWaConfig({ ...waConfig, notifyDueToday: e.target.checked })}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                            />
+                        </label>
+                        
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Contas Vencendo Amanhã</span>
+                            <input 
+                                type="checkbox"
+                                checked={waConfig.notifyDueTomorrow}
+                                onChange={e => setWaConfig({ ...waConfig, notifyDueTomorrow: e.target.checked })}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                            />
+                        </label>
+
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Contas em Atraso</span>
+                            <input 
+                                type="checkbox"
+                                checked={waConfig.notifyOverdue}
+                                onChange={e => setWaConfig({ ...waConfig, notifyOverdue: e.target.checked })}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                            />
+                        </label>
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end">
+                    <button 
+                        onClick={handleSaveWhatsApp}
+                        className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100"
+                    >
+                        Salvar Configurações
+                    </button>
                 </div>
             </div>
         </div>
