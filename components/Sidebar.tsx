@@ -77,7 +77,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   
   // RBAC Logic
   const isAdmin = activeWorkspace?.role === 'ADMIN';
-  const userPermissions = activeWorkspace?.permissions || [];
+  
+  // Defensive: Ensure permissions is an array, parsing if string (just in case of driver quirks)
+  let rawPermissions = activeWorkspace?.permissions || [];
+  let userPermissions: string[] = [];
+  
+  if (Array.isArray(rawPermissions)) {
+      userPermissions = rawPermissions;
+  } else if (typeof rawPermissions === 'string') {
+      try { userPermissions = JSON.parse(rawPermissions); } catch (e) { userPermissions = []; }
+  }
 
   const hasPermission = (viewId: string) => {
       if (isAdmin) return true;

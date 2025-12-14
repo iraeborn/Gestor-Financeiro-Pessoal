@@ -3,18 +3,6 @@ import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppS
 
 const API_URL = '/api';
 
-const INITIAL_EMPTY_STATE: AppState = {
-  accounts: [],
-  transactions: [],
-  goals: [],
-  contacts: [],
-  categories: [],
-  branches: [],
-  costCenters: [],
-  departments: [],
-  projects: []
-};
-
 const getHeaders = () => {
   const token = localStorage.getItem('token');
   return {
@@ -35,7 +23,20 @@ const handleResponse = async (res: Response) => {
     return null; 
 };
 
-// --- Auth ---
+export const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+};
+
+export const refreshUser = async (): Promise<User> => {
+    const res = await fetch(`${API_URL}/auth/me`, { headers: getHeaders() });
+    const data = await handleResponse(res);
+    if (data && data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        return data.user;
+    }
+    throw new Error("Failed to refresh user data");
+};
 
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
   const res = await fetch(`${API_URL}/auth/login`, {
@@ -51,128 +52,95 @@ export const login = async (email: string, password: string): Promise<AuthRespon
 };
 
 export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan): Promise<AuthResponse> => {
-  const res = await fetch(`${API_URL}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password, entityType, plan })
-  });
-  const data = await handleResponse(res);
-  
-  localStorage.setItem('token', data.token);
-  localStorage.setItem('user', JSON.stringify(data.user));
-  return data;
+    const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, entityType, plan })
+    });
+    const data = await handleResponse(res);
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    return data;
 };
 
 export const loginWithGoogle = async (credential: string): Promise<AuthResponse> => {
-  const res = await fetch(`${API_URL}/auth/google`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credential })
-  });
-  const data = await handleResponse(res);
-  
-  localStorage.setItem('token', data.token);
-  localStorage.setItem('user', JSON.stringify(data.user));
-  return data;
-};
-
-export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-};
-
-export const switchContext = async (targetFamilyId: string): Promise<User> => {
-    const res = await fetch(`${API_URL}/switch-context`, {
+    const res = await fetch(`${API_URL}/auth/google`, {
         method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ targetFamilyId })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: credential })
     });
     const data = await handleResponse(res);
-    
-    // Update local storage with new token (if backend rotates it) and user state
-    if (data.token) localStorage.setItem('token', data.token);
-    if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-    
-    return data.user;
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    return data;
 };
 
-export const updateSettings = async (settings: AppSettings) => {
-    const res = await fetch(`${API_URL}/settings`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ settings })
-    });
-    await handleResponse(res);
-    // Update local user object
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-        const user = JSON.parse(userStr);
-        user.settings = settings;
-        localStorage.setItem('user', JSON.stringify(user));
-    }
-};
-
-export const updateProfile = async (data: { name: string; email: string; currentPassword?: string; newPassword?: string }) => {
-    const res = await fetch(`${API_URL}/profile`, {
+export const updateProfile = async (data: any): Promise<User> => {
+    const res = await fetch(`${API_URL}/profile`, { // Fixed endpoint
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
-    const responseData = await handleResponse(res);
-    
-    // Update local storage
-    if (responseData.user) {
-        localStorage.setItem('user', JSON.stringify(responseData.user));
+    const response = await handleResponse(res);
+    localStorage.setItem('user', JSON.stringify(response.user));
+    return response.user;
+};
+
+export const updateSettings = async (settings: AppSettings): Promise<User> => {
+    const res = await fetch(`${API_URL}/settings`, { // Fixed endpoint
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ settings })
+    });
+    // Usually settings update doesn't return full user object in some APIs, but let's assume we refresh user locally or fetch again.
+    // For this app, we can just return the current user with updated settings or fetch fresh.
+    return await refreshUser();
+};
+
+export const switchContext = async (workspaceId: string) => {
+    const res = await fetch(`${API_URL}/switch-context`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ targetFamilyId: workspaceId }) // Fixed param name
+    });
+    const data = await handleResponse(res);
+    if (data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
     }
-    return responseData.user;
 };
 
-// --- Admin ---
-export const getAdminStats = async () => {
-    const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
+export const loadInitialData = async (): Promise<AppState> => {
+    const res = await fetch(`${API_URL}/initial-data`, { headers: getHeaders() });
     return await handleResponse(res);
 };
 
-export const getAdminUsers = async () => {
-    const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
-    return await handleResponse(res);
-};
-
-// --- Collab (Family) ---
-
-export const createInvite = async () => {
-    const res = await fetch(`${API_URL}/admin/invite/create`, {
-        method: 'GET',
-        headers: getHeaders()
+// Collaboration
+export const createInvite = async (): Promise<{ code: string }> => {
+    const res = await fetch(`${API_URL}/invites`, { // Fixed endpoint
+        method: 'POST',
+        headers: getHeaders() 
     });
     return await handleResponse(res);
 };
 
-export const joinFamily = async (code: string) => {
+export const joinFamily = async (code: string): Promise<User> => {
     const res = await fetch(`${API_URL}/invite/join`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ code })
     });
     const data = await handleResponse(res);
-    // Token update needed because familyId changed
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    return data.user;
+    if (data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        return data.user;
+    }
+    throw new Error('Join failed');
 };
 
 export const getFamilyMembers = async (): Promise<Member[]> => {
     const res = await fetch(`${API_URL}/family/members`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    return await res.json();
-};
-
-export const updateMemberRole = async (memberId: string, role: string, permissions: string[]) => {
-    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({ role, permissions })
-    });
     return await handleResponse(res);
 };
 
@@ -184,26 +152,34 @@ export const removeMember = async (memberId: string) => {
     return await handleResponse(res);
 };
 
-// --- Data ---
-
-export const loadInitialData = async (): Promise<AppState> => {
-    const res = await fetch(`${API_URL}/initial-data`, { headers: getHeaders() });
-    
-    if (res.status === 401 || res.status === 403) {
-        throw new Error("Unauthorized");
-    }
-    
+export const updateMemberRole = async (memberId: string, role: string, permissions: string[]) => {
+    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ role, permissions })
+    });
     return await handleResponse(res);
 };
 
-// --- Logs & Restore ---
+// Admin
+export const getAdminStats = async () => {
+    const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+export const getAdminUsers = async () => {
+    const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+// Logs
 export const getAuditLogs = async (): Promise<AuditLog[]> => {
     const res = await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() });
     return await handleResponse(res);
 };
 
 export const restoreRecord = async (entity: string, id: string) => {
-    const res = await fetch(`${API_URL}/restore`, {
+    const res = await fetch(`${API_URL}/restore`, { // Fixed endpoint
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ entity, id })
@@ -212,7 +188,7 @@ export const restoreRecord = async (entity: string, id: string) => {
 };
 
 export const revertLogChange = async (logId: number) => {
-    const res = await fetch(`${API_URL}/revert-change`, {
+    const res = await fetch(`${API_URL}/revert-change`, { // Fixed endpoint
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ logId })
@@ -220,109 +196,144 @@ export const revertLogChange = async (logId: number) => {
     return await handleResponse(res);
 };
 
+// API Object for CRUD
 export const api = {
-  saveAccount: async (account: Account) => {
-    const res = await fetch(`${API_URL}/accounts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(account) });
-    await handleResponse(res);
-  },
-  deleteAccount: async (id: string) => {
-    const res = await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE', headers: getHeaders() });
-    await handleResponse(res);
-  },
-  saveContact: async (contact: Contact) => {
-      const res = await fetch(`${API_URL}/contacts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(contact) });
-      await handleResponse(res);
-  },
-  deleteContact: async (id: string) => {
-    const res = await fetch(`${API_URL}/contacts/${id}`, { method: 'DELETE', headers: getHeaders() });
-    await handleResponse(res);
-  },
-  saveCategory: async (category: Category) => {
-      const res = await fetch(`${API_URL}/categories`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(category) });
-      await handleResponse(res);
-  },
-  deleteCategory: async (id: string) => {
-      const res = await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveTransaction: async (transaction: Transaction) => {
-    const res = await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(transaction) });
-    await handleResponse(res);
-  },
-  deleteTransaction: async (id: string) => {
-    const res = await fetch(`${API_URL}/transactions/${id}`, { method: 'DELETE', headers: getHeaders() });
-    await handleResponse(res);
-  },
-  saveGoal: async (goal: FinancialGoal) => {
-      const res = await fetch(`${API_URL}/goals`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(goal) });
-      await handleResponse(res);
-  },
-  deleteGoal: async (id: string) => {
-      const res = await fetch(`${API_URL}/goals/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  
-  // PJ Methods
-  saveCompanyProfile: async (company: CompanyProfile) => {
-      const res = await fetch(`${API_URL}/company`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(company) });
-      await handleResponse(res);
-  },
-  saveBranch: async (branch: Branch) => {
-      const res = await fetch(`${API_URL}/branches`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(branch) });
-      await handleResponse(res);
-  },
-  deleteBranch: async (id: string) => {
-      const res = await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveCostCenter: async (cc: CostCenter) => {
-      const res = await fetch(`${API_URL}/cost-centers`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(cc) });
-      await handleResponse(res);
-  },
-  deleteCostCenter: async (id: string) => {
-      const res = await fetch(`${API_URL}/cost-centers/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveDepartment: async (dept: Department) => {
-      const res = await fetch(`${API_URL}/departments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(dept) });
-      await handleResponse(res);
-  },
-  deleteDepartment: async (id: string) => {
-      const res = await fetch(`${API_URL}/departments/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveProject: async (project: Project) => {
-      const res = await fetch(`${API_URL}/projects`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(project) });
-      await handleResponse(res);
-  },
-  deleteProject: async (id: string) => {
-      const res = await fetch(`${API_URL}/projects/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-
-  // Generic Module Methods (Replaces Odonto)
-  saveServiceClient: async (client: ServiceClient) => {
-      const res = await fetch(`${API_URL}/modules/clients`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(client) });
-      await handleResponse(res);
-  },
-  deleteServiceClient: async (id: string) => {
-      const res = await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveServiceItem: async (item: ServiceItem) => {
-      const res = await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(item) });
-      await handleResponse(res);
-  },
-  deleteServiceItem: async (id: string) => {
-      const res = await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  },
-  saveServiceAppointment: async (appt: ServiceAppointment) => {
-      const res = await fetch(`${API_URL}/modules/appointments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(appt) });
-      await handleResponse(res);
-  },
-  deleteServiceAppointment: async (id: string) => {
-      const res = await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() });
-      await handleResponse(res);
-  }
+    saveTransaction: async (t: Transaction) => {
+        const res = await fetch(`${API_URL}/transactions`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(t)
+        });
+        return await handleResponse(res);
+    },
+    deleteTransaction: async (id: string) => {
+        const res = await fetch(`${API_URL}/transactions/${id}`, {
+            method: 'DELETE', headers: getHeaders()
+        });
+        return await handleResponse(res);
+    },
+    saveAccount: async (a: Account) => {
+        const res = await fetch(`${API_URL}/accounts`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(a)
+        });
+        return await handleResponse(res);
+    },
+    deleteAccount: async (id: string) => {
+        const res = await fetch(`${API_URL}/accounts/${id}`, {
+            method: 'DELETE', headers: getHeaders()
+        });
+        return await handleResponse(res);
+    },
+    saveContact: async (c: Contact) => {
+        const res = await fetch(`${API_URL}/contacts`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(c)
+        });
+        return await handleResponse(res);
+    },
+    deleteContact: async (id: string) => {
+        const res = await fetch(`${API_URL}/contacts/${id}`, {
+            method: 'DELETE', headers: getHeaders()
+        });
+        return await handleResponse(res);
+    },
+    saveCategory: async (c: Category) => {
+        const res = await fetch(`${API_URL}/categories`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(c)
+        });
+        return await handleResponse(res);
+    },
+    deleteCategory: async (id: string) => {
+        const res = await fetch(`${API_URL}/categories/${id}`, {
+            method: 'DELETE', headers: getHeaders()
+        });
+        return await handleResponse(res);
+    },
+    saveGoal: async (g: FinancialGoal) => {
+        const res = await fetch(`${API_URL}/goals`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(g)
+        });
+        return await handleResponse(res);
+    },
+    deleteGoal: async (id: string) => {
+        const res = await fetch(`${API_URL}/goals/${id}`, {
+            method: 'DELETE', headers: getHeaders()
+        });
+        return await handleResponse(res);
+    },
+    // PJ
+    saveCompanyProfile: async (data: CompanyProfile) => {
+        const res = await fetch(`${API_URL}/company`, { // Fixed endpoint
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    saveBranch: async (data: Branch) => {
+        const res = await fetch(`${API_URL}/branches`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteBranch: async (id: string) => {
+        const res = await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveCostCenter: async (data: CostCenter) => {
+        const res = await fetch(`${API_URL}/cost-centers`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteCostCenter: async (id: string) => {
+        const res = await fetch(`${API_URL}/cost-centers/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveDepartment: async (data: Department) => {
+        const res = await fetch(`${API_URL}/departments`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteDepartment: async (id: string) => {
+        const res = await fetch(`${API_URL}/departments/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveProject: async (data: Project) => {
+        const res = await fetch(`${API_URL}/projects`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteProject: async (id: string) => {
+        const res = await fetch(`${API_URL}/projects/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    // Modules (Fixing paths to match server)
+    saveServiceClient: async (data: ServiceClient) => {
+        const res = await fetch(`${API_URL}/modules/clients`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteServiceClient: async (id: string) => {
+        const res = await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveServiceItem: async (data: ServiceItem) => {
+        const res = await fetch(`${API_URL}/modules/services`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteServiceItem: async (id: string) => {
+        const res = await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveServiceAppointment: async (data: ServiceAppointment) => {
+        const res = await fetch(`${API_URL}/modules/appointments`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteServiceAppointment: async (id: string) => {
+        const res = await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
 };

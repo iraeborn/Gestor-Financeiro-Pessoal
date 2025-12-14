@@ -19,8 +19,8 @@ import ServiceModule from './components/ServiceModule';
 import AccessView from './components/AccessView';
 import CategoriesView from './components/CategoriesView'; 
 import GoalsView from './components/GoalsView';
-import { loadInitialData, api, logout } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionType, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment, FinancialGoal } from './types';
+import { loadInitialData, api, logout, refreshUser } from './services/storageService';
+import { AppState, ViewMode, Transaction, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment, FinancialGoal, TransactionType } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 import { useAlert, useConfirm } from './components/AlertSystem';
 
@@ -62,22 +62,41 @@ const App: React.FC = () => {
         return; 
       }
 
-      const user = JSON.parse(userStr);
-      setCurrentUser(user);
-      
-      if (user.role === UserRole.ADMIN) {
-          setIsLoading(false);
-          return;
+      // 1. Try to load FRESH user data from server (workspaces/permissions might have changed)
+      try {
+          const freshUser = await refreshUser();
+          setCurrentUser(freshUser);
+          
+          if (freshUser.role === UserRole.ADMIN) {
+              setIsLoading(false);
+              return;
+          }
+      } catch (e) {
+          console.error("Session refresh failed (likely expired):", e);
+          // Fallback to local user if API fails (offline?), but typically logout if token invalid
+          const localUser = JSON.parse(userStr);
+          // If token error, we should logout. Assuming 401/403 throws error in refreshUser
+          if ((e as Error).message.includes('401') || (e as Error).message.includes('403')) {
+              logout();
+              setCurrentUser(null);
+              setIsLoading(false);
+              return;
+          }
+          setCurrentUser(localUser);
       }
 
+      // 2. Load Financial Data
       setIsLoading(true);
       try {
         const data = await loadInitialData();
         setState(data);
       } catch (error) {
-        console.error("Failed to load initial data or session expired:", error);
-        logout();
-        setCurrentUser(null);
+        console.error("Failed to load initial data:", error);
+        // If data load fails due to auth, we logout
+        if ((error as Error).message.includes('Unauthorized')) {
+            logout();
+            setCurrentUser(null);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -103,6 +122,8 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
+  // ... (rest of App component handlers unchanged)
+  
   const handleGetStarted = (type: EntityType, plan: SubscriptionPlan) => {
       setRegisterEntityType(type);
       setRegisterPlan(plan);
@@ -117,9 +138,8 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Transactions Logic ---
-
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
+    // ... (rest of existing handler code)
     try {
         const transaction: Transaction = {
           ...newTransaction,
@@ -143,7 +163,6 @@ const App: React.FC = () => {
           let updatedGoals = [...prevState.goals];
           
           if (transaction.status === TransactionStatus.PAID) {
-            // Update Accounts
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === transaction.accountId) {
                 let newBalance = acc.balance;
@@ -160,7 +179,6 @@ const App: React.FC = () => {
               return acc;
             });
 
-            // Update Goals if linked
             if (transaction.goalId) {
                 updatedGoals = updatedGoals.map(g => {
                     if (g.id === transaction.goalId) {
@@ -185,7 +203,9 @@ const App: React.FC = () => {
     }
   };
 
+  // ... (rest of file)
   const handleDeleteTransaction = async (id: string) => {
+    // ... (unchanged)
     const confirm = await showConfirm({
         title: "Excluir Transação",
         message: "Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita e afetará o saldo se já estiver paga.",
@@ -206,7 +226,6 @@ const App: React.FC = () => {
           let updatedGoals = [...prevState.goals];
 
           if (target.status === TransactionStatus.PAID) {
-            // Revert Accounts
             updatedAccounts = updatedAccounts.map(acc => {
               if (acc.id === target.accountId) {
                  let newBalance = acc.balance;
@@ -223,7 +242,6 @@ const App: React.FC = () => {
               return acc;
             });
 
-            // Revert Goals
             if (target.goalId) {
                 updatedGoals = updatedGoals.map(g => {
                     if (g.id === target.goalId) {
@@ -248,6 +266,7 @@ const App: React.FC = () => {
   };
 
   const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact, newCategory?: Category) => {
+    // ... (unchanged)
     try {
         const oldT = state.transactions.find(t => t.id === updatedT.id);
         if (!oldT) return;
@@ -268,7 +287,6 @@ const App: React.FC = () => {
             let updatedAccounts = [...prevState.accounts];
             let updatedGoals = [...prevState.goals];
 
-            // 1. Revert Old Effect
             if (oldT.status === TransactionStatus.PAID) {
                 updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === oldT.accountId) {
@@ -288,7 +306,6 @@ const App: React.FC = () => {
                 }
             }
 
-            // 2. Apply New Effect
             if (updatedT.status === TransactionStatus.PAID) {
                  updatedAccounts = updatedAccounts.map(acc => {
                     if (acc.id === updatedT.accountId) {
@@ -308,7 +325,6 @@ const App: React.FC = () => {
                 }
             }
             
-            // Persist Account Balances locally updated
             updatedAccounts.forEach(acc => {
                 const original = prevState.accounts.find(a => a.id === acc.id);
                 if (original && original.balance !== acc.balance) {
@@ -338,8 +354,6 @@ const App: React.FC = () => {
     handleEditTransaction(updatedT);
   };
 
-  // --- Accounts Logic ---
-
   const handleSaveAccount = async (account: Account) => {
     try {
         await api.saveAccount(account);
@@ -364,9 +378,6 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAccount = async (id: string) => {
-    // Note: The confirmation dialog is handled inside the views (AccountsView, Dashboard) before calling this
-    // OR we can move it here. For now, views call showConfirm then call this.
-    // Actually, AccountsView calls showConfirm then calls this. Dashboard calls this directly but I removed delete button from dashboard.
     try {
         await api.deleteAccount(id);
         setState(prevState => ({
@@ -379,7 +390,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Contacts Logic ---
   const handleSaveContact = async (contact: Contact) => {
       try {
           await api.saveContact(contact);
@@ -413,7 +423,6 @@ const App: React.FC = () => {
       }
   };
 
-  // --- Categories Logic ---
   const handleSaveCategory = async (category: Category) => {
       try {
           await api.saveCategory(category);
@@ -447,7 +456,6 @@ const App: React.FC = () => {
       }
   };
 
-  // --- Goals Logic ---
   const handleSaveGoal = async (goal: FinancialGoal) => {
       try {
           await api.saveGoal(goal);
@@ -466,7 +474,6 @@ const App: React.FC = () => {
       } catch(e: any) { showAlert("Erro ao excluir meta", "error"); }
   };
 
-  // --- PJ Entities Logic ---
   const handleSavePJEntity = async (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => {
       try {
           if (type === 'company') {
@@ -537,8 +544,6 @@ const App: React.FC = () => {
           let finalContactId = c.contactId;
           let contactName = c.contactName;
 
-          // Se não tem ID mas tem nome, criar contato financeiro automaticamente
-          // Agora suporta email e telefone vindos do modal do paciente
           if (!finalContactId && contactName) {
               const newContactId = crypto.randomUUID();
               const newContact: Contact = { 
@@ -548,23 +553,18 @@ const App: React.FC = () => {
                   phone: c.contactPhone
               };
               await api.saveContact(newContact);
-              
-              // Atualiza estado local de contatos
               setState(prev => ({ ...prev, contacts: [...prev.contacts, newContact].sort((a,b) => a.name.localeCompare(b.name)) }));
-              
               finalContactId = newContactId;
           }
 
           if (!finalContactId) throw new Error("Nome do contato é obrigatório.");
 
-          // Monta objeto final
           const clientToSave: ServiceClient = {
               id: c.id!,
               contactId: finalContactId,
               notes: c.notes,
               birthDate: c.birthDate,
               moduleTag: ODONTO_TAG,
-              // Novos campos clínicos
               insurance: c.insurance,
               allergies: c.allergies,
               medications: c.medications
@@ -574,7 +574,6 @@ const App: React.FC = () => {
           
           setState(prev => {
               const exists = prev.serviceClients?.find(sc => sc.id === clientToSave.id);
-              // Resolve Contact Info
               const contact = prev.contacts.find(co => co.id === finalContactId) || (contactName ? { name: contactName } as Contact : undefined);
               const cWithContact = { 
                   ...clientToSave, 
@@ -629,7 +628,6 @@ const App: React.FC = () => {
           await api.saveServiceAppointment(a);
           setState(prev => {
               const exists = prev.serviceAppointments?.find(sa => sa.id === a.id);
-              // Resolve names locally
               const client = prev.serviceClients?.find(c => c.id === a.clientId);
               const service = prev.serviceItems?.find(s => s.id === a.serviceId);
               const resolvedA = { ...a, clientName: client?.contactName, serviceName: service?.name };
@@ -652,7 +650,7 @@ const App: React.FC = () => {
       showAlert("Agendamento excluído.", "success");
   };
 
-  // --- VIEW RENDERING ---
+  // ... (View Rendering logic unchanged)
 
   if (!currentUser) {
       if (showAuth) {
@@ -685,7 +683,6 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentView) {
-      // --- FINANCEIRO MODULE ---
       case 'FIN_DASHBOARD':
         return (
           <Dashboard 
@@ -821,12 +818,10 @@ const App: React.FC = () => {
       case 'ODONTO_AGENDA':
       case 'ODONTO_PATIENTS':
       case 'ODONTO_PROCEDURES':
-        // Filtra dados do estado global para passar apenas os do módulo ODONTO
         const odontoClients = state.serviceClients?.filter(c => c.moduleTag === ODONTO_TAG) || [];
         const odontoServices = state.serviceItems?.filter(s => s.moduleTag === ODONTO_TAG) || [];
         const odontoAppointments = state.serviceAppointments?.filter(a => a.moduleTag === ODONTO_TAG) || [];
 
-        // Determina a seção ativa baseada no view mode
         let section: 'CALENDAR' | 'CLIENTS' | 'SERVICES' = 'CALENDAR';
         if (currentView === 'ODONTO_PATIENTS') section = 'CLIENTS';
         if (currentView === 'ODONTO_PROCEDURES') section = 'SERVICES';
@@ -845,7 +840,6 @@ const App: React.FC = () => {
                 appointments={odontoAppointments}
                 contacts={state.contacts}
                 
-                // Passa dados parciais (pode ser sem contactId se for novo)
                 onSaveClient={handleSaveServiceClient}
                 onDeleteClient={handleDeleteServiceClient}
                 onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
