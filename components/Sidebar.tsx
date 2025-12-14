@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog, Lock
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
@@ -83,6 +82,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       if (isAdmin) return true;
       return userPermissions.includes(viewId);
   };
+
+  // Check if user has ANY permission to view modules
+  const hasAnyPermission = isAdmin || userPermissions.length > 0;
 
   const modules: ModuleGroup[] = [
       {
@@ -188,52 +190,63 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           </div>
       </div>
 
+      {/* Navigation */}
       <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
-        {modules.filter(m => m.isVisible).map((module) => {
-            // Filter items based on permission
-            const visibleItems = module.items.filter(item => hasPermission(item.id));
-            
-            // If no items are visible, hide the whole module
-            if (visibleItems.length === 0) return null;
-
-            return (
-            <div key={module.id} className="space-y-1">
-                <button 
-                    onClick={() => toggleModule(module.id)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
-                >
-                    <span className="flex items-center gap-2">
-                        <module.icon className="w-3 h-3" />
-                        {module.label}
-                    </span>
-                    <ChevronRight className={`w-3 h-3 transition-transform ${expandedModules[module.id] ? 'rotate-90' : ''}`} />
-                </button>
-                
-                {expandedModules[module.id] && (
-                    <div className="space-y-1 animate-fade-in pl-2">
-                        {visibleItems.map(item => {
-                            const Icon = item.icon;
-                            const isActive = currentView === item.id;
-                            return (
-                                <button
-                                    key={item.id}
-                                    onClick={() => onChangeView(item.id)}
-                                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                                        isActive
-                                        ? 'bg-indigo-50 text-indigo-700 shadow-sm'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                    }`}
-                                >
-                                    {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />}
-                                    {item.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
+        {!hasAnyPermission ? (
+            <div className="text-center p-4 bg-gray-50 rounded-xl border border-gray-100 mt-4">
+                <Lock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-gray-600">Acesso Limitado</p>
+                <p className="text-xs text-gray-400 mt-1">
+                    Você não tem permissões para visualizar módulos nesta conta. Solicite acesso ao administrador.
+                </p>
             </div>
-            );
-        })}
+        ) : (
+            modules.filter(m => m.isVisible).map((module) => {
+                // Filter items based on permission
+                const visibleItems = module.items.filter(item => hasPermission(item.id));
+                
+                // If no items are visible, hide the whole module
+                if (visibleItems.length === 0) return null;
+
+                return (
+                <div key={module.id} className="space-y-1">
+                    <button 
+                        onClick={() => toggleModule(module.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
+                    >
+                        <span className="flex items-center gap-2">
+                            <module.icon className="w-3 h-3" />
+                            {module.label}
+                        </span>
+                        <ChevronRight className={`w-3 h-3 transition-transform ${expandedModules[module.id] ? 'rotate-90' : ''}`} />
+                    </button>
+                    
+                    {expandedModules[module.id] && (
+                        <div className="space-y-1 animate-fade-in pl-2">
+                            {visibleItems.map(item => {
+                                const Icon = item.icon;
+                                const isActive = currentView === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => onChangeView(item.id)}
+                                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
+                                            isActive
+                                            ? 'bg-indigo-50 text-indigo-700 shadow-sm'
+                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />}
+                                        {item.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+                );
+            })
+        )}
       </nav>
 
       <div className="p-4 border-t border-gray-100 mt-auto">
