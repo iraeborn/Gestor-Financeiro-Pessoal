@@ -1,4 +1,5 @@
-// ... (previous code)
+
+// ... (código anterior permanece igual)
 
 app.post('/api/invite/join', authenticateToken, async (req, res) => {
     const { code } = req.body;
@@ -55,4 +56,4 @@ app.post('/api/invite/join', authenticateToken, async (req, res) => {
     }
 });
 
-// ... (rest of code)
+// ... (resto do código permanece igual)
