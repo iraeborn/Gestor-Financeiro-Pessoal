@@ -880,7 +880,8 @@ const App: React.FC = () => {
                     setCurrentView(view);
                     setIsMobileMenuOpen(false);
                 }}
-                currentUser={currentUser} 
+                currentUser={currentUser}
+                onUserUpdate={setCurrentUser}
             />
           </div>
         </div>
@@ -890,7 +891,8 @@ const App: React.FC = () => {
         <Sidebar 
             currentView={currentView} 
             onChangeView={setCurrentView}
-            currentUser={currentUser} 
+            currentUser={currentUser}
+            onUserUpdate={setCurrentUser}
         />
       </div>
 

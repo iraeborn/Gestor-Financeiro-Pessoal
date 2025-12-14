@@ -549,6 +549,68 @@ app.post('/api/test-whatsapp', authenticateToken, async (req, res) => {
     }
 });
 
+// --- PROFILE ROUTE (Updated) ---
+app.put('/api/profile', authenticateToken, async (req, res) => {
+    const { name, email, currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+        const user = userRes.rows[0];
+        
+        if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+        // Password Change Logic
+        let passwordHash = user.password_hash;
+        if (newPassword) {
+            if (!user.google_id) { // If google account, might not have password
+                if (!currentPassword) return res.status(400).json({ error: 'Senha atual é obrigatória para alterar a senha.' });
+                const valid = await bcrypt.compare(currentPassword, user.password_hash);
+                if (!valid) return res.status(400).json({ error: 'Senha atual incorreta.' });
+            }
+            passwordHash = await bcrypt.hash(newPassword, 10);
+        }
+
+        // Email Conflict Check (if changed)
+        if (email !== user.email) {
+            const check = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
+            if (check.rows.length > 0) return res.status(400).json({ error: 'Email já está em uso.' });
+        }
+
+        await pool.query(
+            `UPDATE users SET name = $1, email = $2, password_hash = $3 WHERE id = $4`,
+            [name, email, passwordHash, userId]
+        );
+
+        // Fetch updated user to return (without password)
+        const updatedRes = await pool.query('SELECT id, name, email, family_id, settings, role, entity_type, plan, status, trial_ends_at FROM users WHERE id = $1', [userId]);
+        const updatedUser = updatedRes.rows[0];
+        const workspaces = await getUserWorkspaces(userId);
+
+        res.json({
+            user: { 
+                id: updatedUser.id, 
+                name: updatedUser.name, 
+                email: updatedUser.email, 
+                familyId: updatedUser.family_id,
+                settings: updatedUser.settings, 
+                role: updatedUser.role,
+                entityType: updatedUser.entity_type, 
+                plan: updatedUser.plan, 
+                status: updatedUser.status, 
+                trialEndsAt: updatedUser.trial_ends_at,
+                workspaces
+            }
+        });
+
+        await logAudit(pool, userId, 'UPDATE', 'user', userId, 'Perfil atualizado');
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erro ao atualizar perfil.' });
+    }
+});
+
 // --- SCRAPER ROUTE (Enhanced) ---
 app.post('/api/scrape-nfce', authenticateToken, async (req, res) => {
     const { url } = req.body;

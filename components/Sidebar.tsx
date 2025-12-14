@@ -3,17 +3,19 @@ import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
 import { useAlert } from './AlertSystem';
+import ProfileModal from './ProfileModal';
 
 interface SidebarProps {
   currentView: ViewMode;
   onChangeView: (view: ViewMode) => void;
   onOpenCollab?: () => void; 
   currentUser?: User | null; // Pass current user to access workspaces
+  onUserUpdate: (u: User) => void;
 }
 
 interface MenuItem {
@@ -30,7 +32,7 @@ interface ModuleGroup {
     isVisible?: boolean; // Control if module is shown (e.g. PJ only)
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser, onUserUpdate }) => {
   const { showAlert } = useAlert();
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -39,6 +41,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       'ODONTO': true,
       'SYSTEM': true
   });
+  
+  // Profile Modal State
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -168,12 +173,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                               </button>
                           ))}
                       </div>
+                      {/* Gestão de Perfil Logado */}
                       <div className="border-t border-gray-100 bg-gray-50 p-2">
                           <button 
-                            onClick={() => onChangeView('SYS_SETTINGS')}
-                            className="w-full py-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 text-center"
+                            onClick={() => { setIsProfileModalOpen(true); setIsWorkspaceDropdownOpen(false); }}
+                            className="w-full py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 text-center flex items-center justify-center gap-2 hover:bg-indigo-50 rounded-lg transition-colors"
                           >
-                              Gerenciar Contas
+                              <UserCog className="w-4 h-4" />
+                              Meu Perfil (Editar)
                           </button>
                       </div>
                   </div>
@@ -238,6 +245,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
           Sair
         </button>
       </div>
+
+      {/* MODAL DE PERFIL */}
+      {currentUser && (
+          <ProfileModal 
+            isOpen={isProfileModalOpen}
+            onClose={() => setIsProfileModalOpen(false)}
+            currentUser={currentUser}
+            onUserUpdate={onUserUpdate}
+          />
+      )}
     </div>
   );
 };

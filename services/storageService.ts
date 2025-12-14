@@ -112,6 +112,21 @@ export const updateSettings = async (settings: AppSettings) => {
     }
 };
 
+export const updateProfile = async (data: { name: string; email: string; currentPassword?: string; newPassword?: string }) => {
+    const res = await fetch(`${API_URL}/profile`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+    });
+    const responseData = await handleResponse(res);
+    
+    // Update local storage
+    if (responseData.user) {
+        localStorage.setItem('user', JSON.stringify(responseData.user));
+    }
+    return responseData.user;
+};
+
 // --- Admin ---
 export const getAdminStats = async () => {
     const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
