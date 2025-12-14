@@ -43,7 +43,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/node_modules ./node_modules
 
-ENV PORT=3000
+ENV PORT=8080
 ENV NODE_ENV=production
 
 CMD ["node", "server/index.js"]
