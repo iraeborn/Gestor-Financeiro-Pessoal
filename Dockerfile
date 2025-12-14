@@ -1,7 +1,6 @@
 # ============================
 # 1) STAGE DE BUILD
 # ============================
-
 FROM node:18 AS build
 
 WORKDIR /app
@@ -44,7 +43,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/node_modules ./node_modules
 
-ENV PORT=8080
+ENV PORT=3000
 ENV NODE_ENV=production
 
 CMD ["node", "server/index.js"]
