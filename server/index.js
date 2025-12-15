@@ -7,7 +7,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import pool from './db.js';
+import pool, { initDb } from './db.js';
 
 // Import Routes
 import authRoutes from './routes/auth.js';
@@ -99,4 +99,8 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Initialize DB then start server
+initDb().then(() => {
+    httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+});

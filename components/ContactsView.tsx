@@ -81,8 +81,8 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, serviceClients = 
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestão de Contatos</h1>
-          <p className="text-gray-500">Visão unificada de clientes, pacientes, fornecedores e favorecidos.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Pessoas & Empresas</h1>
+          <p className="text-gray-500">Gestão unificada de clientes, fornecedores e contatos diversos.</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}

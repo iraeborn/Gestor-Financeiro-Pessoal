@@ -24,18 +24,6 @@ export default function(logAudit) {
             const ownerRes = await pool.query('SELECT entity_type FROM users WHERE id = $1', [activeFamilyId]);
             const isPJ = ownerRes.rows[0]?.entity_type === 'PJ';
 
-            // 1. AUTO-MIGRATION: Garantir que tabelas novas existam antes de consultar
-            const createTablesQueries = [
-                `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP)`,
-                `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL, start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP)`,
-                `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL, date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP)`,
-                `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL, issue_date DATE, status TEXT, contact_id TEXT, file_url TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP)`
-            ];
-            
-            for (const q of createTablesQueries) {
-                await pool.query(q);
-            }
-
             // LÓGICA DE ISOLAMENTO DE DADOS (CRÍTICO)
             // Função helper para construir o filtro SQL com o alias correto
             const buildFilter = (alias) => {
