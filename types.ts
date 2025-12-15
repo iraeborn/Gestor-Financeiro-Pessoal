@@ -36,6 +36,13 @@ export interface WhatsappConfig {
   notifyOverdue: boolean;
 }
 
+export interface EmailConfig {
+  enabled: boolean;
+  email: string;
+  notifyDueToday: boolean;
+  notifyWeeklyReport: boolean;
+}
+
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
   activeModules?: {
@@ -44,6 +51,7 @@ export interface AppSettings {
       consulting?: boolean;
   };
   whatsapp?: WhatsappConfig;
+  email?: EmailConfig;
 }
 
 export enum UserRole {

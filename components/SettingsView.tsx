@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -37,6 +37,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       notifyOverdue: false
   });
   const [testingWa, setTestingWa] = useState(false);
+
+  // Email Form State
+  const [emailConfig, setEmailConfig] = useState(settings.email || {
+      enabled: false,
+      email: user.email,
+      notifyDueToday: true,
+      notifyWeeklyReport: true
+  });
+  const [testingEmail, setTestingEmail] = useState(false);
 
   // PJ Forms State
   const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { 
@@ -82,9 +91,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          showAlert("Configurações de notificação salvas!", "success");
+          showAlert("Configurações WhatsApp salvas!", "success");
       } catch (e) {
-          showAlert("Erro ao salvar notificações.", "error");
+          showAlert("Erro ao salvar.", "error");
       }
   };
 
@@ -114,6 +123,47 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           showAlert("Erro de conexão.", "error");
       } finally {
           setTestingWa(false);
+      }
+  };
+
+  // Email Handlers
+  const handleSaveEmail = async () => {
+      const newSettings = { ...settings, email: emailConfig };
+      try {
+          await updateSettings(newSettings);
+          onUpdateSettings(newSettings);
+          showAlert("Configurações de Email salvas!", "success");
+      } catch (e) {
+          showAlert("Erro ao salvar.", "error");
+      }
+  };
+
+  const handleTestEmail = async () => {
+      if (!emailConfig.email) {
+          showAlert("Informe um email.", "warning");
+          return;
+      }
+      setTestingEmail(true);
+      try {
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/test-email', {
+              method: 'POST',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': token ? `Bearer ${token}` : ''
+              },
+              body: JSON.stringify({ email: emailConfig.email })
+          });
+          if (res.ok) {
+              showAlert("Email de teste enviado!", "success");
+          } else {
+              const data = await res.json();
+              showAlert("Erro: " + data.error, "error");
+          }
+      } catch (e) {
+          showAlert("Erro de conexão.", "error");
+      } finally {
+          setTestingEmail(false);
       }
   };
 
@@ -222,86 +272,107 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
         </div>
 
-        {/* --- NOTIFICAÇÕES WHATSAPP --- */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-emerald-600" />
-                    Notificações e Alertas (WhatsApp)
-                </h2>
-            </div>
-            <div className="p-6 space-y-6">
-                <div className="flex flex-col md:flex-row gap-6">
-                    <div className="flex-1">
+        {/* --- NOTIFICAÇÕES (GRID: WhatsApp & Email) --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* WhatsApp */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5 text-emerald-600" />
+                        WhatsApp
+                    </h2>
+                </div>
+                <div className="p-6 space-y-6 flex-1 flex flex-col">
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                            <Smartphone className="w-4 h-4 text-gray-400" />
-                            Número do WhatsApp
+                            <Smartphone className="w-4 h-4 text-gray-400" /> Número
                         </label>
                         <div className="flex gap-2">
                             <input 
                                 type="text"
-                                placeholder="5511999999999 (com código país e DDD)"
+                                placeholder="5511999999999"
                                 value={waConfig.phoneNumber}
                                 onChange={e => setWaConfig({ ...waConfig, phoneNumber: e.target.value.replace(/\D/g, '') })}
-                                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                             />
                             <button 
                                 onClick={handleTestWhatsApp}
                                 disabled={testingWa || !waConfig.phoneNumber}
-                                className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100 disabled:opacity-50 flex items-center gap-2"
+                                className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 disabled:opacity-50"
                             >
-                                {testingWa ? 'Enviando...' : <><Send className="w-3 h-3" /> Testar</>}
+                                {testingWa ? '...' : 'Testar'}
                             </button>
                         </div>
-                        <p className="text-xs text-gray-400 mt-2">
-                            Insira apenas números. Certifique-se de incluir o código do país (55 para Brasil).
-                        </p>
                     </div>
                     
-                    <div className="flex-1 bg-emerald-50/50 p-4 rounded-xl space-y-3 border border-emerald-100/50">
-                        <p className="text-xs font-bold text-emerald-800 uppercase mb-2 flex items-center gap-1">
-                            <Bell className="w-3 h-3" /> Configurar Alertas Automáticos
-                        </p>
-                        
+                    <div className="bg-emerald-50/50 p-4 rounded-xl space-y-3 border border-emerald-100/50 flex-1">
+                        <p className="text-xs font-bold text-emerald-800 uppercase mb-2">Alertas Automáticos</p>
                         <label className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700">Contas Vencendo Hoje</span>
-                            <input 
-                                type="checkbox"
-                                checked={waConfig.notifyDueToday}
-                                onChange={e => setWaConfig({ ...waConfig, notifyDueToday: e.target.checked })}
-                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                            />
+                            <input type="checkbox" checked={waConfig.notifyDueToday} onChange={e => setWaConfig({ ...waConfig, notifyDueToday: e.target.checked })} className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"/>
                         </label>
-                        
                         <label className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700">Contas Vencendo Amanhã</span>
-                            <input 
-                                type="checkbox"
-                                checked={waConfig.notifyDueTomorrow}
-                                onChange={e => setWaConfig({ ...waConfig, notifyDueTomorrow: e.target.checked })}
-                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                            />
+                            <input type="checkbox" checked={waConfig.notifyDueTomorrow} onChange={e => setWaConfig({ ...waConfig, notifyDueTomorrow: e.target.checked })} className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"/>
                         </label>
-
                         <label className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700">Contas em Atraso</span>
-                            <input 
-                                type="checkbox"
-                                checked={waConfig.notifyOverdue}
-                                onChange={e => setWaConfig({ ...waConfig, notifyOverdue: e.target.checked })}
-                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                            />
+                            <input type="checkbox" checked={waConfig.notifyOverdue} onChange={e => setWaConfig({ ...waConfig, notifyOverdue: e.target.checked })} className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"/>
                         </label>
                     </div>
-                </div>
 
-                <div className="pt-4 border-t border-gray-100 flex justify-end">
-                    <button 
-                        onClick={handleSaveWhatsApp}
-                        className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100"
-                    >
-                        Salvar Configurações
-                    </button>
+                    <button onClick={handleSaveWhatsApp} className="w-full bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors">Salvar WhatsApp</button>
+                </div>
+            </div>
+
+            {/* Email */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
+                <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Mail className="w-5 h-5 text-blue-600" />
+                        Email
+                    </h2>
+                </div>
+                <div className="p-6 space-y-6 flex-1 flex flex-col">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-gray-400" /> Endereço de Email
+                        </label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="email"
+                                placeholder="seu@email.com"
+                                value={emailConfig.email}
+                                onChange={e => setEmailConfig({ ...emailConfig, email: e.target.value })}
+                                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            />
+                            <button 
+                                onClick={handleTestEmail}
+                                disabled={testingEmail || !emailConfig.email}
+                                className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 disabled:opacity-50"
+                            >
+                                {testingEmail ? '...' : 'Testar'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-blue-50/50 p-4 rounded-xl space-y-3 border border-blue-100/50 flex-1">
+                        <p className="text-xs font-bold text-blue-800 uppercase mb-2">Alertas Automáticos</p>
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Ativar Notificações</span>
+                            <input type="checkbox" checked={emailConfig.enabled} onChange={e => setEmailConfig({ ...emailConfig, enabled: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Contas Vencendo Hoje</span>
+                            <input type="checkbox" checked={emailConfig.notifyDueToday} onChange={e => setEmailConfig({ ...emailConfig, notifyDueToday: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Relatório Semanal</span>
+                            <input type="checkbox" checked={emailConfig.notifyWeeklyReport} onChange={e => setEmailConfig({ ...emailConfig, notifyWeeklyReport: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
+                        </label>
+                    </div>
+
+                    <button onClick={handleSaveEmail} className="w-full bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 transition-colors">Salvar Email</button>
                 </div>
             </div>
         </div>
