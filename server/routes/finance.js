@@ -1,11 +1,81 @@
 
 import express from 'express';
 import pool from '../db.js';
+import crypto from 'crypto';
 import { authenticateToken, calculateChanges, updateAccountBalance, sanitizeValue, familyCheckParam2 } from '../middleware.js';
 
 const router = express.Router();
 
 export default function(logAudit) {
+
+    // --- INITIAL DATA ---
+    router.get('/initial-data', authenticateToken, async (req, res) => {
+        const userId = req.user.id;
+        try {
+            const activeFamilyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id || userId;
+            const familyFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`;
+            
+            const accs = await pool.query(`SELECT * FROM accounts WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE t.${familyFilter} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
+            const goals = await pool.query(`SELECT * FROM goals WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const contacts = await pool.query(`SELECT * FROM contacts WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            let categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            
+            // Fetch company profile
+            const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
+            
+            // PJ & Modules
+            const branches = await pool.query(`SELECT * FROM branches WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const departments = await pool.query(`SELECT * FROM departments WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const projects = await pool.query(`SELECT * FROM projects WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+
+            const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE mc.${familyFilter} AND mc.deleted_at IS NULL`, [activeFamilyId]);
+            const services = await pool.query(`SELECT * FROM module_services WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ma.${familyFilter} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
+
+            // Default Categories Logic
+            if (categories.rows.length === 0) {
+                const defaults = [{ name: 'Alimentação', type: 'EXPENSE' }, { name: 'Moradia', type: 'EXPENSE' }, { name: 'Salário', type: 'INCOME' }];
+                for (const c of defaults) await pool.query('INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4)', [crypto.randomUUID(), c.name, c.type, activeFamilyId]);
+                categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            }
+
+            res.json({
+                accounts: accs.rows.map(r => ({ ...r, balance: parseFloat(r.balance), creditLimit: r.credit_limit ? parseFloat(r.credit_limit) : undefined, closingDay: r.closing_day, dueDay: r.due_day })),
+                transactions: trans.rows.map(r => ({ ...r, amount: parseFloat(r.amount), date: new Date(r.date).toISOString().split('T')[0], recurrenceEndDate: r.recurrence_end_date ? new Date(r.recurrence_end_date).toISOString().split('T')[0] : undefined, interestRate: parseFloat(r.interest_rate), accountId: r.account_id, destinationAccountId: r.destination_account_id, contactId: r.contact_id, goalId: r.goal_id, branchId: r.branch_id, destinationBranchId: r.destination_branch_id, costCenterId: r.cost_center_id, departmentId: r.department_id, projectId: r.project_id, createdByName: r.created_by_name })),
+                goals: goals.rows.map(r => ({ ...r, targetAmount: parseFloat(r.target_amount), currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined })),
+                contacts: contacts.rows.map(r => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, document: r.document, pixKey: r.pix_key })),
+                categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type })),
+                companyProfile: companyRes.rows[0] ? { 
+                    id: companyRes.rows[0].id, 
+                    tradeName: companyRes.rows[0].trade_name, 
+                    legalName: companyRes.rows[0].legal_name, 
+                    cnpj: companyRes.rows[0].cnpj,
+                    taxRegime: companyRes.rows[0].tax_regime,
+                    cnae: companyRes.rows[0].cnae,
+                    city: companyRes.rows[0].city,
+                    state: companyRes.rows[0].state,
+                    hasEmployees: companyRes.rows[0].has_employees,
+                    issuesInvoices: companyRes.rows[0].issues_invoices,
+                    zipCode: companyRes.rows[0].zip_code,
+                    street: companyRes.rows[0].street,
+                    number: companyRes.rows[0].number,
+                    neighborhood: companyRes.rows[0].neighborhood,
+                    phone: companyRes.rows[0].phone,
+                    email: companyRes.rows[0].email,
+                    secondaryCnaes: companyRes.rows[0].secondary_cnaes
+                } : null,
+                branches: branches.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
+                costCenters: costCenters.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
+                departments: departments.rows.map(r => ({ id: r.id, name: r.name })),
+                projects: projects.rows.map(r => ({ id: r.id, name: r.name })),
+                serviceClients: clients.rows.map(r => ({ id: r.id, contactId: r.contact_id, contactName: r.contact_name, contactEmail: r.contact_email, contactPhone: r.contact_phone, notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined, insurance: r.insurance, allergies: r.allergies, medications: r.medications, moduleTag: r.module_tag })),
+                serviceItems: services.rows.map(r => ({ id: r.id, name: r.name, code: r.code, defaultPrice: parseFloat(r.default_price), moduleTag: r.module_tag })),
+                serviceAppointments: appts.rows.map(r => ({ id: r.id, clientId: r.client_id, clientName: r.client_name, serviceId: r.service_id, serviceName: r.service_name, date: r.date, status: r.status, notes: r.notes, transactionId: r.transaction_id, moduleTag: r.module_tag }))
+            });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
 
     // --- ACCOUNTS ---
     router.post('/accounts', authenticateToken, async (req, res) => {
