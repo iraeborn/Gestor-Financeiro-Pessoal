@@ -368,6 +368,7 @@ app.post('/api/consult-cnpj', async (req, res) => {
     const { cnpj } = req.body;
     if (!cnpj) return res.status(400).json({ error: 'CNPJ obrigatório' });
     
+    // BrasilAPI expects just numbers
     const cleanCnpj = cnpj.replace(/\D/g, '');
     try {
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
