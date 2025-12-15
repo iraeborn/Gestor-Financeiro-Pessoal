@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment, Member } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment, Member, NotificationLog } from '../types';
 
 const API_URL = '/api';
 
@@ -185,6 +185,11 @@ export const getAdminUsers = async () => {
 // Logs
 export const getAuditLogs = async (): Promise<AuditLog[]> => {
     const res = await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
+    const res = await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() });
     return await handleResponse(res);
 };
 

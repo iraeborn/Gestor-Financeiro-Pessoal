@@ -271,6 +271,18 @@ export interface AuditLog {
   changes?: Record<string, ChangeDiff>; // JSON com o diff das alterações
 }
 
+export interface NotificationLog {
+    id: number;
+    userId: string;
+    userName?: string;
+    channel: 'EMAIL' | 'WHATSAPP';
+    recipient: string;
+    subject?: string;
+    content?: string;
+    status: 'SENT' | 'FAILED';
+    createdAt: string;
+}
+
 // --- GENERIC SERVICE MODULE TYPES ---
 
 export interface ServiceClient {

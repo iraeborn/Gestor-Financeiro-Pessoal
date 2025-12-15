@@ -76,3 +76,15 @@ CREATE TABLE IF NOT EXISTS goals (
     user_id TEXT REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Histórico de Notificações
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    channel TEXT NOT NULL, -- 'EMAIL', 'WHATSAPP'
+    recipient TEXT NOT NULL,
+    subject TEXT, -- Template name ou Assunto do Email
+    content TEXT,
+    status TEXT DEFAULT 'SENT',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

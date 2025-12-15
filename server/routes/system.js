@@ -24,6 +24,32 @@ const sendWhatsappMessage = async (to, templateName = 'jaspers_market_plain_text
     } catch (e) { console.error("WhatsApp Exception:", e); throw e; }
 };
 
+// --- LOGGING HELPER ---
+const logNotification = async (userId, channel, recipient, subject, content, status) => {
+    try {
+        // Ensure table exists (Lazy migration for this demo environment)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS notification_logs (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT REFERENCES users(id),
+                channel TEXT NOT NULL, 
+                recipient TEXT NOT NULL,
+                subject TEXT,
+                content TEXT,
+                status TEXT DEFAULT 'SENT',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        
+        await pool.query(
+            `INSERT INTO notification_logs (user_id, channel, recipient, subject, content, status) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, channel, recipient, subject, content, status]
+        );
+    } catch (e) {
+        console.error("Failed to log notification:", e);
+    }
+};
+
 // --- NFC-e Helpers ---
 const extractAccessKey = (urlStr) => {
     try {
@@ -107,6 +133,75 @@ const parsers = {
 };
 
 export default function(logAudit) {
+
+    // --- NOTIFICATION ROUTES ---
+    
+    router.post('/test-whatsapp', authenticateToken, async (req, res) => {
+        const { phone } = req.body;
+        try {
+            const result = await sendWhatsappMessage(phone);
+            // Log Success
+            await logNotification(req.user.id, 'WHATSAPP', phone, 'Template Test', 'Mensagem de teste enviada via template', 'SENT');
+            res.json({ success: true, data: result });
+        } catch (e) { 
+            // Log Failure
+            await logNotification(req.user.id, 'WHATSAPP', phone, 'Template Test', e.message, 'FAILED');
+            res.status(500).json({ error: e.message }); 
+        }
+    });
+
+    router.post('/test-email', authenticateToken, async (req, res) => {
+        const { email } = req.body;
+        const subject = "Teste de Notificação";
+        const body = "Este é um email de teste do FinManager.";
+        try {
+            await sendEmail(email, subject, body, "<h1>Olá!</h1><p>Este é um email de teste do FinManager.</p>");
+            // Log Success
+            await logNotification(req.user.id, 'EMAIL', email, subject, body, 'SENT');
+            res.json({ success: true });
+        } catch (e) { 
+            console.error("Erro envio email:", e);
+            let errorMessage = e.message;
+            
+            // Tratamento amigável para erro comum do Gmail (App Password required)
+            if (errorMessage && errorMessage.includes('Application-specific password required')) {
+                errorMessage = 'Para usar o Gmail, você DEVE gerar uma "Senha de App". Ative a Verificação em 2 Etapas na sua conta Google e gere uma senha em: Conta > Segurança > Senhas de app. Use essa senha no .env.';
+            } else if (errorMessage && errorMessage.includes('Invalid login')) {
+                errorMessage = 'Login inválido. Verifique o email e a senha no arquivo .env. Se usar Gmail, use uma Senha de App.';
+            }
+
+            // Log Failure
+            await logNotification(req.user.id, 'EMAIL', email, subject, errorMessage, 'FAILED');
+
+            res.status(500).json({ error: errorMessage }); 
+        }
+    });
+
+    router.get('/notification-logs', authenticateToken, async (req, res) => {
+        try {
+            const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
+            // Get logs for the whole family
+            const logs = await pool.query(`
+                SELECT nl.*, u.name as user_name 
+                FROM notification_logs nl 
+                JOIN users u ON nl.user_id = u.id 
+                WHERE u.family_id = $1 
+                ORDER BY nl.created_at DESC LIMIT 50
+            `, [familyId]);
+            
+            res.json(logs.rows.map(r => ({
+                id: r.id,
+                userId: r.user_id,
+                userName: r.user_name,
+                channel: r.channel,
+                recipient: r.recipient,
+                subject: r.subject,
+                content: r.content,
+                status: r.status,
+                createdAt: r.created_at
+            })));
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
 
     // --- SETTINGS ---
     router.put('/profile', authenticateToken, async (req, res) => {
@@ -255,7 +350,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    // --- UTILS (CNPJ, Scraper, Notifications) ---
+    // --- UTILS (CNPJ, Scraper) ---
     router.post('/consult-cnpj', async (req, res) => {
         const { cnpj } = req.body;
         if (!cnpj) return res.status(400).json({ error: 'CNPJ obrigatório' });
@@ -307,22 +402,6 @@ export default function(logAudit) {
             if (!amount) return res.status(422).json({ error: 'Não foi possível ler o valor total.' });
             res.json({ amount: parseFloat(amount), date: date || new Date().toISOString().split('T')[0], merchant: data.merchant || 'Estabelecimento NFC-e', stateCode: ufCode, paymentType: data.paymentType });
         } catch (error) { res.status(500).json({ error: 'Erro ao processar nota.' }); }
-    });
-
-    router.post('/test-whatsapp', authenticateToken, async (req, res) => {
-        const { phone } = req.body;
-        try {
-            const result = await sendWhatsappMessage(phone);
-            res.json({ success: true, data: result });
-        } catch (e) { res.status(500).json({ error: e.message }); }
-    });
-
-    router.post('/test-email', authenticateToken, async (req, res) => {
-        const { email } = req.body;
-        try {
-            await sendEmail(email, "Teste de Notificação", "Este é um email de teste do FinManager.", "<h1>Olá!</h1><p>Este é um email de teste do FinManager.</p>");
-            res.json({ success: true });
-        } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
     // --- LOGS ---
