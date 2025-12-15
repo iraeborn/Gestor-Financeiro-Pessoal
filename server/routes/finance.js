@@ -8,37 +8,57 @@ const router = express.Router();
 
 export default function(logAudit) {
 
+    // --- HELPER: Get Current Family ID ---
+    const getFamilyId = async (userId) => {
+        const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        return res.rows[0]?.family_id || userId;
+    };
+
     // --- INITIAL DATA ---
     router.get('/initial-data', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         try {
-            const activeFamilyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id || userId;
-            const familyFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`;
+            const activeFamilyId = await getFamilyId(userId);
             
-            const accs = await pool.query(`SELECT * FROM accounts WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE t.${familyFilter} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
-            const goals = await pool.query(`SELECT * FROM goals WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const contacts = await pool.query(`SELECT * FROM contacts WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
-            let categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            // FILTRO ROBUSTO DE ISOLAMENTO:
+            // 1. Dados que têm family_id explicitamente igual ao atual (Novo padrão)
+            // 2. OU dados legados (family_id NULL) que pertencem a usuários que estão na família atual (Retrocompatibilidade).
+            const strictFilter = `(family_id = $1 OR (family_id IS NULL AND user_id IN (SELECT id FROM users WHERE family_id = $1)))`;
             
-            // Fetch company profile
+            // Garantir que tabelas tenham a coluna family_id (Migration Lazy)
+            const ensureCol = async (table) => {
+                try { await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS family_id TEXT`); } catch(e) {}
+            };
+            await Promise.all(['accounts', 'transactions', 'goals', 'contacts', 'categories'].map(ensureCol));
+
+            const accs = await pool.query(`SELECT * FROM accounts WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE t.${strictFilter} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
+            const goals = await pool.query(`SELECT * FROM goals WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const contacts = await pool.query(`SELECT * FROM contacts WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            let categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            
+            // Fetch company profile (Linked to the Family Owner/Admin - usually family_id = user_id of owner)
+            // Company Profiles are 1-to-1 with the workspace owner (family_id)
             const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
             
-            // PJ & Modules
-            const branches = await pool.query(`SELECT * FROM branches WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const departments = await pool.query(`SELECT * FROM departments WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const projects = await pool.query(`SELECT * FROM projects WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            // PJ & Modules 
+            // We use the same filter logic. If PJ tables don't have family_id yet, fallback to user owner check.
+            const pjFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`; 
+            
+            const branches = await pool.query(`SELECT * FROM branches WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const departments = await pool.query(`SELECT * FROM departments WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const projects = await pool.query(`SELECT * FROM projects WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
 
-            const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE mc.${familyFilter} AND mc.deleted_at IS NULL`, [activeFamilyId]);
-            const services = await pool.query(`SELECT * FROM module_services WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ma.${familyFilter} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
+            const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE mc.${pjFilter} AND mc.deleted_at IS NULL`, [activeFamilyId]);
+            const services = await pool.query(`SELECT * FROM module_services WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ma.${pjFilter} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
 
             // Default Categories Logic
             if (categories.rows.length === 0) {
                 const defaults = [{ name: 'Alimentação', type: 'EXPENSE' }, { name: 'Moradia', type: 'EXPENSE' }, { name: 'Salário', type: 'INCOME' }];
-                for (const c of defaults) await pool.query('INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4)', [crypto.randomUUID(), c.name, c.type, activeFamilyId]);
-                categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+                for (const c of defaults) await pool.query('INSERT INTO categories (id, name, type, user_id, family_id) VALUES ($1, $2, $3, $4, $5)', [crypto.randomUUID(), c.name, c.type, activeFamilyId, activeFamilyId]);
+                categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
             }
 
             res.json({
@@ -81,9 +101,16 @@ export default function(logAudit) {
     router.post('/accounts', authenticateToken, async (req, res) => {
         const { id, name, type, balance, creditLimit, closingDay, dueDay } = req.body;
         try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS family_id TEXT`);
+
             const existing = (await pool.query('SELECT * FROM accounts WHERE id = $1', [id])).rows[0];
             const changes = calculateChanges(existing, req.body, { name: 'name', type: 'type', balance: 'balance', creditLimit: 'credit_limit', closingDay: 'closing_day', dueDay: 'due_day' });
-            await pool.query(`INSERT INTO accounts (id, name, type, balance, user_id, credit_limit, closing_day, due_day) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$6, closing_day=$7, due_day=$8, deleted_at=NULL`, [id, name, type, balance, req.user.id, creditLimit||null, closingDay||null, dueDay||null]);
+            
+            // Insert with family_id
+            await pool.query(`INSERT INTO accounts (id, name, type, balance, user_id, family_id, credit_limit, closing_day, due_day) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$7, closing_day=$8, due_day=$9, deleted_at=NULL`, 
+            [id, name, type, balance, req.user.id, familyId, creditLimit||null, closingDay||null, dueDay||null]);
+            
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'account', id, `Conta: ${name}`, existing, changes);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
@@ -91,7 +118,8 @@ export default function(logAudit) {
     router.delete('/accounts/:id', authenticateToken, async (req, res) => {
         try {
             const prev = (await pool.query('SELECT * FROM accounts WHERE id=$1', [req.params.id])).rows[0];
-            await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, req.user.id]);
+            // Soft delete with validation (must own directly or via family)
+            await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND (user_id = $2 OR family_id = (SELECT family_id FROM users WHERE id = $2))`, [req.params.id, req.user.id]);
             await logAudit(pool, req.user.id, 'DELETE', 'account', req.params.id, `Conta: ${prev?.name}`, prev);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -101,10 +129,14 @@ export default function(logAudit) {
     router.post('/transactions', authenticateToken, async (req, res) => {
         const t = req.body; const u = req.user.id;
         try {
+            const familyId = await getFamilyId(u);
+            await pool.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS family_id TEXT`);
+
             const existing = (await pool.query('SELECT * FROM transactions WHERE id=$1', [t.id])).rows[0];
             const changes = calculateChanges(existing, t, { description: 'description', amount: 'amount', type: 'type', category: 'category', date: 'date', status: 'status', accountId: 'account_id', destinationAccountId: 'destination_account_id' });
-            await pool.query(`INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, goal_id, user_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id, created_by, updated_by, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $23, NOW()) ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, goal_id=$15, branch_id=$17, cost_center_id=$18, department_id=$19, project_id=$20, classification=$21, destination_branch_id=$22, updated_by=$23, updated_at=NOW(), deleted_at=NULL`, 
-            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate||0, sanitizeValue(t.contactId), sanitizeValue(t.goalId), u, sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId), t.classification||'STANDARD', sanitizeValue(t.destinationBranchId), u]);
+            
+            await pool.query(`INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, is_recurring, recurrence_frequency, recurrence_end_date, interest_rate, contact_id, goal_id, user_id, family_id, branch_id, cost_center_id, department_id, project_id, classification, destination_branch_id, created_by, updated_by, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $24, NOW()) ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, is_recurring=$10, recurrence_frequency=$11, recurrence_end_date=$12, interest_rate=$13, contact_id=$14, goal_id=$15, branch_id=$18, cost_center_id=$19, department_id=$20, project_id=$21, classification=$22, destination_branch_id=$23, updated_by=$24, updated_at=NOW(), deleted_at=NULL`, 
+            [t.id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, sanitizeValue(t.destinationAccountId), t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, t.interestRate||0, sanitizeValue(t.contactId), sanitizeValue(t.goalId), u, familyId, sanitizeValue(t.branchId), sanitizeValue(t.costCenterId), sanitizeValue(t.departmentId), sanitizeValue(t.projectId), t.classification||'STANDARD', sanitizeValue(t.destinationBranchId), u]);
             
             if (t.goalId && t.status === 'PAID') {
                 const diff = parseFloat(t.amount) - (existing && existing.goal_id === t.goalId ? parseFloat(existing.amount) : 0);
@@ -117,7 +149,8 @@ export default function(logAudit) {
     router.delete('/transactions/:id', authenticateToken, async (req, res) => {
         try {
             const prev = (await pool.query('SELECT * FROM transactions WHERE id=$1', [req.params.id])).rows[0];
-            await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, req.user.id]);
+            // Validate ownership/family
+            await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND (user_id = $2 OR family_id = (SELECT family_id FROM users WHERE id = $2))`, [req.params.id, req.user.id]);
             if (prev && prev.goal_id && prev.status === 'PAID') await pool.query(`UPDATE goals SET current_amount = current_amount - $1 WHERE id = $2`, [prev.amount, prev.goal_id]);
             await logAudit(pool, req.user.id, 'DELETE', 'transaction', req.params.id, prev?.description, prev);
             res.json({ success: true });
@@ -128,9 +161,12 @@ export default function(logAudit) {
     router.post('/categories', authenticateToken, async (req, res) => {
         const { id, name, type } = req.body;
         try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS family_id TEXT`);
+
             const existing = (await pool.query('SELECT * FROM categories WHERE id=$1', [id])).rows[0];
             const changes = calculateChanges(existing, req.body, { name: 'name', type: 'type' });
-            await pool.query(`INSERT INTO categories (id, name, type, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`, [id, name, type||null, req.user.id]);
+            await pool.query(`INSERT INTO categories (id, name, type, user_id, family_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`, [id, name, type||null, req.user.id, familyId]);
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'category', id, name, existing, changes);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -138,7 +174,7 @@ export default function(logAudit) {
     router.delete('/categories/:id', authenticateToken, async (req, res) => {
         try {
             const prev = (await pool.query('SELECT * FROM categories WHERE id=$1', [req.params.id])).rows[0];
-            await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, req.user.id]);
+            await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND (user_id = $2 OR family_id = (SELECT family_id FROM users WHERE id = $2))`, [req.params.id, req.user.id]);
             await logAudit(pool, req.user.id, 'DELETE', 'category', req.params.id, prev?.name, prev);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -148,9 +184,12 @@ export default function(logAudit) {
     router.post('/goals', authenticateToken, async (req, res) => {
         const { id, name, targetAmount, currentAmount, deadline } = req.body;
         try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS family_id TEXT`);
+
             const existing = (await pool.query('SELECT * FROM goals WHERE id=$1', [id])).rows[0];
             const changes = calculateChanges(existing, req.body, { name: 'name', targetAmount: 'target_amount', currentAmount: 'current_amount', deadline: 'deadline' });
-            await pool.query(`INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET name=$2, target_amount=$3, current_amount=$4, deadline=$5, deleted_at=NULL`, [id, name, targetAmount, currentAmount, deadline||null, req.user.id]);
+            await pool.query(`INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id, family_id) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET name=$2, target_amount=$3, current_amount=$4, deadline=$5, deleted_at=NULL`, [id, name, targetAmount, currentAmount, deadline||null, req.user.id, familyId]);
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'goal', id, name, existing, changes);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -158,7 +197,7 @@ export default function(logAudit) {
     router.delete('/goals/:id', authenticateToken, async (req, res) => {
         try {
             const prev = (await pool.query('SELECT * FROM goals WHERE id=$1', [req.params.id])).rows[0];
-            await pool.query(`UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, req.user.id]);
+            await pool.query(`UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND (user_id = $2 OR family_id = (SELECT family_id FROM users WHERE id = $2))`, [req.params.id, req.user.id]);
             await logAudit(pool, req.user.id, 'DELETE', 'goal', req.params.id, prev?.name, prev);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }

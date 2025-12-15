@@ -7,13 +7,22 @@ const router = express.Router();
 
 export default function(logAudit) {
 
+    // --- HELPER ---
+    const getFamilyId = async (userId) => {
+        const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        return res.rows[0]?.family_id || userId;
+    };
+
     // --- CONTACTS ---
     router.post('/contacts', authenticateToken, async (req, res) => {
         const { id, name, email, phone, document, pixKey } = req.body;
         try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS family_id TEXT`);
+
             const existing = (await pool.query('SELECT * FROM contacts WHERE id=$1', [id])).rows[0];
             const changes = calculateChanges(existing, req.body, { name: 'name', email: 'email', phone: 'phone', document: 'document', pixKey: 'pix_key' });
-            await pool.query(`INSERT INTO contacts (id, name, user_id, email, phone, document, pix_key) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET name=$2, email=$4, phone=$5, document=$6, pix_key=$7, deleted_at=NULL`, [id, name, req.user.id, sanitizeValue(email), sanitizeValue(phone), sanitizeValue(document), sanitizeValue(pixKey)]);
+            await pool.query(`INSERT INTO contacts (id, name, user_id, family_id, email, phone, document, pix_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET name=$2, email=$5, phone=$6, document=$7, pix_key=$8, deleted_at=NULL`, [id, name, req.user.id, familyId, sanitizeValue(email), sanitizeValue(phone), sanitizeValue(document), sanitizeValue(pixKey)]);
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'contact', id, name, existing, changes);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -21,7 +30,7 @@ export default function(logAudit) {
     router.delete('/contacts/:id', authenticateToken, async (req, res) => {
         try {
             const prev = (await pool.query('SELECT * FROM contacts WHERE id=$1', [req.params.id])).rows[0];
-            await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND ${familyCheckParam2}`, [req.params.id, req.user.id]);
+            await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND (user_id = $2 OR family_id = (SELECT family_id FROM users WHERE id = $2))`, [req.params.id, req.user.id]);
             await logAudit(pool, req.user.id, 'DELETE', 'contact', req.params.id, prev?.name, prev);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }

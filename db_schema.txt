@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     type TEXT NOT NULL, -- WALLET, BANK, CARD, INVESTMENT
     balance DECIMAL(15,2) DEFAULT 0,
     user_id TEXT REFERENCES users(id),
+    family_id TEXT, -- Vínculo forte com a Família/Workspace
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     credit_limit DECIMAL(15,2), -- Novo: Limite do Cartão
     closing_day INTEGER,        -- Novo: Dia de Fechamento da Fatura
@@ -42,7 +43,24 @@ CREATE TABLE IF NOT EXISTS contacts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     user_id TEXT REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    family_id TEXT, -- Vínculo forte com a Família/Workspace
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    email TEXT,
+    phone TEXT,
+    document TEXT,
+    pix_key TEXT,
+    deleted_at TIMESTAMP
+);
+
+-- Criação da Tabela de Categorias
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT, -- INCOME, EXPENSE
+    user_id TEXT REFERENCES users(id),
+    family_id TEXT, -- Vínculo forte com a Família/Workspace
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
 );
 
 -- Criação da Tabela de Transações
@@ -59,6 +77,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL, -- Coluna para Transferências
     contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL, -- Vínculo com Contato
     user_id TEXT REFERENCES users(id),
+    family_id TEXT, -- Vínculo forte com a Família/Workspace
     is_recurring BOOLEAN DEFAULT FALSE,
     recurrence_frequency TEXT, -- WEEKLY, MONTHLY, YEARLY
     recurrence_end_date DATE,
@@ -74,6 +93,7 @@ CREATE TABLE IF NOT EXISTS goals (
     current_amount DECIMAL(15,2) NOT NULL,
     deadline DATE,
     user_id TEXT REFERENCES users(id),
+    family_id TEXT, -- Vínculo forte com a Família/Workspace
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
