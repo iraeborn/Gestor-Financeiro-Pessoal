@@ -1,6 +1,8 @@
 
 import 'dotenv/config';
 import express from 'express';
+import { createServer } from 'http'; // Import http server
+import { Server } from 'socket.io'; // Import Socket.io
 import pg from 'pg';
 const { Pool } = pg;
 import cors from 'cors';
@@ -16,6 +18,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app); // Wrap express in http server
+
+// --- Socket.io Setup ---
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*", // Em produção, restrinja isso para seu domínio
+    methods: ["GET", "POST"]
+  }
+});
+
+// Map para rastrear quais sockets pertencem a qual family_id
+const userSocketMap = new Map(); // socketId -> { userId, familyId }
+
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  // O cliente envia um evento 'join_family' ao conectar
+  socket.on('join_family', (familyId) => {
+    socket.join(familyId);
+    console.log(`Socket ${socket.id} joined family room: ${familyId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+});
 
 // 1. Logger Middleware
 app.use((req, res, next) => {
@@ -44,12 +72,32 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
 
 const pool = new Pool(poolConfig);
 
-// Helper para Auditoria
+// Helper para Auditoria & BROADCAST SOCKET
 const logAudit = async (client, userId, action, entity, entityId, details, previousState = null, changes = null) => {
+    // 1. Persist Log
     await client.query(
         `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [userId, action, entity, entityId, details, previousState, changes]
     );
+
+    // 2. Real-time Broadcast via WebSocket
+    try {
+        // Find the user's family_id to broadcast only to relevant members
+        const res = await client.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+        const familyId = res.rows[0]?.family_id || userId;
+        
+        // Emit to everyone in the room EXCEPT the sender (optional, but good for reducing echo if client updates optimistically)
+        // For simplicity in this app (Single Source of Truth), we broadcast to ALL including sender to force a clean refresh.
+        io.to(familyId).emit('DATA_UPDATED', {
+            action,
+            entity,
+            actorId: userId,
+            timestamp: new Date()
+        });
+        console.log(`Broadcasted update to family ${familyId}`);
+    } catch (e) {
+        console.error("Socket broadcast error:", e);
+    }
 };
 
 // Helper para calcular Diff entre objeto antigo (DB SnakeCase) e novo (Req Body CamelCase)
@@ -874,4 +922,4 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));

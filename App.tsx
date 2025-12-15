@@ -23,6 +23,7 @@ import { loadInitialData, api, logout, refreshUser } from './services/storageSer
 import { AppState, ViewMode, Transaction, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment, FinancialGoal, TransactionType } from './types';
 import { Menu, Loader2 } from 'lucide-react';
 import { useAlert, useConfirm } from './components/AlertSystem';
+import { io } from 'socket.io-client';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -53,7 +54,6 @@ const App: React.FC = () => {
 
   // --- CORE DATA SYNCHRONIZATION ---
   
-  // Função central para recarregar dados do servidor (Single Source of Truth)
   const refreshData = useCallback(async (silent = false) => {
       if (!silent) setIsLoading(true);
       try {
@@ -66,7 +66,33 @@ const App: React.FC = () => {
       }
   }, []);
 
-  // Initial Load & Polling Setup
+  // Socket Connection Effect
+  useEffect(() => {
+      if (!currentUser || currentUser.role === UserRole.ADMIN) return;
+
+      const socket = io(); // Connect to same origin
+
+      socket.on('connect', () => {
+          console.log('Connected to WebSocket');
+          // Join specific family room
+          if (currentUser.familyId) {
+              socket.emit('join_family', currentUser.familyId);
+          }
+      });
+
+      socket.on('DATA_UPDATED', (payload) => {
+          console.log('Received update via Socket:', payload);
+          // Optional: Check payload.actorId to ignore self-updates if Optimistic UI was perfect,
+          // but for safety we refresh anyway to sync DB state.
+          refreshData(true);
+      });
+
+      return () => {
+          socket.disconnect();
+      };
+  }, [currentUser, refreshData]);
+
+  // Initial Load
   useEffect(() => {
     const init = async () => {
       const token = localStorage.getItem('token');
@@ -100,20 +126,12 @@ const App: React.FC = () => {
               return;
           }
           setCurrentUser(localUser);
-          // Tenta carregar dados mesmo com erro de sessão (modo offline/fallback)
           refreshData();
       }
     };
     init();
 
-    // Setup Polling (Sync every 10 seconds to keep multi-users updated)
-    const intervalId = setInterval(() => {
-        if (localStorage.getItem('token')) {
-            refreshData(true); // Silent refresh
-        }
-    }, 10000);
-
-    // Refresh on Window Focus (User comes back to tab)
+    // Refresh on Window Focus (Fallback)
     const handleFocus = () => {
         if (localStorage.getItem('token')) {
             refreshData(true);
@@ -122,7 +140,6 @@ const App: React.FC = () => {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-        clearInterval(intervalId);
         window.removeEventListener('focus', handleFocus);
     };
   }, [refreshData]);
@@ -148,27 +165,25 @@ const App: React.FC = () => {
     }
   };
 
-  // --- CRUD HANDLERS (UPDATED TO USE SERVER REFRESH) ---
-  // Instead of manually calculating state (which creates race conditions),
-  // we await the server operation and then refresh the full state.
+  // --- CRUD HANDLERS ---
 
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
     try {
         const transaction: Transaction = { ...newTransaction, id: crypto.randomUUID() };
-
-        // Parallel requests optimization
         const promises = [];
         if (newContact) promises.push(api.saveContact(newContact));
         if (newCategory) promises.push(api.saveCategory(newCategory));
         promises.push(api.saveTransaction(transaction));
-
         await Promise.all(promises);
         
-        await refreshData(true); // Reload data from server to update balances/lists
+        // No need to manually refreshData() here if Socket is working, 
+        // BUT for perceived performance (latency compensation), we can do it or rely on socket.
+        // Let's rely on socket for consistency, or call refreshData(true) for immediate feedback.
+        // Calling it here guarantees UI update even if socket delays slightly.
+        await refreshData(true); 
         showAlert("Transação salva com sucesso!", "success");
     } catch (e: any) {
         showAlert("Erro ao salvar transação: " + e.message, "error");
-        console.error(e);
     }
   };
 
@@ -212,7 +227,6 @@ const App: React.FC = () => {
         : TransactionStatus.PAID;
 
     const updatedT = { ...t, status: newStatus };
-    // Reuse handleEdit logic
     await handleEditTransaction(updatedT);
   };
 
