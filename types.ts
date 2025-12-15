@@ -325,6 +325,58 @@ export interface ServiceAppointment {
     moduleTag: string; // 'ODONTO', 'PHYSIO'
 }
 
+// --- NEW SERVICE MODULE TYPES (OS, Sales, Contracts) ---
+
+export interface ServiceOrder {
+    id: string;
+    number: number;
+    title: string;
+    description?: string;
+    contactId?: string;
+    contactName?: string; // Resolved
+    status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
+    totalAmount: number;
+    startDate?: string;
+    endDate?: string;
+}
+
+export interface Contract {
+    id: string;
+    title: string;
+    contactId?: string;
+    contactName?: string; // Resolved
+    value: number;
+    startDate: string;
+    endDate?: string;
+    status: 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+    billingDay?: number;
+}
+
+export interface CommercialOrder {
+    id: string;
+    type: 'SALE' | 'PURCHASE';
+    description: string;
+    contactId?: string;
+    contactName?: string; // Resolved
+    amount: number;
+    date: string;
+    status: 'DRAFT' | 'CONFIRMED' | 'CANCELED';
+    transactionId?: string;
+}
+
+export interface Invoice {
+    id: string;
+    number?: string;
+    series?: string;
+    type: 'ISS' | 'ICMS';
+    amount: number;
+    issueDate: string;
+    status: 'ISSUED' | 'CANCELED' | 'ERROR';
+    contactId?: string;
+    contactName?: string;
+    fileUrl?: string;
+}
+
 export interface AppState {
   accounts: Account[];
   transactions: Transaction[];
@@ -341,6 +393,11 @@ export interface AppState {
   serviceClients?: ServiceClient[];
   serviceItems?: ServiceItem[];
   serviceAppointments?: ServiceAppointment[];
+  // Services Module Data
+  serviceOrders?: ServiceOrder[];
+  contracts?: Contract[];
+  commercialOrders?: CommercialOrder[];
+  invoices?: Invoice[];
 }
 
 // Updated ViewMode to support Module Hierarchies
@@ -350,16 +407,23 @@ export type ViewMode =
   | 'FIN_TRANSACTIONS' 
   | 'FIN_CALENDAR' 
   | 'FIN_CARDS'
-  | 'FIN_ACCOUNTS' // Novo: Lista de Contas
+  | 'FIN_ACCOUNTS' 
   | 'FIN_REPORTS' 
   | 'FIN_ADVISOR'
   | 'FIN_CATEGORIES'
   | 'FIN_CONTACTS' 
-  | 'FIN_GOALS' // Novo: Metas
+  | 'FIN_GOALS'
   // Odonto
   | 'ODONTO_AGENDA'
   | 'ODONTO_PATIENTS'
   | 'ODONTO_PROCEDURES'
+  // Serviços
+  | 'SRV_OS'
+  | 'SRV_SALES'
+  | 'SRV_PURCHASES'
+  | 'SRV_CONTRACTS'
+  | 'SRV_NF'
+  | 'SRV_CLIENTS'
   // Gestão / Sistema
   | 'SYS_CONTACTS' 
   | 'SYS_LOGS'

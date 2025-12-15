@@ -16,6 +16,7 @@ import CollaborationModal from './components/CollaborationModal';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import ServiceModule from './components/ServiceModule';
+import ServicesView from './components/ServicesView';
 import AccessView from './components/AccessView';
 import CategoriesView from './components/CategoriesView'; 
 import GoalsView from './components/GoalsView';
@@ -40,7 +41,8 @@ const App: React.FC = () => {
   const [state, setState] = useState<AppState>({ 
       accounts: [], transactions: [], goals: [], contacts: [], categories: [],
       branches: [], costCenters: [], departments: [], projects: [],
-      serviceClients: [], serviceItems: [], serviceAppointments: [] 
+      serviceClients: [], serviceItems: [], serviceAppointments: [],
+      serviceOrders: [], contracts: [], commercialOrders: [], invoices: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
@@ -176,10 +178,6 @@ const App: React.FC = () => {
         promises.push(api.saveTransaction(transaction));
         await Promise.all(promises);
         
-        // No need to manually refreshData() here if Socket is working, 
-        // BUT for perceived performance (latency compensation), we can do it or rely on socket.
-        // Let's rely on socket for consistency, or call refreshData(true) for immediate feedback.
-        // Calling it here guarantees UI update even if socket delays slightly.
         await refreshData(true); 
         showAlert("Transação salva com sucesso!", "success");
     } catch (e: any) {
@@ -443,6 +441,16 @@ const App: React.FC = () => {
       showAlert("Agendamento excluído.", "success");
   };
 
+  // --- SERVICE MODULE HANDLERS ---
+  const handleSaveOS = async (os: any) => { try { await api.saveServiceOrder(os); await refreshData(true); showAlert("OS salva.", "success"); } catch(e: any) { showAlert("Erro ao salvar OS", "error"); } };
+  const handleDeleteOS = async (id: string) => { try { await api.deleteServiceOrder(id); await refreshData(true); showAlert("OS excluída.", "success"); } catch(e: any) { showAlert("Erro ao excluir OS", "error"); } };
+  const handleSaveOrder = async (o: any) => { try { await api.saveCommercialOrder(o); await refreshData(true); showAlert("Pedido salvo.", "success"); } catch(e: any) { showAlert("Erro ao salvar Pedido", "error"); } };
+  const handleDeleteOrder = async (id: string) => { try { await api.deleteCommercialOrder(id); await refreshData(true); showAlert("Pedido excluído.", "success"); } catch(e: any) { showAlert("Erro ao excluir Pedido", "error"); } };
+  const handleSaveContract = async (c: any) => { try { await api.saveContract(c); await refreshData(true); showAlert("Contrato salvo.", "success"); } catch(e: any) { showAlert("Erro ao salvar Contrato", "error"); } };
+  const handleDeleteContract = async (id: string) => { try { await api.deleteContract(id); await refreshData(true); showAlert("Contrato excluído.", "success"); } catch(e: any) { showAlert("Erro ao excluir Contrato", "error"); } };
+  const handleSaveInvoice = async (i: any) => { try { await api.saveInvoice(i); await refreshData(true); showAlert("Nota salva.", "success"); } catch(e: any) { showAlert("Erro ao salvar Nota", "error"); } };
+  const handleDeleteInvoice = async (id: string) => { try { await api.deleteInvoice(id); await refreshData(true); showAlert("Nota excluída.", "success"); } catch(e: any) { showAlert("Erro ao excluir Nota", "error"); } };
+
   // --- RENDER ---
 
   if (!currentUser) {
@@ -564,17 +572,7 @@ const App: React.FC = () => {
             />
         );
       case 'FIN_CONTACTS':
-        return (
-            <ContactsView 
-                contacts={state.contacts}
-                serviceClients={state.serviceClients}
-                onAddContact={handleSaveContact}
-                onEditContact={handleSaveContact}
-                onDeleteContact={handleDeleteContact}
-            />
-        );
-      
-      // --- SYSTEM/MANAGEMENT MODULE ---
+      case 'SRV_CLIENTS':
       case 'SYS_CONTACTS':
         return (
             <ContactsView 
@@ -585,6 +583,33 @@ const App: React.FC = () => {
                 onDeleteContact={handleDeleteContact}
             />
         );
+      
+      // --- SERVICE MODULE ---
+      case 'SRV_OS':
+      case 'SRV_SALES':
+      case 'SRV_PURCHASES':
+      case 'SRV_CONTRACTS':
+      case 'SRV_NF':
+        return (
+            <ServicesView
+                currentView={currentView}
+                serviceOrders={state.serviceOrders || []}
+                commercialOrders={state.commercialOrders || []}
+                contracts={state.contracts || []}
+                invoices={state.invoices || []}
+                contacts={state.contacts}
+                onSaveOS={handleSaveOS}
+                onDeleteOS={handleDeleteOS}
+                onSaveOrder={handleSaveOrder}
+                onDeleteOrder={handleDeleteOrder}
+                onSaveContract={handleSaveContract}
+                onDeleteContract={handleDeleteContract}
+                onSaveInvoice={handleSaveInvoice}
+                onDeleteInvoice={handleDeleteInvoice}
+                onAddTransaction={handleAddTransaction}
+            />
+        );
+
       case 'SYS_LOGS':
         return <LogsView />;
       case 'SYS_SETTINGS':

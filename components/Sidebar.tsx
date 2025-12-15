@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { 
     LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
     CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog, Lock
+    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog, Lock, ShoppingBag, FileText, Wrench, FileSignature
 } from 'lucide-react';
 import { ViewMode, User, Workspace } from '../types';
 import { logout, switchContext } from '../services/storageService';
@@ -39,7 +39,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
       'FINANCE': true,
       'ODONTO': true,
-      'SYSTEM': true
+      'SYSTEM': true,
+      'SERVICES': true
   });
   
   // Profile Modal State
@@ -113,6 +114,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
               { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
               { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos', icon: Users },
               { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
+          ]
+      },
+      {
+          id: 'SERVICES',
+          label: 'Serviços & Vendas',
+          icon: ShoppingBag,
+          isVisible: isPJ, // Only for PJ
+          items: [
+              { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
+              { id: 'SRV_SALES', label: 'Vendas', icon: Tag },
+              { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
+              { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
+              { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
+              { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
           ]
       },
       {

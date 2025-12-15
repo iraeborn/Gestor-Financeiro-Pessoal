@@ -41,7 +41,8 @@ export default function(logAudit) {
             const tablesToCheck = [
                 'accounts', 'transactions', 'goals', 'contacts', 'categories', 
                 'branches', 'cost_centers', 'departments', 'projects', 
-                'module_clients', 'module_services', 'module_appointments'
+                'module_clients', 'module_services', 'module_appointments',
+                'service_orders', 'contracts', 'commercial_orders', 'invoices'
             ];
             const ensureCol = async (table) => {
                 try { await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS family_id TEXT`); } catch(e) {}
@@ -71,6 +72,12 @@ export default function(logAudit) {
             const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE ${buildFilter('mc')} AND mc.deleted_at IS NULL`, [activeFamilyId]);
             const services = await pool.query(`SELECT * FROM module_services WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ${buildFilter('ma')} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
+
+            // Services Module (OS, Sales, etc) - Alias explicit mappings
+            const so = await pool.query(`SELECT s.*, c.name as contact_name FROM service_orders s LEFT JOIN contacts c ON s.contact_id = c.id WHERE ${buildFilter('s')} AND s.deleted_at IS NULL ORDER BY s.created_at DESC`, [activeFamilyId]);
+            const co = await pool.query(`SELECT co.*, c.name as contact_name FROM commercial_orders co LEFT JOIN contacts c ON co.contact_id = c.id WHERE ${buildFilter('co')} AND co.deleted_at IS NULL ORDER BY co.date DESC`, [activeFamilyId]);
+            const ct = await pool.query(`SELECT ct.*, c.name as contact_name FROM contracts ct LEFT JOIN contacts c ON ct.contact_id = c.id WHERE ${buildFilter('ct')} AND ct.deleted_at IS NULL ORDER BY ct.created_at DESC`, [activeFamilyId]);
+            const inv = await pool.query(`SELECT i.*, c.name as contact_name FROM invoices i LEFT JOIN contacts c ON i.contact_id = c.id WHERE ${buildFilter('i')} AND i.deleted_at IS NULL ORDER BY i.issue_date DESC`, [activeFamilyId]);
 
             // Categorias Padrão
             if (categories.rows.length === 0) {
@@ -116,7 +123,13 @@ export default function(logAudit) {
                 projects: projects.rows.map(r => ({ id: r.id, name: r.name })),
                 serviceClients: clients.rows.map(r => ({ id: r.id, contactId: r.contact_id, contactName: r.contact_name, contactEmail: r.contact_email, contactPhone: r.contact_phone, notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined, insurance: r.insurance, allergies: r.allergies, medications: r.medications, moduleTag: r.module_tag })),
                 serviceItems: services.rows.map(r => ({ id: r.id, name: r.name, code: r.code, defaultPrice: parseFloat(r.default_price), moduleTag: r.module_tag })),
-                serviceAppointments: appts.rows.map(r => ({ id: r.id, clientId: r.client_id, clientName: r.client_name, serviceId: r.service_id, serviceName: r.service_name, date: r.date, status: r.status, notes: r.notes, transactionId: r.transaction_id, moduleTag: r.module_tag }))
+                serviceAppointments: appts.rows.map(r => ({ id: r.id, clientId: r.client_id, clientName: r.client_name, serviceId: r.service_id, serviceName: r.service_name, date: r.date, status: r.status, notes: r.notes, transactionId: r.transaction_id, moduleTag: r.module_tag })),
+                
+                // Services Module Data Mappers
+                serviceOrders: so.rows.map(r => ({ id: r.id, number: r.number, title: r.title, description: r.description, contactId: r.contact_id, contactName: r.contact_name, status: r.status, totalAmount: parseFloat(r.total_amount), startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : undefined, endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : undefined })),
+                commercialOrders: co.rows.map(r => ({ id: r.id, type: r.type, description: r.description, contactId: r.contact_id, contactName: r.contact_name, amount: parseFloat(r.amount), date: new Date(r.date).toISOString().split('T')[0], status: r.status, transactionId: r.transaction_id })),
+                contracts: ct.rows.map(r => ({ id: r.id, title: r.title, contactId: r.contact_id, contactName: r.contact_name, value: parseFloat(r.value), startDate: new Date(r.start_date).toISOString().split('T')[0], endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : undefined, status: r.status, billingDay: r.billing_day })),
+                invoices: inv.rows.map(r => ({ id: r.id, number: r.number, series: r.series, type: r.type, amount: parseFloat(r.amount), issueDate: new Date(r.issue_date).toISOString().split('T')[0], status: r.status, contactId: r.contact_id, contactName: r.contact_name, fileUrl: r.file_url }))
             });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });

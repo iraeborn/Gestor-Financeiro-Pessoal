@@ -108,3 +108,71 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     status TEXT DEFAULT 'SENT',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- MÓDULO SERVIÇOS --
+
+-- Ordens de Serviço
+CREATE TABLE IF NOT EXISTS service_orders (
+    id TEXT PRIMARY KEY,
+    number SERIAL, -- Número sequencial visível
+    title TEXT NOT NULL,
+    description TEXT,
+    contact_id TEXT REFERENCES contacts(id),
+    status TEXT NOT NULL, -- OPEN, IN_PROGRESS, DONE, CANCELED
+    total_amount DECIMAL(15,2) DEFAULT 0,
+    start_date DATE,
+    end_date DATE,
+    user_id TEXT REFERENCES users(id),
+    family_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+
+-- Contratos
+CREATE TABLE IF NOT EXISTS contracts (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    contact_id TEXT REFERENCES contacts(id),
+    value DECIMAL(15,2) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    status TEXT NOT NULL, -- ACTIVE, EXPIRED, CANCELED
+    billing_day INTEGER, -- Dia de faturamento
+    user_id TEXT REFERENCES users(id),
+    family_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+
+-- Pedidos de Venda / Compra (Simplificado)
+CREATE TABLE IF NOT EXISTS commercial_orders (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL, -- SALE, PURCHASE
+    description TEXT NOT NULL,
+    contact_id TEXT REFERENCES contacts(id),
+    amount DECIMAL(15,2) NOT NULL,
+    date DATE NOT NULL,
+    status TEXT NOT NULL, -- DRAFT, CONFIRMED, CANCELED
+    transaction_id TEXT, -- Link para transação financeira gerada
+    user_id TEXT REFERENCES users(id),
+    family_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+
+-- Notas Fiscais (Registro)
+CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    number TEXT,
+    series TEXT,
+    type TEXT NOT NULL, -- ISS, ICMS
+    amount DECIMAL(15,2) NOT NULL,
+    issue_date DATE NOT NULL,
+    status TEXT NOT NULL, -- ISSUED, CANCELED, ERROR
+    contact_id TEXT REFERENCES contacts(id),
+    file_url TEXT, -- Link para PDF/XML
+    user_id TEXT REFERENCES users(id),
+    family_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);

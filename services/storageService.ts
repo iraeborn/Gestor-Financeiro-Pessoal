@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment, Member, NotificationLog } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, AuditLog, ServiceClient, ServiceItem, ServiceAppointment, Member, NotificationLog, ServiceOrder, CommercialOrder, Contract, Invoice } from '../types';
 
 const API_URL = '/api';
 
@@ -93,8 +93,6 @@ export const updateSettings = async (settings: AppSettings): Promise<User> => {
         headers: getHeaders(),
         body: JSON.stringify({ settings })
     });
-    // Usually settings update doesn't return full user object in some APIs, but let's assume we refresh user locally or fetch again.
-    // For this app, we can just return the current user with updated settings or fetch fresh.
     return await refreshUser();
 };
 
@@ -351,4 +349,45 @@ export const api = {
         const res = await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() });
         return await handleResponse(res);
     },
+    // NEW SERVICE MODULE
+    saveServiceOrder: async (data: ServiceOrder) => {
+        const res = await fetch(`${API_URL}/services/os`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteServiceOrder: async (id: string) => {
+        const res = await fetch(`${API_URL}/services/os/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveCommercialOrder: async (data: CommercialOrder) => {
+        const res = await fetch(`${API_URL}/services/orders`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteCommercialOrder: async (id: string) => {
+        const res = await fetch(`${API_URL}/services/orders/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveContract: async (data: Contract) => {
+        const res = await fetch(`${API_URL}/services/contracts`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteContract: async (id: string) => {
+        const res = await fetch(`${API_URL}/services/contracts/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    saveInvoice: async (data: Invoice) => {
+        const res = await fetch(`${API_URL}/services/invoices`, {
+            method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
+        });
+        return await handleResponse(res);
+    },
+    deleteInvoice: async (id: string) => {
+        const res = await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    }
 };

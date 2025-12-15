@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import financeRoutes from './routes/finance.js';
 import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
+import servicesRoutes from './routes/services.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +80,7 @@ app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit)); // Contains initial-data
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
+app.use('/api', servicesRoutes(logAudit));
 
 // Fallback /api 404
 app.all('/api/*', (req, res) => res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` }));
