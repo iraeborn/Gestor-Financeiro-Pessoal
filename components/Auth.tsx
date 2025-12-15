@@ -26,8 +26,20 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       tradeName: '',
       legalName: '',
       cnae: '',
+      secondaryCnaes: '',
+      
+      // Endereço
+      zipCode: '',
+      street: '',
+      number: '',
+      neighborhood: '',
       city: '',
       state: '',
+      
+      // Contato
+      phone: '',
+      email: '',
+
       taxRegime: TaxRegime.SIMPLES,
       hasEmployees: false,
       issuesInvoices: false
@@ -77,15 +89,37 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       try {
           const data = await consultCnpj(cnpj);
           if (data) {
+              // Mapear CNAEs Secundários
+              let secCnaesStr = '';
+              if (data.cnaes_secundarios && Array.isArray(data.cnaes_secundarios)) {
+                  secCnaesStr = data.cnaes_secundarios.map((item: any) => `${item.codigo} - ${item.descricao}`).join('\n');
+              }
+
               setCompanyData(prev => ({
                   ...prev,
                   tradeName: data.nome_fantasia || data.razao_social,
                   legalName: data.razao_social,
-                  cnae: data.cnae_fiscal_descricao,
+                  cnae: `${data.cnae_fiscal} - ${data.cnae_fiscal_descricao}`,
+                  secondaryCnaes: secCnaesStr,
+                  
+                  // Mapeamento Endereço
+                  zipCode: data.cep,
+                  street: `${data.descricao_tipo_de_logradouro || ''} ${data.logradouro}`.trim(),
+                  number: data.numero,
+                  neighborhood: data.bairro,
                   city: data.municipio,
-                  state: data.uf
+                  state: data.uf,
+                  
+                  // Mapeamento Contato
+                  phone: data.ddd_telefone_1,
+                  email: data.email
               }));
-              setName(data.nome_fantasia || data.razao_social); // Auto-fill main name
+              
+              if (data.nome_fantasia || data.razao_social) {
+                  setName(data.nome_fantasia || data.razao_social); 
+              }
+              // Tentar preencher email se vier da receita e estiver vazio
+              if (data.email && !email) setEmail(data.email.toLowerCase());
           }
       } catch (e) {
           setError("CNPJ não encontrado ou erro na consulta.");
@@ -200,13 +234,36 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                    <div className="col-span-2">
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
                                         <input type="text" value={companyData.legalName} onChange={e => setCompanyData({...companyData, legalName: e.target.value})} className="w-full p-2 rounded border text-sm" />
                                     </div>
-                                    <div>
+                                    <div className="col-span-2">
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
                                         <input type="text" value={companyData.tradeName} onChange={e => setCompanyData({...companyData, tradeName: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
+                                        <input type="text" value={companyData.zipCode} onChange={e => setCompanyData({...companyData, zipCode: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Endereço</label>
+                                        <input type="text" value={companyData.street} onChange={e => setCompanyData({...companyData, street: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
+                                        <input type="text" value={companyData.number} onChange={e => setCompanyData({...companyData, number: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
+                                        <input type="text" value={companyData.neighborhood} onChange={e => setCompanyData({...companyData, neighborhood: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Cidade/UF</label>
+                                        <input type="text" value={`${companyData.city}/${companyData.state}`} disabled className="w-full p-2 rounded border text-sm bg-gray-100" />
                                     </div>
                                 </div>
 
@@ -215,16 +272,16 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                     <input type="text" value={companyData.cnae} onChange={e => setCompanyData({...companyData, cnae: e.target.value})} className="w-full p-2 rounded border text-sm" />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                {companyData.secondaryCnaes && (
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
-                                        <input type="text" value={companyData.city} onChange={e => setCompanyData({...companyData, city: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">CNAEs Secundários</label>
+                                        <textarea 
+                                            value={companyData.secondaryCnaes} 
+                                            readOnly 
+                                            className="w-full p-2 rounded border text-xs bg-gray-50 h-20 overflow-y-auto resize-none"
+                                        />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Estado (UF)</label>
-                                        <input type="text" value={companyData.state} onChange={e => setCompanyData({...companyData, state: e.target.value})} className="w-full p-2 rounded border text-sm" />
-                                    </div>
-                                </div>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>

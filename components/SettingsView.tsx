@@ -41,7 +41,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   // PJ Forms State
   const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { 
       tradeName: '', legalName: '', cnpj: '', 
-      taxRegime: TaxRegime.SIMPLES, cnae: '', city: '', state: '', hasEmployees: false, issuesInvoices: false 
+      taxRegime: TaxRegime.SIMPLES, cnae: '', secondaryCnaes: '', 
+      zipCode: '', street: '', number: '', neighborhood: '', city: '', state: '', phone: '', email: '',
+      hasEmployees: false, issuesInvoices: false 
   });
   const [loadingCnpj, setLoadingCnpj] = useState(false);
 
@@ -121,13 +123,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       try {
           const data = await consultCnpj(companyForm.cnpj);
           if (data) {
+              // Mapear CNAEs Secundários
+              let secCnaesStr = '';
+              if (data.cnaes_secundarios && Array.isArray(data.cnaes_secundarios)) {
+                  secCnaesStr = data.cnaes_secundarios.map((item: any) => `${item.codigo} - ${item.descricao}`).join('\n');
+              }
+
               setCompanyForm(prev => ({
                   ...prev,
                   tradeName: data.nome_fantasia || data.razao_social,
                   legalName: data.razao_social,
-                  cnae: data.cnae_fiscal_descricao,
+                  cnae: `${data.cnae_fiscal} - ${data.cnae_fiscal_descricao}`,
+                  secondaryCnaes: secCnaesStr,
+                  zipCode: data.cep,
+                  street: `${data.descricao_tipo_de_logradouro || ''} ${data.logradouro}`.trim(),
+                  number: data.numero,
+                  neighborhood: data.bairro,
                   city: data.municipio,
-                  state: data.uf
+                  state: data.uf,
+                  phone: data.ddd_telefone_1,
+                  email: data.email
               }));
               showAlert("Dados carregados com sucesso!", "success");
           }
@@ -327,7 +342,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                            <div>
+                            <div className="md:col-span-2">
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Razão Social</label>
                                 <input 
                                     type="text"
@@ -336,7 +351,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
-                            <div>
+                            <div className="md:col-span-2">
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Nome Fantasia</label>
                                 <input 
                                     type="text"
@@ -345,27 +360,50 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
-                            
-                            {/* Novos Campos Fiscais */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Regime Tributário</label>
-                                <select
-                                    value={companyForm.taxRegime}
-                                    onChange={e => setCompanyForm({...companyForm, taxRegime: e.target.value as TaxRegime})}
-                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm bg-white"
-                                >
-                                    <option value={TaxRegime.MEI}>MEI</option>
-                                    <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
-                                    <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
-                                    <option value={TaxRegime.REAL}>Lucro Real</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">CNAE Principal</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Telefone</label>
                                 <input 
                                     type="text"
-                                    value={companyForm.cnae}
-                                    onChange={e => setCompanyForm({...companyForm, cnae: e.target.value})}
+                                    value={companyForm.phone}
+                                    onChange={e => setCompanyForm({...companyForm, phone: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            
+                            {/* Endereço */}
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">CEP</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.zipCode}
+                                    onChange={e => setCompanyForm({...companyForm, zipCode: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Logradouro</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.street}
+                                    onChange={e => setCompanyForm({...companyForm, street: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Número</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.number}
+                                    onChange={e => setCompanyForm({...companyForm, number: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Bairro</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.neighborhood}
+                                    onChange={e => setCompanyForm({...companyForm, neighborhood: e.target.value})}
                                     className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
@@ -388,6 +426,41 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     />
                                 </div>
                             </div>
+
+                            {/* Novos Campos Fiscais */}
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Regime Tributário</label>
+                                <select
+                                    value={companyForm.taxRegime}
+                                    onChange={e => setCompanyForm({...companyForm, taxRegime: e.target.value as TaxRegime})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm bg-white"
+                                >
+                                    <option value={TaxRegime.MEI}>MEI</option>
+                                    <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
+                                    <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
+                                    <option value={TaxRegime.REAL}>Lucro Real</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-medium text-gray-500 mb-1">CNAE Principal</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.cnae}
+                                    onChange={e => setCompanyForm({...companyForm, cnae: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            
+                            {companyForm.secondaryCnaes && (
+                                <div className="md:col-span-3">
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">CNAEs Secundários</label>
+                                    <textarea 
+                                        value={companyForm.secondaryCnaes}
+                                        readOnly
+                                        className="w-full rounded-lg border border-gray-200 p-2 text-xs bg-gray-50 h-20 overflow-y-auto resize-none"
+                                    />
+                                </div>
+                            )}
 
                             <div className="md:col-span-3 flex gap-6 pt-2">
                                 <label className="flex items-center gap-2 cursor-pointer">

@@ -157,11 +157,23 @@ export interface CompanyProfile {
   legalName: string; // Razão Social
   cnpj: string;
   userId?: string;
-  // Novos campos tributários e operacionais
+  
+  // Dados Tributários
   taxRegime?: TaxRegime;
   cnae?: string; // Código Principal
+  secondaryCnaes?: string; // Lista formatada de CNAEs secundários
+  
+  // Endereço e Contato
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
   city?: string;
   state?: string;
+  phone?: string;
+  email?: string;
+
+  // Indicadores
   hasEmployees?: boolean;
   issuesInvoices?: boolean;
 }

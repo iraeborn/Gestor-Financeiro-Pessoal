@@ -255,6 +255,15 @@ pool.connect().then(async (client) => {
         await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS state TEXT;`);
         await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS has_employees BOOLEAN DEFAULT FALSE;`);
         await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS issues_invoices BOOLEAN DEFAULT FALSE;`);
+        
+        // Novas colunas para endereço completo e contato (Endereço, Telefone, Email, CNAEs Secundários)
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS secondary_cnaes TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS zip_code TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS street TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS number TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS neighborhood TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS phone TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
 
         await client.query(`CREATE TABLE IF NOT EXISTS branches (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
         await client.query(`CREATE TABLE IF NOT EXISTS cost_centers (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
@@ -440,8 +449,11 @@ app.post('/api/auth/register', async (req, res) => {
     // If PJ and company data provided, create profile immediately
     if (entityType === 'PJ' && companyData) {
         await pool.query(
-            `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            `INSERT INTO company_profiles (
+                id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id,
+                zip_code, street, number, neighborhood, phone, email, secondary_cnaes
+            ) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
             [
                 crypto.randomUUID(),
                 companyData.tradeName || name, 
@@ -453,7 +465,14 @@ app.post('/api/auth/register', async (req, res) => {
                 companyData.state,
                 companyData.hasEmployees || false,
                 companyData.issuesInvoices || false,
-                id
+                id,
+                companyData.zipCode,
+                companyData.street,
+                companyData.number,
+                companyData.neighborhood,
+                companyData.phone,
+                companyData.email,
+                companyData.secondaryCnaes
             ]
         );
     }
@@ -734,7 +753,15 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
                 city: companyRes.rows[0].city,
                 state: companyRes.rows[0].state,
                 hasEmployees: companyRes.rows[0].has_employees,
-                issuesInvoices: companyRes.rows[0].issues_invoices
+                issuesInvoices: companyRes.rows[0].issues_invoices,
+                // Mapeamento dos novos campos
+                zipCode: companyRes.rows[0].zip_code,
+                street: companyRes.rows[0].street,
+                number: companyRes.rows[0].number,
+                neighborhood: companyRes.rows[0].neighborhood,
+                phone: companyRes.rows[0].phone,
+                email: companyRes.rows[0].email,
+                secondaryCnaes: companyRes.rows[0].secondary_cnaes
             } : null,
             branches: branches.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
             costCenters: costCenters.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
@@ -853,18 +880,40 @@ app.delete('/api/goals/:id', authenticateToken, async (req, res) => {
 
 // PJ Routes
 app.post('/api/company', authenticateToken, async (req, res) => {
-    const { id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices } = req.body;
+    const { id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices, zipCode, street, number, neighborhood, phone, email, secondaryCnaes } = req.body;
     try {
         const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
         const existing = (await pool.query('SELECT * FROM company_profiles WHERE user_id = $1', [familyId])).rows[0];
-        const changes = calculateChanges(existing, req.body, { tradeName: 'trade_name', legalName: 'legal_name', cnpj: 'cnpj', taxRegime: 'tax_regime', cnae: 'cnae' });
+        const changes = calculateChanges(existing, req.body, { 
+            tradeName: 'trade_name', 
+            legalName: 'legal_name', 
+            cnpj: 'cnpj', 
+            taxRegime: 'tax_regime', 
+            cnae: 'cnae',
+            zipCode: 'zip_code',
+            street: 'street',
+            number: 'number',
+            neighborhood: 'neighborhood',
+            city: 'city',
+            state: 'state',
+            phone: 'phone',
+            email: 'email',
+            secondaryCnaes: 'secondary_cnaes'
+        });
         
         await pool.query(
-            `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+            `INSERT INTO company_profiles (
+                id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id,
+                zip_code, street, number, neighborhood, phone, email, secondary_cnaes
+            ) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
              ON CONFLICT (user_id) DO UPDATE SET 
-                trade_name=$2, legal_name=$3, cnpj=$4, tax_regime=$5, cnae=$6, city=$7, state=$8, has_employees=$9, issues_invoices=$10`, 
-            [id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices, familyId]
+                trade_name=$2, legal_name=$3, cnpj=$4, tax_regime=$5, cnae=$6, city=$7, state=$8, has_employees=$9, issues_invoices=$10,
+                zip_code=$12, street=$13, number=$14, neighborhood=$15, phone=$16, email=$17, secondary_cnaes=$18`, 
+            [
+                id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices, familyId,
+                zipCode, street, number, neighborhood, phone, email, secondaryCnaes
+            ]
         );
         await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'company', id, tradeName, existing, changes);
         res.json({ success: true });
