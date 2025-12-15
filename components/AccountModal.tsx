@@ -7,7 +7,7 @@ interface AccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (account: Account) => void;
-  initialData?: Account | null;
+  initialData?: Partial<Account> | null;
 }
 
 const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
@@ -23,9 +23,9 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
   useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name,
-        type: initialData.type,
-        balance: initialData.balance.toString(),
+        name: initialData.name || '',
+        type: initialData.type || AccountType.BANK,
+        balance: (initialData.balance !== undefined ? initialData.balance : 0).toString(),
         creditLimit: initialData.creditLimit ? initialData.creditLimit.toString() : '',
         closingDay: initialData.closingDay ? initialData.closingDay.toString() : '',
         dueDay: initialData.dueDay ? initialData.dueDay.toString() : ''
@@ -47,10 +47,10 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      id: initialData ? initialData.id : crypto.randomUUID(),
+      id: (initialData && initialData.id) ? initialData.id : crypto.randomUUID(),
       name: formData.name,
       type: formData.type,
-      balance: parseFloat(formData.balance),
+      balance: parseFloat(formData.balance) || 0,
       creditLimit: formData.type === AccountType.CARD && formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
       closingDay: formData.type === AccountType.CARD && formData.closingDay ? parseInt(formData.closingDay) : undefined,
       dueDay: formData.type === AccountType.CARD && formData.dueDay ? parseInt(formData.dueDay) : undefined,
@@ -63,7 +63,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, in
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h2 className="text-lg font-bold text-gray-800">
-            {initialData ? 'Editar Conta' : 'Nova Conta'}
+            {initialData && initialData.id ? 'Editar Conta' : 'Nova Conta'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />

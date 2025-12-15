@@ -28,7 +28,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const { showConfirm } = useConfirm();
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isTransModalOpen, setIsTransModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editingAccount, setEditingAccount] = useState<Partial<Account> | null>(null);
   
   // Estado para preencher o TransactionModal automaticamente
   const [prefilledTransaction, setPrefilledTransaction] = useState<Partial<Transaction> | null>(null);
@@ -44,11 +44,6 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-      // Nota: A lógica de confirmação já está em App.tsx -> handleDeleteAccount, mas o botão aqui chama onDeleteAccount direto.
-      // Se App.tsx faz o confirm, aqui não precisa.
-      // Porém, em App.tsx `handleDeleteAccount` chama `showConfirm`. Então só chamamos onDeleteAccount.
-      // Ops, `CreditCardsView` chama `onDeleteAccount` que é `handleDeleteAccount` do App.tsx.
-      // Então é só chamar a prop.
       onDeleteAccount(id);
   };
 
@@ -174,7 +169,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           <p className="text-gray-500">Gerencie limites, faturas e datas importantes.</p>
         </div>
         <button 
-          onClick={() => { setEditingAccount({ type: AccountType.CARD } as Account); setIsAccountModalOpen(true); }}
+          onClick={() => { setEditingAccount({ type: AccountType.CARD }); setIsAccountModalOpen(true); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
         >
           <Plus className="w-5 h-5" />
@@ -331,7 +326,7 @@ const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         isOpen={isAccountModalOpen}
         onClose={handleCloseAccountModal}
         onSave={onSaveAccount}
-        initialData={editingAccount}
+        initialData={editingAccount as Account | null}
       />
 
       <TransactionModal 
