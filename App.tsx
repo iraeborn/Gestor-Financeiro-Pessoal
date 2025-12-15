@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import TransactionsView from './components/TransactionsView';
@@ -42,7 +42,7 @@ const App: React.FC = () => {
       serviceClients: [], serviceItems: [], serviceAppointments: [] 
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD'); // Padrão Financeiro
+  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Modal States
@@ -51,7 +51,22 @@ const App: React.FC = () => {
   // Constants
   const ODONTO_TAG = 'ODONTO';
 
-  // Initial Load
+  // --- CORE DATA SYNCHRONIZATION ---
+  
+  // Função central para recarregar dados do servidor (Single Source of Truth)
+  const refreshData = useCallback(async (silent = false) => {
+      if (!silent) setIsLoading(true);
+      try {
+          const data = await loadInitialData();
+          setState(data);
+      } catch (error) {
+          console.error("Sync error:", error);
+      } finally {
+          if (!silent) setIsLoading(false);
+      }
+  }, []);
+
+  // Initial Load & Polling Setup
   useEffect(() => {
     const init = async () => {
       const token = localStorage.getItem('token');
@@ -62,8 +77,8 @@ const App: React.FC = () => {
         return; 
       }
 
-      // 1. Try to load FRESH user data from server (workspaces/permissions might have changed)
       try {
+          // 1. Refresh User Session
           const freshUser = await refreshUser();
           setCurrentUser(freshUser);
           
@@ -71,11 +86,13 @@ const App: React.FC = () => {
               setIsLoading(false);
               return;
           }
+
+          // 2. Load Initial Data
+          await refreshData();
+
       } catch (e) {
-          console.error("Session refresh failed (likely expired):", e);
-          // Fallback to local user if API fails (offline?), but typically logout if token invalid
+          console.error("Session refresh failed:", e);
           const localUser = JSON.parse(userStr);
-          // If token error, we should logout. Assuming 401/403 throws error in refreshUser
           if ((e as Error).message.includes('401') || (e as Error).message.includes('403')) {
               logout();
               setCurrentUser(null);
@@ -83,47 +100,40 @@ const App: React.FC = () => {
               return;
           }
           setCurrentUser(localUser);
-      }
-
-      // 2. Load Financial Data
-      setIsLoading(true);
-      try {
-        const data = await loadInitialData();
-        setState(data);
-      } catch (error) {
-        console.error("Failed to load initial data:", error);
-        // If data load fails due to auth, we logout
-        if ((error as Error).message.includes('Unauthorized')) {
-            logout();
-            setCurrentUser(null);
-        }
-      } finally {
-        setIsLoading(false);
+          // Tenta carregar dados mesmo com erro de sessão (modo offline/fallback)
+          refreshData();
       }
     };
     init();
-  }, []);
+
+    // Setup Polling (Sync every 10 seconds to keep multi-users updated)
+    const intervalId = setInterval(() => {
+        if (localStorage.getItem('token')) {
+            refreshData(true); // Silent refresh
+        }
+    }, 10000);
+
+    // Refresh on Window Focus (User comes back to tab)
+    const handleFocus = () => {
+        if (localStorage.getItem('token')) {
+            refreshData(true);
+        }
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+        clearInterval(intervalId);
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshData]);
 
   const handleLoginSuccess = async (user: User) => {
     setCurrentUser(user);
     setShowAuth(false);
-    
-    if (user.role === UserRole.ADMIN) {
-        return;
-    }
-
-    setIsLoading(true);
-    try {
-        const data = await loadInitialData();
-        setState(data);
-    } catch (e) {
-        console.error(e);
-    }
-    setIsLoading(false);
+    if (user.role === UserRole.ADMIN) return;
+    await refreshData();
   };
 
-  // ... (rest of App component handlers unchanged)
-  
   const handleGetStarted = (type: EntityType, plan: SubscriptionPlan) => {
       setRegisterEntityType(type);
       setRegisterPlan(plan);
@@ -138,64 +148,23 @@ const App: React.FC = () => {
     }
   };
 
+  // --- CRUD HANDLERS (UPDATED TO USE SERVER REFRESH) ---
+  // Instead of manually calculating state (which creates race conditions),
+  // we await the server operation and then refresh the full state.
+
   const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
-    // ... (rest of existing handler code)
     try {
-        const transaction: Transaction = {
-          ...newTransaction,
-          id: crypto.randomUUID(),
-        };
+        const transaction: Transaction = { ...newTransaction, id: crypto.randomUUID() };
 
-        if (newContact) {
-            await api.saveContact(newContact);
-            setState(prev => ({ ...prev, contacts: [...prev.contacts, newContact] }));
-        }
+        // Parallel requests optimization
+        const promises = [];
+        if (newContact) promises.push(api.saveContact(newContact));
+        if (newCategory) promises.push(api.saveCategory(newCategory));
+        promises.push(api.saveTransaction(transaction));
 
-        if (newCategory) {
-            await api.saveCategory(newCategory);
-            setState(prev => ({ ...prev, categories: [...prev.categories, newCategory] }));
-        }
-
-        await api.saveTransaction(transaction);
-
-        setState(prevState => {
-          let updatedAccounts = [...prevState.accounts];
-          let updatedGoals = [...prevState.goals];
-          
-          if (transaction.status === TransactionStatus.PAID) {
-            updatedAccounts = updatedAccounts.map(acc => {
-              if (acc.id === transaction.accountId) {
-                let newBalance = acc.balance;
-                if (transaction.type === TransactionType.INCOME) newBalance += transaction.amount;
-                else newBalance -= transaction.amount;
-                api.saveAccount({ ...acc, balance: newBalance }); 
-                return { ...acc, balance: newBalance };
-              }
-              if (transaction.type === TransactionType.TRANSFER && transaction.destinationAccountId && acc.id === transaction.destinationAccountId) {
-                 const newBalance = acc.balance + transaction.amount;
-                 api.saveAccount({ ...acc, balance: newBalance });
-                 return { ...acc, balance: newBalance };
-              }
-              return acc;
-            });
-
-            if (transaction.goalId) {
-                updatedGoals = updatedGoals.map(g => {
-                    if (g.id === transaction.goalId) {
-                        return { ...g, currentAmount: g.currentAmount + transaction.amount };
-                    }
-                    return g;
-                });
-            }
-          }
-
-          return {
-            ...prevState,
-            accounts: updatedAccounts,
-            goals: updatedGoals,
-            transactions: [transaction, ...prevState.transactions]
-          };
-        });
+        await Promise.all(promises);
+        
+        await refreshData(true); // Reload data from server to update balances/lists
         showAlert("Transação salva com sucesso!", "success");
     } catch (e: any) {
         showAlert("Erro ao salvar transação: " + e.message, "error");
@@ -203,12 +172,10 @@ const App: React.FC = () => {
     }
   };
 
-  // ... (rest of file)
   const handleDeleteTransaction = async (id: string) => {
-    // ... (unchanged)
     const confirm = await showConfirm({
         title: "Excluir Transação",
-        message: "Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita e afetará o saldo se já estiver paga.",
+        message: "Tem certeza que deseja excluir esta transação? O saldo será recalculado automaticamente.",
         variant: "danger",
         confirmText: "Sim, Excluir"
     });
@@ -216,49 +183,8 @@ const App: React.FC = () => {
     if (!confirm) return;
 
     try {
-        const target = state.transactions.find(t => t.id === id);
-        if (!target) return;
-
         await api.deleteTransaction(id);
-
-        setState(prevState => {
-          let updatedAccounts = [...prevState.accounts];
-          let updatedGoals = [...prevState.goals];
-
-          if (target.status === TransactionStatus.PAID) {
-            updatedAccounts = updatedAccounts.map(acc => {
-              if (acc.id === target.accountId) {
-                 let newBalance = acc.balance;
-                 if (target.type === TransactionType.INCOME) newBalance -= target.amount;
-                 else newBalance += target.amount;
-                 api.saveAccount({ ...acc, balance: newBalance });
-                 return { ...acc, balance: newBalance };
-              }
-              if (target.type === TransactionType.TRANSFER && target.destinationAccountId && acc.id === target.destinationAccountId) {
-                  const newBalance = acc.balance - target.amount;
-                  api.saveAccount({ ...acc, balance: newBalance });
-                  return { ...acc, balance: newBalance };
-              }
-              return acc;
-            });
-
-            if (target.goalId) {
-                updatedGoals = updatedGoals.map(g => {
-                    if (g.id === target.goalId) {
-                        return { ...g, currentAmount: g.currentAmount - target.amount };
-                    }
-                    return g;
-                });
-            }
-          }
-
-          return {
-            ...prevState,
-            accounts: updatedAccounts,
-            goals: updatedGoals,
-            transactions: prevState.transactions.filter(t => t.id !== id)
-          };
-        });
+        await refreshData(true);
         showAlert("Transação excluída.", "success");
     } catch (e: any) {
         showAlert("Erro ao excluir transação: " + e.message, "error");
@@ -266,111 +192,34 @@ const App: React.FC = () => {
   };
 
   const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact, newCategory?: Category) => {
-    // ... (unchanged)
     try {
-        const oldT = state.transactions.find(t => t.id === updatedT.id);
-        if (!oldT) return;
+        const promises = [];
+        if (newContact) promises.push(api.saveContact(newContact));
+        if (newCategory) promises.push(api.saveCategory(newCategory));
+        promises.push(api.saveTransaction(updatedT));
 
-        if (newContact) {
-            await api.saveContact(newContact);
-            setState(prev => ({ ...prev, contacts: [...prev.contacts, newContact] }));
-        }
-
-        if (newCategory) {
-            await api.saveCategory(newCategory);
-            setState(prev => ({ ...prev, categories: [...prev.categories, newCategory] }));
-        }
-
-        await api.saveTransaction(updatedT);
-
-        setState(prevState => {
-            let updatedAccounts = [...prevState.accounts];
-            let updatedGoals = [...prevState.goals];
-
-            if (oldT.status === TransactionStatus.PAID) {
-                updatedAccounts = updatedAccounts.map(acc => {
-                    if (acc.id === oldT.accountId) {
-                        let revBalance = acc.balance;
-                        if (oldT.type === TransactionType.INCOME) revBalance -= oldT.amount;
-                        else revBalance += oldT.amount;
-                        return { ...acc, balance: revBalance };
-                    }
-                    if (oldT.type === TransactionType.TRANSFER && oldT.destinationAccountId && acc.id === oldT.destinationAccountId) {
-                        return { ...acc, balance: acc.balance - oldT.amount };
-                    }
-                    return acc;
-                });
-
-                if (oldT.goalId) {
-                    updatedGoals = updatedGoals.map(g => g.id === oldT.goalId ? { ...g, currentAmount: g.currentAmount - oldT.amount } : g);
-                }
-            }
-
-            if (updatedT.status === TransactionStatus.PAID) {
-                 updatedAccounts = updatedAccounts.map(acc => {
-                    if (acc.id === updatedT.accountId) {
-                        let newBalance = acc.balance;
-                        if (updatedT.type === TransactionType.INCOME) newBalance += updatedT.amount;
-                        else newBalance -= updatedT.amount;
-                        return { ...acc, balance: newBalance };
-                    }
-                    if (updatedT.type === TransactionType.TRANSFER && updatedT.destinationAccountId && acc.id === updatedT.destinationAccountId) {
-                        return { ...acc, balance: acc.balance + updatedT.amount };
-                    }
-                    return acc;
-                });
-
-                if (updatedT.goalId) {
-                    updatedGoals = updatedGoals.map(g => g.id === updatedT.goalId ? { ...g, currentAmount: g.currentAmount + updatedT.amount } : g);
-                }
-            }
-            
-            updatedAccounts.forEach(acc => {
-                const original = prevState.accounts.find(a => a.id === acc.id);
-                if (original && original.balance !== acc.balance) {
-                    api.saveAccount(acc);
-                }
-            });
-
-            return {
-                ...prevState,
-                accounts: updatedAccounts,
-                goals: updatedGoals,
-                transactions: prevState.transactions.map(t => t.id === updatedT.id ? updatedT : t)
-            };
-        });
+        await Promise.all(promises);
+        await refreshData(true);
         showAlert("Transação atualizada.", "success");
     } catch (e: any) {
         showAlert("Erro ao editar transação: " + e.message, "error");
     }
   };
 
-  const handleUpdateStatus = (t: Transaction) => {
+  const handleUpdateStatus = async (t: Transaction) => {
     const newStatus = t.status === TransactionStatus.PAID 
         ? TransactionStatus.PENDING 
         : TransactionStatus.PAID;
 
     const updatedT = { ...t, status: newStatus };
-    handleEditTransaction(updatedT);
+    // Reuse handleEdit logic
+    await handleEditTransaction(updatedT);
   };
 
   const handleSaveAccount = async (account: Account) => {
     try {
         await api.saveAccount(account);
-        setState(prevState => {
-          const exists = prevState.accounts.find(a => a.id === account.id);
-          if (exists) {
-            return {
-              ...prevState,
-              accounts: prevState.accounts.map(a => a.id === account.id ? account : a)
-            };
-          } else {
-            return {
-              ...prevState,
-              accounts: [...prevState.accounts, account]
-            };
-          }
-        });
+        await refreshData(true);
         showAlert("Conta salva com sucesso.", "success");
     } catch (e: any) {
         showAlert("Erro ao salvar conta: " + e.message, "error");
@@ -380,10 +229,7 @@ const App: React.FC = () => {
   const handleDeleteAccount = async (id: string) => {
     try {
         await api.deleteAccount(id);
-        setState(prevState => ({
-          ...prevState,
-          accounts: prevState.accounts.filter(a => a.id !== id)
-        }));
+        await refreshData(true);
         showAlert("Conta excluída.", "success");
     } catch (e: any) {
         showAlert("Erro ao excluir conta: " + e.message, "error");
@@ -393,13 +239,7 @@ const App: React.FC = () => {
   const handleSaveContact = async (contact: Contact) => {
       try {
           await api.saveContact(contact);
-          setState(prevState => {
-              const exists = prevState.contacts.find(c => c.id === contact.id);
-              if (exists) {
-                  return { ...prevState, contacts: prevState.contacts.map(c => c.id === contact.id ? contact : c) };
-              }
-              return { ...prevState, contacts: [...prevState.contacts, contact].sort((a,b) => a.name.localeCompare(b.name)) };
-          });
+          await refreshData(true);
           showAlert("Contato salvo.", "success");
       } catch (e: any) {
           showAlert("Erro ao salvar contato: " + e.message, "error");
@@ -409,14 +249,14 @@ const App: React.FC = () => {
   const handleDeleteContact = async (id: string) => {
       const confirm = await showConfirm({
           title: "Excluir Contato",
-          message: "Excluir contato? O histórico de transações não será perdido, mas o nome do contato será desvinculado.",
+          message: "Excluir contato? O histórico de transações não será perdido.",
           variant: "danger"
       });
       if(!confirm) return;
 
       try {
           await api.deleteContact(id);
-          setState(prevState => ({ ...prevState, contacts: prevState.contacts.filter(c => c.id !== id) }));
+          await refreshData(true);
           showAlert("Contato excluído.", "success");
       } catch (e: any) {
           showAlert("Erro ao excluir contato: " + e.message, "error");
@@ -426,13 +266,7 @@ const App: React.FC = () => {
   const handleSaveCategory = async (category: Category) => {
       try {
           await api.saveCategory(category);
-          setState(prev => {
-              const exists = prev.categories.find(c => c.id === category.id);
-              if (exists) {
-                  return { ...prev, categories: prev.categories.map(c => c.id === category.id ? category : c) }
-              }
-              return { ...prev, categories: [...prev.categories, category].sort((a,b) => a.name.localeCompare(b.name)) }
-          });
+          await refreshData(true);
           showAlert("Categoria salva.", "success");
       } catch (e: any) {
           showAlert("Erro ao salvar categoria: " + e.message, "error");
@@ -449,7 +283,7 @@ const App: React.FC = () => {
 
       try {
           await api.deleteCategory(id);
-          setState(prev => ({ ...prev, categories: prev.categories.filter(c => c.id !== id) }));
+          await refreshData(true);
           showAlert("Categoria excluída.", "success");
       } catch (e: any) {
           showAlert("Erro ao excluir categoria: " + e.message, "error");
@@ -459,51 +293,26 @@ const App: React.FC = () => {
   const handleSaveGoal = async (goal: FinancialGoal) => {
       try {
           await api.saveGoal(goal);
-          setState(prev => {
-              const exists = prev.goals.find(g => g.id === goal.id);
-              if (exists) return { ...prev, goals: prev.goals.map(g => g.id === goal.id ? goal : g) };
-              return { ...prev, goals: [...prev.goals, goal] };
-          });
+          await refreshData(true);
       } catch(e: any) { showAlert("Erro ao salvar meta", "error"); }
   };
 
   const handleDeleteGoal = async (id: string) => {
       try {
           await api.deleteGoal(id);
-          setState(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
+          await refreshData(true);
       } catch(e: any) { showAlert("Erro ao excluir meta", "error"); }
   };
 
   const handleSavePJEntity = async (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => {
       try {
-          if (type === 'company') {
-              await api.saveCompanyProfile(data);
-              setState(prev => ({ ...prev, companyProfile: data }));
-          } else if (type === 'branch') {
-              await api.saveBranch(data);
-              setState(prev => {
-                  const exists = prev.branches.find(i => i.id === data.id);
-                  return { ...prev, branches: exists ? prev.branches.map(i => i.id === data.id ? data : i) : [...prev.branches, data] };
-              });
-          } else if (type === 'costCenter') {
-              await api.saveCostCenter(data);
-              setState(prev => {
-                  const exists = prev.costCenters.find(i => i.id === data.id);
-                  return { ...prev, costCenters: exists ? prev.costCenters.map(i => i.id === data.id ? data : i) : [...prev.costCenters, data] };
-              });
-          } else if (type === 'department') {
-              await api.saveDepartment(data);
-              setState(prev => {
-                  const exists = prev.departments.find(i => i.id === data.id);
-                  return { ...prev, departments: exists ? prev.departments.map(i => i.id === data.id ? data : i) : [...prev.departments, data] };
-              });
-          } else if (type === 'project') {
-              await api.saveProject(data);
-              setState(prev => {
-                  const exists = prev.projects.find(i => i.id === data.id);
-                  return { ...prev, projects: exists ? prev.projects.map(i => i.id === data.id ? data : i) : [...prev.projects, data] };
-              });
-          }
+          if (type === 'company') await api.saveCompanyProfile(data);
+          else if (type === 'branch') await api.saveBranch(data);
+          else if (type === 'costCenter') await api.saveCostCenter(data);
+          else if (type === 'department') await api.saveDepartment(data);
+          else if (type === 'project') await api.saveProject(data);
+          
+          await refreshData(true);
           showAlert("Dados salvos com sucesso.", "success");
       } catch (e: any) {
           showAlert(`Erro ao salvar ${type}: ` + e.message, "error");
@@ -519,19 +328,12 @@ const App: React.FC = () => {
       if(!confirm) return;
 
       try {
-          if (type === 'branch') {
-              await api.deleteBranch(id);
-              setState(prev => ({ ...prev, branches: prev.branches.filter(i => i.id !== id) }));
-          } else if (type === 'costCenter') {
-              await api.deleteCostCenter(id);
-              setState(prev => ({ ...prev, costCenters: prev.costCenters.filter(i => i.id !== id) }));
-          } else if (type === 'department') {
-              await api.deleteDepartment(id);
-              setState(prev => ({ ...prev, departments: prev.departments.filter(i => i.id !== id) }));
-          } else if (type === 'project') {
-              await api.deleteProject(id);
-              setState(prev => ({ ...prev, projects: prev.projects.filter(i => i.id !== id) }));
-          }
+          if (type === 'branch') await api.deleteBranch(id);
+          else if (type === 'costCenter') await api.deleteCostCenter(id);
+          else if (type === 'department') await api.deleteDepartment(id);
+          else if (type === 'project') await api.deleteProject(id);
+          
+          await refreshData(true);
           showAlert("Item excluído.", "success");
       } catch (e: any) {
           showAlert(`Erro ao excluir ${type}: ` + e.message, "error");
@@ -542,7 +344,7 @@ const App: React.FC = () => {
   const handleSaveServiceClient = async (c: Partial<ServiceClient>) => {
       try {
           let finalContactId = c.contactId;
-          let contactName = c.contactName;
+          const contactName = c.contactName;
 
           if (!finalContactId && contactName) {
               const newContactId = crypto.randomUUID();
@@ -553,7 +355,6 @@ const App: React.FC = () => {
                   phone: c.contactPhone
               };
               await api.saveContact(newContact);
-              setState(prev => ({ ...prev, contacts: [...prev.contacts, newContact].sort((a,b) => a.name.localeCompare(b.name)) }));
               finalContactId = newContactId;
           }
 
@@ -571,25 +372,11 @@ const App: React.FC = () => {
           };
 
           await api.saveServiceClient(clientToSave);
-          
-          setState(prev => {
-              const exists = prev.serviceClients?.find(sc => sc.id === clientToSave.id);
-              const contact = prev.contacts.find(co => co.id === finalContactId) || (contactName ? { name: contactName } as Contact : undefined);
-              const cWithContact = { 
-                  ...clientToSave, 
-                  contactName: contact?.name, 
-                  contactEmail: contact?.email, 
-                  contactPhone: contact?.phone 
-              };
-              
-              if(exists) {
-                  return { ...prev, serviceClients: prev.serviceClients?.map(sc => sc.id === clientToSave.id ? cWithContact : sc) };
-              }
-              return { ...prev, serviceClients: [...(prev.serviceClients || []), cWithContact] };
-          });
+          await refreshData(true);
           showAlert("Cliente salvo com sucesso.", "success");
       } catch(e: any) { showAlert("Erro ao salvar cliente: " + e.message, "error"); }
   };
+  
   const handleDeleteServiceClient = async (id: string) => {
       const confirm = await showConfirm({
           title: "Excluir Cliente",
@@ -598,20 +385,18 @@ const App: React.FC = () => {
       });
       if(!confirm) return;
       await api.deleteServiceClient(id);
-      setState(prev => ({ ...prev, serviceClients: prev.serviceClients?.filter(c => c.id !== id) }));
+      await refreshData(true);
       showAlert("Cliente excluído.", "success");
   };
+  
   const handleSaveServiceItem = async (s: ServiceItem) => {
       try {
           await api.saveServiceItem(s);
-          setState(prev => {
-              const exists = prev.serviceItems?.find(si => si.id === s.id);
-              if(exists) return { ...prev, serviceItems: prev.serviceItems?.map(si => si.id === s.id ? s : si) };
-              return { ...prev, serviceItems: [...(prev.serviceItems || []), s] };
-          });
+          await refreshData(true);
           showAlert("Serviço salvo.", "success");
       } catch(e) { showAlert("Erro ao salvar serviço", "error"); }
   };
+  
   const handleDeleteServiceItem = async (id: string) => {
       const confirm = await showConfirm({
           title: "Excluir Serviço",
@@ -620,24 +405,18 @@ const App: React.FC = () => {
       });
       if(!confirm) return;
       await api.deleteServiceItem(id);
-      setState(prev => ({ ...prev, serviceItems: prev.serviceItems?.filter(s => s.id !== id) }));
+      await refreshData(true);
       showAlert("Serviço excluído.", "success");
   };
+  
   const handleSaveServiceAppointment = async (a: ServiceAppointment) => {
       try {
           await api.saveServiceAppointment(a);
-          setState(prev => {
-              const exists = prev.serviceAppointments?.find(sa => sa.id === a.id);
-              const client = prev.serviceClients?.find(c => c.id === a.clientId);
-              const service = prev.serviceItems?.find(s => s.id === a.serviceId);
-              const resolvedA = { ...a, clientName: client?.contactName, serviceName: service?.name };
-
-              if(exists) return { ...prev, serviceAppointments: prev.serviceAppointments?.map(sa => sa.id === a.id ? resolvedA : sa) };
-              return { ...prev, serviceAppointments: [...(prev.serviceAppointments || []), resolvedA] };
-          });
+          await refreshData(true);
           showAlert("Agendamento salvo.", "success");
       } catch(e) { showAlert("Erro ao salvar agendamento", "error"); }
   };
+  
   const handleDeleteServiceAppointment = async (id: string) => {
       const confirm = await showConfirm({
           title: "Excluir Agendamento",
@@ -646,11 +425,11 @@ const App: React.FC = () => {
       });
       if(!confirm) return;
       await api.deleteServiceAppointment(id);
-      setState(prev => ({ ...prev, serviceAppointments: prev.serviceAppointments?.filter(a => a.id !== id) }));
+      await refreshData(true);
       showAlert("Agendamento excluído.", "success");
   };
 
-  // ... (View Rendering logic unchanged)
+  // --- RENDER ---
 
   if (!currentUser) {
       if (showAuth) {
@@ -675,7 +454,7 @@ const App: React.FC = () => {
           <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
               <div className="flex flex-col items-center gap-4">
                   <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-                  <p className="text-gray-500 font-medium">Carregando seus dados...</p>
+                  <p className="text-gray-500 font-medium">Sincronizando dados...</p>
               </div>
           </div>
       );
