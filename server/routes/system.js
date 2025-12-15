@@ -24,7 +24,7 @@ const sendWhatsappMessage = async (to, templateName = 'jaspers_market_plain_text
     } catch (e) { console.error("WhatsApp Exception:", e); throw e; }
 };
 
-// --- LOGGING HELPER ---
+// --- LOGGING HELPER (Autocreate Table) ---
 const logNotification = async (userId, channel, recipient, subject, content, status) => {
     try {
         // Ensure table exists (Lazy migration for this demo environment)
@@ -180,6 +180,21 @@ export default function(logAudit) {
     router.get('/notification-logs', authenticateToken, async (req, res) => {
         try {
             const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
+            
+            // Ensure table exists before querying (just in case no log was created yet)
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS notification_logs (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT REFERENCES users(id),
+                    channel TEXT NOT NULL, 
+                    recipient TEXT NOT NULL,
+                    subject TEXT,
+                    content TEXT,
+                    status TEXT DEFAULT 'SENT',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
             // Get logs for the whole family
             const logs = await pool.query(`
                 SELECT nl.*, u.name as user_name 
