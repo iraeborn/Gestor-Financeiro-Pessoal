@@ -67,10 +67,19 @@ export default function(logAudit) {
         router.post(`/${path}`, authenticateToken, async (req, res) => {
             const { id, name, code } = req.body;
             try {
+                const familyId = await getFamilyId(req.user.id);
+                // Ensure column exists
+                try { await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS family_id TEXT`); } catch(e) {}
+
                 const existing = (await pool.query(`SELECT * FROM ${table} WHERE id=$1`, [id])).rows[0];
                 const changes = calculateChanges(existing, req.body, { name: 'name', code: 'code' });
-                if (code !== undefined) await pool.query(`INSERT INTO ${table} (id, name, code, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, deleted_at=NULL`, [id, name, code, req.user.id]);
-                else await pool.query(`INSERT INTO ${table} (id, name, user_id) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at=NULL`, [id, name, req.user.id]);
+                
+                if (code !== undefined) {
+                    await pool.query(`INSERT INTO ${table} (id, name, code, user_id, family_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, deleted_at=NULL`, [id, name, code, req.user.id, familyId]);
+                } else {
+                    await pool.query(`INSERT INTO ${table} (id, name, user_id, family_id) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name=$2, deleted_at=NULL`, [id, name, req.user.id, familyId]);
+                }
+                
                 await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', entity, id, name, existing, changes);
                 res.json({ success: true });
             } catch(err) { res.status(500).json({ error: err.message }); }
@@ -93,7 +102,9 @@ export default function(logAudit) {
     router.post('/modules/clients', authenticateToken, async (req, res) => {
         const { id, contactId, notes, birthDate, moduleTag, insurance, allergies, medications } = req.body;
         try {
-            await pool.query(`INSERT INTO module_clients (id, contact_id, notes, birth_date, module_tag, insurance, allergies, medications, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET contact_id=$2, notes=$3, birth_date=$4, module_tag=$5, insurance=$6, allergies=$7, medications=$8, deleted_at=NULL`, [id, contactId, notes||'', sanitizeValue(birthDate), moduleTag||'GENERAL', sanitizeValue(insurance), sanitizeValue(allergies), sanitizeValue(medications), req.user.id]);
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE module_clients ADD COLUMN IF NOT EXISTS family_id TEXT`);
+            await pool.query(`INSERT INTO module_clients (id, contact_id, notes, birth_date, module_tag, insurance, allergies, medications, user_id, family_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET contact_id=$2, notes=$3, birth_date=$4, module_tag=$5, insurance=$6, allergies=$7, medications=$8, deleted_at=NULL`, [id, contactId, notes||'', sanitizeValue(birthDate), moduleTag||'GENERAL', sanitizeValue(insurance), sanitizeValue(allergies), sanitizeValue(medications), req.user.id, familyId]);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -103,10 +114,13 @@ export default function(logAudit) {
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
+    
     router.post('/modules/services', authenticateToken, async (req, res) => {
         const { id, name, code, defaultPrice, moduleTag } = req.body;
         try {
-            await pool.query(`INSERT INTO module_services (id, name, code, default_price, module_tag, user_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, default_price=$4, module_tag=$5, deleted_at=NULL`, [id, name, sanitizeValue(code), defaultPrice||0, moduleTag||'GENERAL', req.user.id]);
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE module_services ADD COLUMN IF NOT EXISTS family_id TEXT`);
+            await pool.query(`INSERT INTO module_services (id, name, code, default_price, module_tag, user_id, family_id) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, default_price=$4, module_tag=$5, deleted_at=NULL`, [id, name, sanitizeValue(code), defaultPrice||0, moduleTag||'GENERAL', req.user.id, familyId]);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -116,10 +130,13 @@ export default function(logAudit) {
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
+    
     router.post('/modules/appointments', authenticateToken, async (req, res) => {
         const { id, clientId, serviceId, date, status, notes, transactionId, moduleTag } = req.body;
         try {
-            await pool.query(`INSERT INTO module_appointments (id, client_id, service_id, date, status, notes, transaction_id, module_tag, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, date=$4, status=$5, notes=$6, transaction_id=$7, module_tag=$8, deleted_at=NULL`, [id, clientId, sanitizeValue(serviceId), date, status, notes, sanitizeValue(transactionId), moduleTag||'GENERAL', req.user.id]);
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`ALTER TABLE module_appointments ADD COLUMN IF NOT EXISTS family_id TEXT`);
+            await pool.query(`INSERT INTO module_appointments (id, client_id, service_id, date, status, notes, transaction_id, module_tag, user_id, family_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, date=$4, status=$5, notes=$6, transaction_id=$7, module_tag=$8, deleted_at=NULL`, [id, clientId, sanitizeValue(serviceId), date, status, notes, sanitizeValue(transactionId), moduleTag||'GENERAL', req.user.id, familyId]);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });

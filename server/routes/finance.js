@@ -25,50 +25,54 @@ export default function(logAudit) {
             const isPJ = ownerRes.rows[0]?.entity_type === 'PJ';
 
             // LÓGICA DE ISOLAMENTO DE DADOS (CRÍTICO)
-            let strictFilter;
+            // Função helper para construir o filtro SQL com o alias correto
+            const buildFilter = (alias) => {
+                const prefix = alias ? `${alias}.` : '';
+                if (isPJ) {
+                    // ISOLAMENTO TOTAL PARA PJ: Apenas dados deste family_id
+                    return `${prefix}family_id = $1`;
+                } else {
+                    // MODO HÍBRIDO PARA PF: Dados da família OU dados legados do usuário
+                    return `(${prefix}family_id = $1 OR (${prefix}family_id IS NULL AND ${prefix}user_id IN (SELECT id FROM users WHERE family_id = $1)))`;
+                }
+            };
             
-            if (isPJ) {
-                // ISOLAMENTO TOTAL PARA PJ:
-                // Se estamos num workspace PJ, mostramos APENAS dados carimbados explicitamente com este family_id.
-                // Isso impede que dados pessoais antigos (legado com family_id NULL) "vazem" para a conta empresarial.
-                strictFilter = `family_id = $1`;
-            } else {
-                // MODO HÍBRIDO PARA PF:
-                // Mostra dados da família atual OU dados pessoais antigos (legado) do próprio usuário.
-                // Isso garante que o usuário não "perca" seu histórico pessoal antigo ao usar o sistema.
-                strictFilter = `(family_id = $1 OR (family_id IS NULL AND user_id IN (SELECT id FROM users WHERE family_id = $1)))`;
-            }
-            
-            // Garantir que tabelas tenham a coluna family_id (Migration Lazy para evitar erros em DBs antigos)
+            // Garantir que TODAS as tabelas tenham a coluna family_id (Migration Lazy)
+            const tablesToCheck = [
+                'accounts', 'transactions', 'goals', 'contacts', 'categories', 
+                'branches', 'cost_centers', 'departments', 'projects', 
+                'module_clients', 'module_services', 'module_appointments'
+            ];
             const ensureCol = async (table) => {
                 try { await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS family_id TEXT`); } catch(e) {}
             };
-            await Promise.all(['accounts', 'transactions', 'goals', 'contacts', 'categories'].map(ensureCol));
+            await Promise.all(tablesToCheck.map(ensureCol));
 
-            // Executar Queries com o Filtro Definido
-            const accs = await pool.query(`SELECT * FROM accounts WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE t.${strictFilter} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
-            const goals = await pool.query(`SELECT * FROM goals WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const contacts = await pool.query(`SELECT * FROM contacts WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
-            let categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            // Executar Queries com o Filtro Definido (Usando buildFilter)
             
-            // Company Profile é sempre 1-pra-1 com o Workspace Owner (activeFamilyId)
+            const accs = await pool.query(`SELECT * FROM accounts WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            
+            // Transações (Alias 't')
+            const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE ${buildFilter('t')} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
+            
+            const goals = await pool.query(`SELECT * FROM goals WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            const contacts = await pool.query(`SELECT * FROM contacts WHERE ${buildFilter()} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            let categories = await pool.query(`SELECT * FROM categories WHERE ${buildFilter()} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+            
             const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
             
-            // PJ & Modules: Filtro específico para tabelas de suporte
-            // Se as tabelas PJ já tiverem family_id, ideal usar strictFilter. Se não, fallback para user_id do owner.
-            const pjFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`; 
-            
-            const branches = await pool.query(`SELECT * FROM branches WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const departments = await pool.query(`SELECT * FROM departments WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const projects = await pool.query(`SELECT * FROM projects WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
+            // PJ & Modules
+            const branches = await pool.query(`SELECT * FROM branches WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            const departments = await pool.query(`SELECT * FROM departments WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            const projects = await pool.query(`SELECT * FROM projects WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
 
-            const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE mc.${pjFilter} AND mc.deleted_at IS NULL`, [activeFamilyId]);
-            const services = await pool.query(`SELECT * FROM module_services WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
-            const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ma.${pjFilter} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
+            // Modules (Alias 'mc' e 'ma')
+            const clients = await pool.query(`SELECT mc.*, c.name as contact_name, c.email as contact_email, c.phone as contact_phone FROM module_clients mc JOIN contacts c ON mc.contact_id = c.id WHERE ${buildFilter('mc')} AND mc.deleted_at IS NULL`, [activeFamilyId]);
+            const services = await pool.query(`SELECT * FROM module_services WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
+            const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ${buildFilter('ma')} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
 
-            // Categorias Padrão (apenas se a lista estiver vazia e for PF, ou se quiser forçar defaults em nova PJ)
+            // Categorias Padrão
             if (categories.rows.length === 0) {
                 const defaults = [
                     { name: 'Alimentação', type: 'EXPENSE' }, 
@@ -78,7 +82,7 @@ export default function(logAudit) {
                 ];
                 for (const c of defaults) await pool.query('INSERT INTO categories (id, name, type, user_id, family_id) VALUES ($1, $2, $3, $4, $5)', [crypto.randomUUID(), c.name, c.type, activeFamilyId, activeFamilyId]);
                 // Recarregar
-                categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
+                categories = await pool.query(`SELECT * FROM categories WHERE ${buildFilter()} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
             }
 
             res.json({
