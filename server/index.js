@@ -368,14 +368,30 @@ app.post('/api/consult-cnpj', async (req, res) => {
     const { cnpj } = req.body;
     if (!cnpj) return res.status(400).json({ error: 'CNPJ obrigatório' });
     
-    // BrasilAPI expects just numbers
-    const cleanCnpj = cnpj.replace(/\D/g, '');
+    // BrasilAPI expects just numbers. Ensure it is a string first.
+    const cleanCnpj = String(cnpj).replace(/\D/g, '');
+    
+    if (cleanCnpj.length !== 14) {
+         return res.status(400).json({ error: 'CNPJ inválido (deve ter 14 dígitos)' });
+    }
+
     try {
-        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
-        if (!response.ok) throw new Error("CNPJ não encontrado");
+        console.log(`Consulting CNPJ: ${cleanCnpj}`);
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; FinManager/1.0;)'
+            }
+        });
+        
+        if (!response.ok) {
+            console.error(`BrasilAPI Error: ${response.status} ${response.statusText}`);
+            throw new Error("CNPJ não encontrado ou erro na BrasilAPI");
+        }
+        
         const data = await response.json();
         res.json(data);
     } catch (e) {
+        console.error("Consult CNPJ Exception:", e);
         res.status(404).json({ error: e.message });
     }
 });
