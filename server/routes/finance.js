@@ -20,29 +20,43 @@ export default function(logAudit) {
         try {
             const activeFamilyId = await getFamilyId(userId);
             
-            // FILTRO ROBUSTO DE ISOLAMENTO:
-            // 1. Dados que têm family_id explicitamente igual ao atual (Novo padrão)
-            // 2. OU dados legados (family_id NULL) que pertencem a usuários que estão na família atual (Retrocompatibilidade).
-            const strictFilter = `(family_id = $1 OR (family_id IS NULL AND user_id IN (SELECT id FROM users WHERE family_id = $1)))`;
+            // Determinar o Tipo da Entidade do Workspace Atual (PJ ou PF)
+            const ownerRes = await pool.query('SELECT entity_type FROM users WHERE id = $1', [activeFamilyId]);
+            const isPJ = ownerRes.rows[0]?.entity_type === 'PJ';
+
+            // LÓGICA DE ISOLAMENTO DE DADOS (CRÍTICO)
+            let strictFilter;
             
-            // Garantir que tabelas tenham a coluna family_id (Migration Lazy)
+            if (isPJ) {
+                // ISOLAMENTO TOTAL PARA PJ:
+                // Se estamos num workspace PJ, mostramos APENAS dados carimbados explicitamente com este family_id.
+                // Isso impede que dados pessoais antigos (legado com family_id NULL) "vazem" para a conta empresarial.
+                strictFilter = `family_id = $1`;
+            } else {
+                // MODO HÍBRIDO PARA PF:
+                // Mostra dados da família atual OU dados pessoais antigos (legado) do próprio usuário.
+                // Isso garante que o usuário não "perca" seu histórico pessoal antigo ao usar o sistema.
+                strictFilter = `(family_id = $1 OR (family_id IS NULL AND user_id IN (SELECT id FROM users WHERE family_id = $1)))`;
+            }
+            
+            // Garantir que tabelas tenham a coluna family_id (Migration Lazy para evitar erros em DBs antigos)
             const ensureCol = async (table) => {
                 try { await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS family_id TEXT`); } catch(e) {}
             };
             await Promise.all(['accounts', 'transactions', 'goals', 'contacts', 'categories'].map(ensureCol));
 
+            // Executar Queries com o Filtro Definido
             const accs = await pool.query(`SELECT * FROM accounts WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
             const trans = await pool.query(`SELECT t.*, uc.name as created_by_name FROM transactions t LEFT JOIN users uc ON t.created_by = uc.id WHERE t.${strictFilter} AND t.deleted_at IS NULL ORDER BY t.date DESC`, [activeFamilyId]);
             const goals = await pool.query(`SELECT * FROM goals WHERE ${strictFilter} AND deleted_at IS NULL`, [activeFamilyId]);
             const contacts = await pool.query(`SELECT * FROM contacts WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
             let categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
             
-            // Fetch company profile (Linked to the Family Owner/Admin - usually family_id = user_id of owner)
-            // Company Profiles are 1-to-1 with the workspace owner (family_id)
+            // Company Profile é sempre 1-pra-1 com o Workspace Owner (activeFamilyId)
             const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
             
-            // PJ & Modules 
-            // We use the same filter logic. If PJ tables don't have family_id yet, fallback to user owner check.
+            // PJ & Modules: Filtro específico para tabelas de suporte
+            // Se as tabelas PJ já tiverem family_id, ideal usar strictFilter. Se não, fallback para user_id do owner.
             const pjFilter = `user_id IN (SELECT id FROM users WHERE family_id = $1)`; 
             
             const branches = await pool.query(`SELECT * FROM branches WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
@@ -54,10 +68,16 @@ export default function(logAudit) {
             const services = await pool.query(`SELECT * FROM module_services WHERE ${pjFilter} AND deleted_at IS NULL`, [activeFamilyId]);
             const appts = await pool.query(`SELECT ma.*, c.name as client_name, ms.name as service_name FROM module_appointments ma JOIN module_clients mc ON ma.client_id = mc.id JOIN contacts c ON mc.contact_id = c.id LEFT JOIN module_services ms ON ma.service_id = ms.id WHERE ma.${pjFilter} AND ma.deleted_at IS NULL ORDER BY ma.date ASC`, [activeFamilyId]);
 
-            // Default Categories Logic
+            // Categorias Padrão (apenas se a lista estiver vazia e for PF, ou se quiser forçar defaults em nova PJ)
             if (categories.rows.length === 0) {
-                const defaults = [{ name: 'Alimentação', type: 'EXPENSE' }, { name: 'Moradia', type: 'EXPENSE' }, { name: 'Salário', type: 'INCOME' }];
+                const defaults = [
+                    { name: 'Alimentação', type: 'EXPENSE' }, 
+                    { name: 'Transporte', type: 'EXPENSE' }, 
+                    { name: 'Vendas', type: 'INCOME' },
+                    { name: 'Serviços', type: 'INCOME' }
+                ];
                 for (const c of defaults) await pool.query('INSERT INTO categories (id, name, type, user_id, family_id) VALUES ($1, $2, $3, $4, $5)', [crypto.randomUUID(), c.name, c.type, activeFamilyId, activeFamilyId]);
+                // Recarregar
                 categories = await pool.query(`SELECT * FROM categories WHERE ${strictFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
             }
 
