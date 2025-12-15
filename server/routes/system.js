@@ -1,8 +1,10 @@
 
 import express from 'express';
 import pool from '../db.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { sendEmail } from '../services/email.js';
-import { authenticateToken, familyCheckParam2, updateAccountBalance } from '../middleware.js';
+import { authenticateToken, familyCheckParam2, updateAccountBalance, getUserWorkspaces } from '../middleware.js';
 
 const router = express.Router();
 const WHATSAPP_API_URL = "https://graph.facebook.com/v22.0/934237103105071/messages";
@@ -271,7 +273,7 @@ export default function(logAudit) {
                 settings: userRow.settings, role: userRow.role, entityType: ownerRes.rows[0]?.entity_type || 'PF',
                 plan: userRow.plan, status: userRow.status, trialEndsAt: userRow.trial_ends_at, workspaces
             };
-            const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '7d' });
+            const token = jwt.sign(user, process.env.JWT_SECRET || 'dev-secret-key', { expiresIn: '7d' });
             res.json({ success: true, token, user });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -305,7 +307,7 @@ export default function(logAudit) {
             const ownerRes = await pool.query('SELECT entity_type FROM users WHERE id = $1', [userRow.family_id]);
             
             const user = { id: userRow.id, name: userRow.name, email: userRow.email, familyId: userRow.family_id, settings: userRow.settings, role: userRow.role, entityType: ownerRes.rows[0]?.entity_type || 'PF', workspaces };
-            const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '7d' });
+            const token = jwt.sign(user, process.env.JWT_SECRET || 'dev-secret-key', { expiresIn: '7d' });
             res.json({ success: true, token, user });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
