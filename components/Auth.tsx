@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, LogIn, UserPlus, AlertCircle, Info, Briefcase, User as UserIcon, CheckCircle } from 'lucide-react';
-import { login, register, loginWithGoogle } from '../services/storageService';
-import { User, EntityType, SubscriptionPlan } from '../types';
+import { Mail, Lock, LogIn, AlertCircle, Briefcase, User as UserIcon, CheckCircle, Search, Building, MapPin, FileText } from 'lucide-react';
+import { login, register, loginWithGoogle, consultCnpj } from '../services/storageService';
+import { User, EntityType, SubscriptionPlan, TaxRegime } from '../types';
 
 interface AuthProps {
   onLoginSuccess: (user: User) => void;
@@ -19,12 +19,24 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   const [entityType, setEntityType] = useState<EntityType>(initialEntityType);
   const [plan, setPlan] = useState<SubscriptionPlan>(initialPlan);
   
+  // PJ Specific State
+  const [cnpj, setCnpj] = useState('');
+  const [loadingCnpj, setLoadingCnpj] = useState(false);
+  const [companyData, setCompanyData] = useState({
+      tradeName: '',
+      legalName: '',
+      cnae: '',
+      city: '',
+      state: '',
+      taxRegime: TaxRegime.SIMPLES,
+      hasEmployees: false,
+      issuesInvoices: false
+  });
+  
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [currentOrigin, setCurrentOrigin] = useState('');
 
   useEffect(() => {
-    setCurrentOrigin(window.location.origin);
     const clientId = window.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
  
     if (window.google && clientId && mode === 'LOGIN') {
@@ -59,6 +71,29 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     }
   };
 
+  const handleConsultCnpj = async () => {
+      if (!cnpj || cnpj.length < 14) return;
+      setLoadingCnpj(true);
+      try {
+          const data = await consultCnpj(cnpj);
+          if (data) {
+              setCompanyData(prev => ({
+                  ...prev,
+                  tradeName: data.nome_fantasia || data.razao_social,
+                  legalName: data.razao_social,
+                  cnae: data.cnae_fiscal_descricao,
+                  city: data.municipio,
+                  state: data.uf
+              }));
+              setName(data.nome_fantasia || data.razao_social); // Auto-fill main name
+          }
+      } catch (e) {
+          setError("CNPJ não encontrado ou erro na consulta.");
+      } finally {
+          setLoadingCnpj(false);
+      }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -70,7 +105,9 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
         data = await login(email, password);
       } else {
         // Register Flow
-        data = await register(name, email, password, entityType, plan);
+        // Se for PJ, passamos companyData
+        const pjPayload = entityType === EntityType.BUSINESS ? { ...companyData, cnpj } : undefined;
+        data = await register(name, email, password, entityType, plan, pjPayload);
       }
       onLoginSuccess(data.user);
     } catch (err: any) {
@@ -84,7 +121,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   if (mode === 'CHECKOUT' || mode === 'REGISTER') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col md:flex-row">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
                 {/* Lado esquerdo: Resumo do Pedido */}
                 <div className="bg-slate-900 p-8 text-white md:w-1/3 flex flex-col justify-between">
                     <div>
@@ -115,7 +152,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                 </div>
 
                 {/* Lado direito: Form */}
-                <div className="p-8 md:w-2/3">
+                <div className="p-8 md:w-2/3 max-h-[90vh] overflow-y-auto">
                     <h2 className="text-2xl font-bold text-gray-900 mb-6">Criar Conta</h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -137,8 +174,90 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                             </button>
                         </div>
 
+                        {/* SECTION: PJ LOOKUP */}
+                        {entityType === EntityType.BUSINESS && (
+                            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-4 animate-fade-in">
+                                <div className="flex gap-2 items-end">
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-indigo-800 mb-1">CNPJ (Apenas números)</label>
+                                        <input
+                                            type="text"
+                                            value={cnpj}
+                                            onChange={(e) => setCnpj(e.target.value.replace(/\D/g, ''))}
+                                            className="w-full px-3 py-2 rounded-lg border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="00000000000191"
+                                            maxLength={14}
+                                        />
+                                    </div>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleConsultCnpj} 
+                                        disabled={loadingCnpj || cnpj.length < 14}
+                                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {loadingCnpj ? '...' : <Search className="w-4 h-4" />}
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
+                                        <input type="text" value={companyData.legalName} onChange={e => setCompanyData({...companyData, legalName: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
+                                        <input type="text" value={companyData.tradeName} onChange={e => setCompanyData({...companyData, tradeName: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Atividade Principal (CNAE)</label>
+                                    <input type="text" value={companyData.cnae} onChange={e => setCompanyData({...companyData, cnae: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
+                                        <input type="text" value={companyData.city} onChange={e => setCompanyData({...companyData, city: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Estado (UF)</label>
+                                        <input type="text" value={companyData.state} onChange={e => setCompanyData({...companyData, state: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Regime Tributário</label>
+                                        <select 
+                                            value={companyData.taxRegime} 
+                                            onChange={e => setCompanyData({...companyData, taxRegime: e.target.value as TaxRegime})}
+                                            className="w-full p-2 rounded border text-sm bg-white"
+                                        >
+                                            <option value={TaxRegime.MEI}>MEI</option>
+                                            <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
+                                            <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
+                                            <option value={TaxRegime.REAL}>Lucro Real</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-2 pt-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={companyData.hasEmployees} onChange={e => setCompanyData({...companyData, hasEmployees: e.target.checked})} className="rounded text-indigo-600" />
+                                            <span className="text-xs text-gray-700">Possui Funcionários?</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={companyData.issuesInvoices} onChange={e => setCompanyData({...companyData, issuesInvoices: e.target.checked})} className="rounded text-indigo-600" />
+                                            <span className="text-xs text-gray-700">Emite Nota Fiscal?</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Nome Completo / Razão Social</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                {entityType === EntityType.BUSINESS ? 'Nome do Responsável' : 'Nome Completo'}
+                            </label>
                             <input
                                 type="text"
                                 required
@@ -149,7 +268,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Email Profissional ou Pessoal</label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
                             <input
                                 type="email"
                                 required

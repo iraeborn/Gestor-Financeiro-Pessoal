@@ -51,11 +51,12 @@ export const login = async (email: string, password: string): Promise<AuthRespon
   return data;
 };
 
-export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan): Promise<AuthResponse> => {
+// Updated to accept companyData
+export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, companyData?: Partial<CompanyProfile>): Promise<AuthResponse> => {
     const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, entityType, plan })
+        body: JSON.stringify({ name, email, password, entityType, plan, companyData })
     });
     const data = await handleResponse(res);
     localStorage.setItem('token', data.token);
@@ -112,6 +113,15 @@ export const switchContext = async (workspaceId: string) => {
 
 export const loadInitialData = async (): Promise<AppState> => {
     const res = await fetch(`${API_URL}/initial-data`, { headers: getHeaders() });
+    return await handleResponse(res);
+};
+
+export const consultCnpj = async (cnpj: string) => {
+    const res = await fetch(`${API_URL}/consult-cnpj`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj })
+    });
     return await handleResponse(res);
 };
 

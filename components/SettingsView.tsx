@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send } from 'lucide-react';
-import { updateSettings } from '../services/storageService';
+import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText } from 'lucide-react';
+import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
 interface SettingsViewProps {
@@ -39,7 +39,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [testingWa, setTestingWa] = useState(false);
 
   // PJ Forms State
-  const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { tradeName: '', legalName: '', cnpj: '' });
+  const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { 
+      tradeName: '', legalName: '', cnpj: '', 
+      taxRegime: TaxRegime.SIMPLES, cnae: '', city: '', state: '', hasEmployees: false, issuesInvoices: false 
+  });
+  const [loadingCnpj, setLoadingCnpj] = useState(false);
+
   const [newItemName, setNewItemName] = useState('');
   const [newItemCode, setNewItemCode] = useState(''); // For Branch/CostCenter
   const [activeTab, setActiveTab] = useState<'BRANCH' | 'CC' | 'DEPT' | 'PROJ'>('BRANCH');
@@ -107,6 +112,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           showAlert("Erro de conexão.", "error");
       } finally {
           setTestingWa(false);
+      }
+  };
+
+  const handleConsultCnpj = async () => {
+      if (!companyForm.cnpj || companyForm.cnpj.length < 14) return;
+      setLoadingCnpj(true);
+      try {
+          const data = await consultCnpj(companyForm.cnpj);
+          if (data) {
+              setCompanyForm(prev => ({
+                  ...prev,
+                  tradeName: data.nome_fantasia || data.razao_social,
+                  legalName: data.razao_social,
+                  cnae: data.cnae_fiscal_descricao,
+                  city: data.municipio,
+                  state: data.uf
+              }));
+              showAlert("Dados carregados com sucesso!", "success");
+          }
+      } catch (e) {
+          showAlert("CNPJ não encontrado.", "error");
+      } finally {
+          setLoadingCnpj(false);
       }
   };
 
@@ -279,6 +307,27 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <h3 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><Building className="w-4 h-4"/> Identificação da Empresa</h3>
                         <form onSubmit={handleSaveCompany} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">CNPJ</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        value={companyForm.cnpj}
+                                        onChange={e => setCompanyForm({...companyForm, cnpj: e.target.value.replace(/\D/g, '')})}
+                                        className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Somente números"
+                                    />
+                                    <button 
+                                        type="button" 
+                                        onClick={handleConsultCnpj}
+                                        disabled={loadingCnpj}
+                                        className="bg-gray-100 text-gray-600 px-3 rounded-lg text-sm font-medium hover:bg-gray-200"
+                                        title="Buscar na Receita"
+                                    >
+                                        {loadingCnpj ? '...' : <FileText className="w-4 h-4"/>}
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Razão Social</label>
                                 <input 
                                     type="text"
@@ -296,16 +345,71 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
+                            
+                            {/* Novos Campos Fiscais */}
                             <div>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">CNPJ</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Regime Tributário</label>
+                                <select
+                                    value={companyForm.taxRegime}
+                                    onChange={e => setCompanyForm({...companyForm, taxRegime: e.target.value as TaxRegime})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm bg-white"
+                                >
+                                    <option value={TaxRegime.MEI}>MEI</option>
+                                    <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
+                                    <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
+                                    <option value={TaxRegime.REAL}>Lucro Real</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">CNAE Principal</label>
+                                <input 
+                                    type="text"
+                                    value={companyForm.cnae}
+                                    onChange={e => setCompanyForm({...companyForm, cnae: e.target.value})}
+                                    className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Cidade / UF</label>
                                 <div className="flex gap-2">
                                     <input 
                                         type="text"
-                                        value={companyForm.cnpj}
-                                        onChange={e => setCompanyForm({...companyForm, cnpj: e.target.value})}
-                                        className="w-full rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        value={companyForm.city}
+                                        onChange={e => setCompanyForm({...companyForm, city: e.target.value})}
+                                        placeholder="Cidade"
+                                        className="flex-1 rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                     />
-                                    <button type="submit" className="bg-indigo-600 text-white px-3 rounded-lg text-sm font-medium hover:bg-indigo-700">Salvar</button>
+                                    <input 
+                                        type="text"
+                                        value={companyForm.state}
+                                        onChange={e => setCompanyForm({...companyForm, state: e.target.value})}
+                                        placeholder="UF"
+                                        className="w-16 rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-3 flex gap-6 pt-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={companyForm.hasEmployees}
+                                        onChange={e => setCompanyForm({...companyForm, hasEmployees: e.target.checked})}
+                                        className="rounded text-indigo-600 focus:ring-indigo-500" 
+                                    />
+                                    <span className="text-sm text-gray-700">Possui Funcionários?</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={companyForm.issuesInvoices}
+                                        onChange={e => setCompanyForm({...companyForm, issuesInvoices: e.target.checked})}
+                                        className="rounded text-indigo-600 focus:ring-indigo-500" 
+                                    />
+                                    <span className="text-sm text-gray-700">Emite Nota Fiscal?</span>
+                                </label>
+                                <div className="flex-1 flex justify-end">
+                                    <button type="submit" className="bg-indigo-600 text-white px-6 rounded-lg text-sm font-medium hover:bg-indigo-700 py-2">Salvar Dados da Empresa</button>
                                 </div>
                             </div>
                         </form>

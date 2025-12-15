@@ -248,6 +248,14 @@ pool.connect().then(async (client) => {
         await client.query(`CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, user_id TEXT REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
         
         await client.query(`CREATE TABLE IF NOT EXISTS company_profiles (id TEXT PRIMARY KEY, trade_name TEXT, legal_name TEXT, cnpj TEXT, user_id TEXT REFERENCES users(id) UNIQUE);`);
+        // Migrations for Extended PJ Fields
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS tax_regime TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS cnae TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS city TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS state TEXT;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS has_employees BOOLEAN DEFAULT FALSE;`);
+        await client.query(`ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS issues_invoices BOOLEAN DEFAULT FALSE;`);
+
         await client.query(`CREATE TABLE IF NOT EXISTS branches (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
         await client.query(`CREATE TABLE IF NOT EXISTS cost_centers (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, user_id TEXT REFERENCES users(id));`);
         await client.query(`CREATE TABLE IF NOT EXISTS departments (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT REFERENCES users(id));`);
@@ -356,6 +364,21 @@ const sendWhatsappMessage = async (to, templateName = 'jaspers_market_plain_text
 
 app.get('/api/health', async (req, res) => res.json({ status: 'OK' }));
 
+app.post('/api/consult-cnpj', async (req, res) => {
+    const { cnpj } = req.body;
+    if (!cnpj) return res.status(400).json({ error: 'CNPJ obrigatório' });
+    
+    const cleanCnpj = cnpj.replace(/\D/g, '');
+    try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+        if (!response.ok) throw new Error("CNPJ não encontrado");
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        res.status(404).json({ error: e.message });
+    }
+});
+
 app.post('/api/test-whatsapp', authenticateToken, async (req, res) => {
     const { phone } = req.body;
     try {
@@ -382,7 +405,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password, entityType, plan } = req.body;
+  const { name, email, password, entityType, plan, companyData } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = crypto.randomUUID();
@@ -396,6 +419,28 @@ app.post('/api/auth/register', async (req, res) => {
       [id, name, email, hashedPassword, defaultSettings, 'USER', entityType || 'PF', plan || 'TRIAL', 'TRIALING', trialEndsAt]
     );
     await pool.query('INSERT INTO memberships (user_id, family_id, role) VALUES ($1, $1, $2)', [id, 'ADMIN']);
+    
+    // If PJ and company data provided, create profile immediately
+    if (entityType === 'PJ' && companyData) {
+        await pool.query(
+            `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+                crypto.randomUUID(),
+                companyData.tradeName || name, 
+                companyData.legalName || name, 
+                companyData.cnpj || '', 
+                companyData.taxRegime || 'SIMPLES',
+                companyData.cnae,
+                companyData.city,
+                companyData.state,
+                companyData.hasEmployees || false,
+                companyData.issuesInvoices || false,
+                id
+            ]
+        );
+    }
+
     const workspaces = await getUserWorkspaces(id);
     const user = { id, name, email, familyId: id, settings: defaultSettings, role: 'USER', entityType: entityType || 'PF', plan: plan || 'TRIAL', status: 'TRIALING', trialEndsAt, workspaces };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
@@ -638,7 +683,9 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
         const contacts = await pool.query(`SELECT * FROM contacts WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
         let categories = await pool.query(`SELECT * FROM categories WHERE ${familyFilter} AND deleted_at IS NULL ORDER BY name ASC`, [activeFamilyId]);
         
+        // Fetch company profile with new fields (using * covers it, but mapping in front needs to match DB column names)
         const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
+        
         const branches = await pool.query(`SELECT * FROM branches WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
         const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
         const departments = await pool.query(`SELECT * FROM departments WHERE ${familyFilter} AND deleted_at IS NULL`, [activeFamilyId]);
@@ -660,7 +707,18 @@ app.get('/api/initial-data', authenticateToken, async (req, res) => {
             goals: goals.rows.map(r => ({ ...r, targetAmount: parseFloat(r.target_amount), currentAmount: parseFloat(r.current_amount), deadline: r.deadline ? new Date(r.deadline).toISOString().split('T')[0] : undefined })),
             contacts: contacts.rows.map(r => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, document: r.document, pixKey: r.pix_key })),
             categories: categories.rows.map(r => ({ id: r.id, name: r.name, type: r.type })),
-            companyProfile: companyRes.rows[0] ? { id: companyRes.rows[0].id, tradeName: companyRes.rows[0].trade_name, legalName: companyRes.rows[0].legal_name, cnpj: companyRes.rows[0].cnpj } : null,
+            companyProfile: companyRes.rows[0] ? { 
+                id: companyRes.rows[0].id, 
+                tradeName: companyRes.rows[0].trade_name, 
+                legalName: companyRes.rows[0].legal_name, 
+                cnpj: companyRes.rows[0].cnpj,
+                taxRegime: companyRes.rows[0].tax_regime,
+                cnae: companyRes.rows[0].cnae,
+                city: companyRes.rows[0].city,
+                state: companyRes.rows[0].state,
+                hasEmployees: companyRes.rows[0].has_employees,
+                issuesInvoices: companyRes.rows[0].issues_invoices
+            } : null,
             branches: branches.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
             costCenters: costCenters.rows.map(r => ({ id: r.id, name: r.name, code: r.code })),
             departments: departments.rows.map(r => ({ id: r.id, name: r.name })),
@@ -778,12 +836,19 @@ app.delete('/api/goals/:id', authenticateToken, async (req, res) => {
 
 // PJ Routes
 app.post('/api/company', authenticateToken, async (req, res) => {
-    const { id, tradeName, legalName, cnpj } = req.body;
+    const { id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices } = req.body;
     try {
         const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
         const existing = (await pool.query('SELECT * FROM company_profiles WHERE user_id = $1', [familyId])).rows[0];
-        const changes = calculateChanges(existing, req.body, { tradeName: 'trade_name', legalName: 'legal_name', cnpj: 'cnpj' });
-        await pool.query(`INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, user_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id) DO UPDATE SET trade_name=$2, legal_name=$3, cnpj=$4`, [id, tradeName, legalName, cnpj, familyId]);
+        const changes = calculateChanges(existing, req.body, { tradeName: 'trade_name', legalName: 'legal_name', cnpj: 'cnpj', taxRegime: 'tax_regime', cnae: 'cnae' });
+        
+        await pool.query(
+            `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+             ON CONFLICT (user_id) DO UPDATE SET 
+                trade_name=$2, legal_name=$3, cnpj=$4, tax_regime=$5, cnae=$6, city=$7, state=$8, has_employees=$9, issues_invoices=$10`, 
+            [id, tradeName, legalName, cnpj, taxRegime, cnae, city, state, hasEmployees, issuesInvoices, familyId]
+        );
         await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'company', id, tradeName, existing, changes);
         res.json({ success: true });
     } catch(err) { res.status(500).json({ error: err.message }); }

@@ -144,12 +144,26 @@ export interface Category {
 }
 
 // --- PJ Specific Interfaces ---
+export enum TaxRegime {
+    MEI = 'MEI',
+    SIMPLES = 'SIMPLES',
+    PRESUMIDO = 'PRESUMIDO',
+    REAL = 'REAL'
+}
+
 export interface CompanyProfile {
   id: string;
   tradeName: string; // Nome Fantasia
   legalName: string; // Razão Social
   cnpj: string;
   userId?: string;
+  // Novos campos tributários e operacionais
+  taxRegime?: TaxRegime;
+  cnae?: string; // Código Principal
+  city?: string;
+  state?: string;
+  hasEmployees?: boolean;
+  issuesInvoices?: boolean;
 }
 
 export interface Branch {
