@@ -45,62 +45,12 @@ export interface EmailConfig {
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
-  activeModules?: {
-      odonto?: boolean;
-      physio?: boolean;
-      consulting?: boolean;
-  };
   whatsapp?: WhatsappConfig;
   email?: EmailConfig;
-}
-
-export enum UserRole {
-  USER = 'USER',
-  ADMIN = 'ADMIN'
-}
-
-export enum EntityType {
-  PERSONAL = 'PF', // Pessoa Física
-  BUSINESS = 'PJ'  // Pessoa Jurídica
-}
-
-export enum SubscriptionPlan {
-  MONTHLY = 'MONTHLY',
-  YEARLY = 'YEARLY',
-  TRIAL = 'TRIAL'
-}
-
-export enum SubscriptionStatus {
-  ACTIVE = 'ACTIVE',
-  TRIALING = 'TRIALING',
-  CANCELED = 'CANCELED',
-  EXPIRED = 'EXPIRED'
-}
-
-export interface Workspace {
-  id: string; // family_id
-  name: string; // Nome do dono da conta ou da empresa
-  role: 'ADMIN' | 'MEMBER';
-  entityType: EntityType;
-  isCurrent: boolean;
-  permissions?: string[]; // Lista de permissões (ex: 'FIN_VIEW', 'ODONTO_AGENDA_EDIT')
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  googleId?: string;
-  familyId?: string;
-  settings?: AppSettings;
-  // SaaS Fields
-  role?: UserRole; // App Level Role (Not Workspace Role)
-  entityType?: EntityType; // Tipo da conta ATUAL
-  plan?: SubscriptionPlan;
-  status?: SubscriptionStatus;
-  trialEndsAt?: string;
-  createdAt?: string;
-  workspaces?: Workspace[]; // Lista de contas acessíveis
+  activeModules?: {
+      odonto?: boolean;
+      // future modules
+  };
 }
 
 export interface Member {
@@ -108,7 +58,46 @@ export interface Member {
     name: string;
     email: string;
     role: 'ADMIN' | 'MEMBER';
-    permissions: string[];
+    permissions?: string[];
+}
+
+export interface Workspace {
+    id: string;
+    name: string;
+    role: string;
+    entityType: EntityType;
+    permissions?: string[];
+}
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  USER = 'USER'
+}
+
+export enum EntityType {
+  PERSONAL = 'PF',
+  BUSINESS = 'PJ'
+}
+
+export enum SubscriptionPlan {
+  TRIAL = 'TRIAL',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY'
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  familyId: string;
+  settings?: AppSettings;
+  role: UserRole | string;
+  entityType: EntityType;
+  plan: SubscriptionPlan;
+  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED';
+  trialEndsAt?: string;
+  googleId?: string;
+  workspaces?: Workspace[];
 }
 
 export interface AuthResponse {
@@ -116,100 +105,29 @@ export interface AuthResponse {
   user: User;
 }
 
-export interface Invite {
-  code: string;
-  expiresAt: string;
-}
-
 export interface Account {
   id: string;
   name: string;
   type: AccountType;
   balance: number;
-  userId?: string;
-  // Campos específicos para Cartão de Crédito
   creditLimit?: number;
-  closingDay?: number; // Melhor dia de compra
-  dueDay?: number;     // Dia do vencimento
+  closingDay?: number;
+  dueDay?: number;
 }
 
 export interface Contact {
   id: string;
   name: string;
-  userId?: string;
-  // Extended Fields (Centralized Info)
   email?: string;
   phone?: string;
-  document?: string; // CPF/CNPJ
+  document?: string;
   pixKey?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
-  type?: TransactionType; // Opcional, para sugerir apenas em receitas ou despesas
-  userId?: string;
-}
-
-// --- PJ Specific Interfaces ---
-export enum TaxRegime {
-    MEI = 'MEI',
-    SIMPLES = 'SIMPLES',
-    PRESUMIDO = 'PRESUMIDO',
-    REAL = 'REAL'
-}
-
-export interface CompanyProfile {
-  id: string;
-  tradeName: string; // Nome Fantasia
-  legalName: string; // Razão Social
-  cnpj: string;
-  userId?: string;
-  
-  // Dados Tributários
-  taxRegime?: TaxRegime;
-  cnae?: string; // Código Principal
-  secondaryCnaes?: string; // Lista formatada de CNAEs secundários
-  
-  // Endereço e Contato
-  zipCode?: string;
-  street?: string;
-  number?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  phone?: string;
-  email?: string;
-
-  // Indicadores
-  hasEmployees?: boolean;
-  issuesInvoices?: boolean;
-}
-
-export interface Branch {
-  id: string;
-  name: string;
-  code?: string;
-  userId?: string;
-}
-
-export interface CostCenter {
-  id: string;
-  name: string;
-  code?: string;
-  userId?: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-  userId?: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  userId?: string;
+  type: TransactionType;
 }
 
 export interface Transaction {
@@ -221,26 +139,22 @@ export interface Transaction {
   date: string;
   status: TransactionStatus;
   accountId: string;
-  isRecurring: boolean;
+  destinationAccountId?: string;
+  isRecurring?: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
-  userId?: string;
-  destinationAccountId?: string;
   interestRate?: number;
   contactId?: string;
-  goalId?: string; // Link to FinancialGoal (Aporte)
+  goalId?: string;
   // PJ Fields
   branchId?: string;
-  destinationBranchId?: string; // Para transferências entre filiais
+  destinationBranchId?: string;
   costCenterId?: string;
   departmentId?: string;
   projectId?: string;
   classification?: TransactionClassification;
-  // Audit Fields
+  
   createdByName?: string;
-  updatedByName?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface FinancialGoal {
@@ -249,26 +163,96 @@ export interface FinancialGoal {
   targetAmount: number;
   currentAmount: number;
   deadline: string;
-  userId?: string;
 }
 
-export interface ChangeDiff {
-  old: any;
-  new: any;
+export interface AppState {
+  accounts: Account[];
+  transactions: Transaction[];
+  goals: FinancialGoal[];
+  contacts: Contact[];
+  categories: Category[];
+  
+  // PJ Data
+  companyProfile?: CompanyProfile | null;
+  branches: Branch[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  projects: Project[];
+
+  // Modules Data
+  serviceClients: ServiceClient[];
+  serviceItems: ServiceItem[];
+  serviceAppointments: ServiceAppointment[];
+  serviceOrders: ServiceOrder[];
+  commercialOrders: CommercialOrder[];
+  contracts: Contract[];
+  invoices: Invoice[];
 }
+
+export type ViewMode = 
+  // Finance
+  'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_ADVISOR' |
+  // System
+  'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' |
+  // Odonto
+  'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES' |
+  // Services & Sales
+  'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS';
+
+// --- PJ INTERFACES ---
+
+export enum TaxRegime {
+    MEI = 'MEI',
+    SIMPLES = 'SIMPLES',
+    PRESUMIDO = 'PRESUMIDO',
+    REAL = 'REAL'
+}
+
+export interface CompanyProfile {
+    id: string;
+    tradeName: string; // Nome Fantasia
+    legalName: string; // Razão Social
+    cnpj: string;
+    taxRegime: TaxRegime;
+    cnae: string; // Atividade Principal
+    secondaryCnaes?: string;
+    
+    // Endereço
+    zipCode: string;
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    
+    // Contato
+    phone: string;
+    email: string;
+
+    // Configs
+    hasEmployees: boolean;
+    issuesInvoices: boolean;
+}
+
+export interface Branch { id: string; name: string; code?: string; }
+export interface CostCenter { id: string; name: string; code?: string; }
+export interface Department { id: string; name: string; }
+export interface Project { id: string; name: string; }
+
+// --- MODULES & AUDIT ---
 
 export interface AuditLog {
-  id: number;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
-  entity: string; // 'transaction', 'account', etc.
-  entityId: string;
-  details?: string; // Nome ou descrição resumida do item
-  timestamp: string;
-  userId: string;
-  userName: string;
-  isDeleted: boolean; // Se o registro atual está deletado (para saber se exibe botão restaurar)
-  previousState?: any; // JSON com o estado anterior
-  changes?: Record<string, ChangeDiff>; // JSON com o diff das alterações
+    id: number;
+    userId: string;
+    userName?: string;
+    action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
+    entity: string;
+    entityId: string;
+    details: string;
+    timestamp: string;
+    isDeleted?: boolean;
+    previousState?: any;
+    changes?: Record<string, { old: any, new: any }>;
 }
 
 export interface NotificationLog {
@@ -283,73 +267,56 @@ export interface NotificationLog {
     createdAt: string;
 }
 
-// --- GENERIC SERVICE MODULE TYPES ---
-
 export interface ServiceClient {
     id: string;
-    contactId: string; // Link to core Contacts table
-    contactName?: string; // Resolved name
-    // Fields passed during creation but stored in Contacts table
+    contactId: string;
+    contactName?: string; // Resolved
     contactEmail?: string;
     contactPhone?: string;
-    
-    // Module Specific (Clinical Data)
-    notes?: string; // Anamnese, Histórico, Prontuário, etc.
+    notes?: string; // Anamnese / Histórico
     birthDate?: string;
+    moduleTag: string; // 'ODONTO', 'FISIO', etc.
+    
+    // Specifics
     insurance?: string; // Convênio
     allergies?: string;
     medications?: string;
-    
-    moduleTag: string; // 'ODONTO', 'PHYSIO', etc. (MANDATORY for filtering)
-    createdAt?: string;
 }
 
 export interface ServiceItem {
     id: string;
-    name: string; // Nome do procedimento/serviço
+    name: string; // "Limpeza", "Consulta"
     code?: string;
     defaultPrice: number;
-    moduleTag: string; // 'ODONTO', 'PHYSIO'
+    moduleTag: string;
 }
 
 export interface ServiceAppointment {
     id: string;
-    clientId: string; 
-    clientName?: string; 
-    serviceId?: string; 
-    serviceName?: string; 
-    date: string; // YYYY-MM-DD HH:mm
+    clientId: string;
+    clientName?: string; // Resolved
+    serviceId?: string;
+    serviceName?: string; // Resolved
+    date: string;
     status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
     notes?: string;
-    transactionId?: string; 
-    moduleTag: string; // 'ODONTO', 'PHYSIO'
+    transactionId?: string; // Link to finance
+    moduleTag: string;
 }
 
-// --- NEW SERVICE MODULE TYPES (OS, Sales, Contracts) ---
+// --- NEW SERVICE MODULE TYPES ---
 
 export interface ServiceOrder {
     id: string;
-    number: number;
+    number?: number;
     title: string;
     description?: string;
     contactId?: string;
-    contactName?: string; // Resolved
+    contactName?: string;
     status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
     totalAmount: number;
     startDate?: string;
     endDate?: string;
-}
-
-export interface Contract {
-    id: string;
-    title: string;
-    contactId?: string;
-    contactName?: string; // Resolved
-    value: number;
-    startDate: string;
-    endDate?: string;
-    status: 'ACTIVE' | 'EXPIRED' | 'CANCELED';
-    billingDay?: number;
 }
 
 export interface CommercialOrder {
@@ -357,11 +324,23 @@ export interface CommercialOrder {
     type: 'SALE' | 'PURCHASE';
     description: string;
     contactId?: string;
-    contactName?: string; // Resolved
+    contactName?: string;
     amount: number;
     date: string;
     status: 'DRAFT' | 'CONFIRMED' | 'CANCELED';
     transactionId?: string;
+}
+
+export interface Contract {
+    id: string;
+    title: string;
+    contactId?: string;
+    contactName?: string;
+    value: number;
+    startDate: string;
+    endDate?: string;
+    status: 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+    billingDay?: number;
 }
 
 export interface Invoice {
@@ -377,62 +356,50 @@ export interface Invoice {
     fileUrl?: string;
 }
 
-export interface AppState {
-  accounts: Account[];
-  transactions: Transaction[];
-  goals: FinancialGoal[];
-  contacts: Contact[]; 
-  categories: Category[];
-  // PJ Data
-  companyProfile?: CompanyProfile | null;
-  branches: Branch[];
-  costCenters: CostCenter[];
-  departments: Department[];
-  projects: Project[];
-  // Generic Module Data
-  serviceClients?: ServiceClient[];
-  serviceItems?: ServiceItem[];
-  serviceAppointments?: ServiceAppointment[];
-  // Services Module Data
-  serviceOrders?: ServiceOrder[];
-  contracts?: Contract[];
-  commercialOrders?: CommercialOrder[];
-  invoices?: Invoice[];
+// --- ACCESS CONTROL ROLES ---
+
+export interface RoleTemplate {
+    id: string;
+    label: string;
+    description: string;
+    defaultPermissions: string[];
 }
 
-// Updated ViewMode to support Module Hierarchies
-export type ViewMode = 
-  // Financeiro (Padrão)
-  | 'FIN_DASHBOARD' 
-  | 'FIN_TRANSACTIONS' 
-  | 'FIN_CALENDAR' 
-  | 'FIN_CARDS'
-  | 'FIN_ACCOUNTS' 
-  | 'FIN_REPORTS' 
-  | 'FIN_ADVISOR'
-  | 'FIN_CATEGORIES'
-  | 'FIN_CONTACTS' 
-  | 'FIN_GOALS'
-  // Odonto
-  | 'ODONTO_AGENDA'
-  | 'ODONTO_PATIENTS'
-  | 'ODONTO_PROCEDURES'
-  // Serviços
-  | 'SRV_OS'
-  | 'SRV_SALES'
-  | 'SRV_PURCHASES'
-  | 'SRV_CONTRACTS'
-  | 'SRV_NF'
-  | 'SRV_CLIENTS'
-  // Gestão / Sistema
-  | 'SYS_CONTACTS' 
-  | 'SYS_LOGS'
-  | 'SYS_SETTINGS'
-  | 'SYS_ACCESS';
-
-declare global {
-  interface Window {
-    google: any;
-    GOOGLE_CLIENT_ID?: string;
-  }
-}
+export const ROLE_DEFINITIONS: RoleTemplate[] = [
+    { 
+        id: 'ADMIN', 
+        label: 'Administrador', 
+        description: 'Acesso total a todos os módulos e configurações.', 
+        defaultPermissions: [] // Admin bypasses checks
+    }, 
+    { 
+        id: 'MEMBER', 
+        label: 'Membro Padrão', 
+        description: 'Acesso às finanças básicas (Lançamentos, Contas, Metas).', 
+        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS'] 
+    },
+    { 
+        id: 'ACCOUNTANT', 
+        label: 'Contador / Auditor', 
+        description: 'Visualização de relatórios, extratos e logs de auditoria.', 
+        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR'] 
+    },
+    { 
+        id: 'DENTIST', 
+        label: 'Profissional Odonto', 
+        description: 'Acesso focado na agenda e pacientes.', 
+        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS'] 
+    },
+    { 
+        id: 'SALES', 
+        label: 'Vendedor', 
+        description: 'Acesso a pedidos de venda, clientes e orçamentos.', 
+        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'] 
+    },
+    {
+        id: 'OPERATOR',
+        label: 'Operador Financeiro',
+        description: 'Pode lançar contas e OS, sem acesso a relatórios gerenciais.',
+        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
+    }
+];

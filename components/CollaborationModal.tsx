@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase } from 'lucide-react';
+import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase, ChevronRight } from 'lucide-react';
 import { createInvite, joinFamily, getFamilyMembers } from '../services/storageService';
-import { User, EntityType, Member } from '../types';
+import { User, EntityType, Member, ROLE_DEFINITIONS } from '../types';
 import { useAlert } from './AlertSystem';
 
 interface CollaborationModalProps {
@@ -21,12 +21,16 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  
+  // Role Selection State
+  const [selectedRole, setSelectedRole] = useState<string>('MEMBER');
 
   const isPJ = currentUser.entityType === EntityType.BUSINESS;
 
   useEffect(() => {
     if (isOpen) {
       loadMembers();
+      setInviteCode(null); // Reset code on open
     }
   }, [isOpen]);
 
@@ -42,10 +46,11 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
   const handleCreateInvite = async () => {
     setLoading(true);
     try {
-        const data = await createInvite();
+        const data = await createInvite(selectedRole); // Pass selected role
         setInviteCode(data.code);
     } catch (e) {
         console.error(e);
+        showAlert("Erro ao gerar convite.", "error");
     } finally {
         setLoading(false);
     }
@@ -78,20 +83,24 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
       inviteTab: isPJ ? "Convidar Sócio/Membro" : "Convidar Familiar",
       joinTab: isPJ ? "Entrar em Organização" : "Entrar em Família",
       inviteDesc: isPJ 
-        ? "Gere um código de acesso para permitir que sócios ou colaboradores visualizem e gerenciem o fluxo de caixa desta empresa."
-        : "Gere um código para que seu parceiro(a) ou familiar possa ver e editar as mesmas finanças que você em tempo real.",
+        ? "Gere um código de acesso. Escolha o perfil do novo membro para configurar permissões automaticamente."
+        : "Gere um código para que seu parceiro(a) ou familiar possa ver e editar as mesmas finanças.",
       membersTitle: isPJ ? "Membros da Organização" : "Membros da Família",
       joinTitle: isPJ ? "Unir-se a uma Empresa" : "Unir Contas Familiares",
       joinDesc: isPJ
-        ? "Ao entrar com um código corporativo, você passará a visualizar os dados financeiros da empresa convidada."
+        ? "Ao entrar com um código corporativo, você passará a visualizar os dados da empresa convidada."
         : "Ao entrar em um grupo, seus dados atuais serão mesclados ou substituídos pela visualização da família.",
       joinBtn: isPJ ? "Entrar na Organização" : "Entrar na Família"
   };
 
+  // Filter roles based on context (PF usually doesn't need Dentist/Sales templates explicitly shown unless active, but we show all for flexibility)
+  // For PF, maybe simplify? Let's keep it powerful.
+  const availableRoles = ROLE_DEFINITIONS.filter(r => r.id !== 'ADMIN'); // Admin is implicitly the owner
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
-        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
             {isPJ ? <Briefcase className="w-5 h-5 text-indigo-600" /> : <Users className="w-5 h-5 text-indigo-600" />}
             {texts.title}
@@ -101,7 +110,7 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
             {/* Tabs */}
             <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button
@@ -121,32 +130,66 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
             {activeTab === 'INVITE' && (
                 <div className="space-y-6">
                     <div className="text-center">
-                        <p className="text-sm text-gray-500 mb-4 leading-relaxed">
+                        <p className="text-sm text-gray-500 mb-6 leading-relaxed">
                             {texts.inviteDesc}
                         </p>
                         
                         {!inviteCode ? (
-                            <button 
-                                onClick={handleCreateInvite}
-                                disabled={loading}
-                                className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-                            >
-                                {loading ? 'Gerando...' : 'Gerar Código de Acesso'}
-                            </button>
+                            <div className="space-y-4">
+                                <div className="text-left">
+                                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Perfil de Acesso do Convidado</label>
+                                    <div className="space-y-2">
+                                        {availableRoles.map(role => (
+                                            <label 
+                                                key={role.id}
+                                                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedRole === role.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-indigo-200'}`}
+                                            >
+                                                <input 
+                                                    type="radio" 
+                                                    name="role" 
+                                                    value={role.id} 
+                                                    checked={selectedRole === role.id}
+                                                    onChange={() => setSelectedRole(role.id)}
+                                                    className="mt-1"
+                                                />
+                                                <div>
+                                                    <span className={`block text-sm font-bold ${selectedRole === role.id ? 'text-indigo-700' : 'text-gray-700'}`}>{role.label}</span>
+                                                    <span className="text-xs text-gray-500 leading-tight">{role.description}</span>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={handleCreateInvite}
+                                    disabled={loading}
+                                    className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2"
+                                >
+                                    {loading ? 'Gerando...' : 'Gerar Código de Acesso'}
+                                </button>
+                            </div>
                         ) : (
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 animate-fade-in">
-                                <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider mb-2">Código de Acesso</p>
+                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 animate-fade-in">
+                                <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider mb-2">Código de Acesso ({ROLE_DEFINITIONS.find(r => r.id === selectedRole)?.label})</p>
                                 <div className="flex items-center justify-center gap-3">
-                                    <span className="text-3xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
+                                    <span className="text-4xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
                                     <button 
                                         onClick={() => { navigator.clipboard.writeText(inviteCode); showAlert("Código copiado!", "info"); }}
                                         className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
                                         title="Copiar"
                                     >
-                                        <Copy className="w-5 h-5" />
+                                        <Copy className="w-6 h-6" />
                                     </button>
                                 </div>
                                 <p className="text-xs text-indigo-400 mt-2">Válido por 24 horas</p>
+                                
+                                <button 
+                                    onClick={() => setInviteCode(null)}
+                                    className="text-xs text-gray-400 hover:text-gray-600 underline mt-4"
+                                >
+                                    Gerar novo código
+                                </button>
                             </div>
                         )}
                     </div>

@@ -124,10 +124,11 @@ export const consultCnpj = async (cnpj: string) => {
 };
 
 // Collaboration
-export const createInvite = async (): Promise<{ code: string }> => {
-    const res = await fetch(`${API_URL}/invites`, { // Fixed endpoint
+export const createInvite = async (roleTemplate?: string): Promise<{ code: string }> => {
+    const res = await fetch(`${API_URL}/invites`, { 
         method: 'POST',
-        headers: getHeaders() 
+        headers: getHeaders(),
+        body: JSON.stringify({ roleTemplate })
     });
     return await handleResponse(res);
 };

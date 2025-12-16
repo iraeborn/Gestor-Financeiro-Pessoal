@@ -49,17 +49,19 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const clientId = window.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+    // Cast window to any to access custom properties and google object injected by scripts
+    const win = window as any;
+    const clientId = win.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
  
-    if (window.google && clientId && mode === 'LOGIN') {
+    if (win.google && clientId && mode === 'LOGIN') {
       try {
-        window.google.accounts.id.initialize({
+        win.google.accounts.id.initialize({
           client_id: clientId,
           callback: handleGoogleCallback
         });
         const buttonDiv = document.getElementById("googleSignInDiv");
         if (buttonDiv) {
-          window.google.accounts.id.renderButton(
+          win.google.accounts.id.renderButton(
             buttonDiv,
             { theme: "outline", size: "large", width: "100%" } 
           );

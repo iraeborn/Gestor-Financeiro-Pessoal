@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS invites (
     family_id TEXT NOT NULL,
     created_by TEXT NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    role_template TEXT -- Novo: Define o perfil de acesso sugerido (ADMIN, MEMBER, ACCOUNTANT...)
 );
 
 -- Criação da Tabela de Contas

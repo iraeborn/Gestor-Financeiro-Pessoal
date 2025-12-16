@@ -10,6 +10,16 @@ const router = express.Router();
 const WHATSAPP_API_URL = "https://graph.facebook.com/v22.0/934237103105071/messages";
 const WHATSAPP_TOKEN = "EAFpabmZBi0U0BQKRhGRsH8eVtgUPLNUoDi2mg2r8bDAj9vfBcolZC9CONlSdqFVug7FXrCKZCGsgxPiIUZBc2kIdnZBbnZAVZAJFOFRk4f3ZA3bsOwEyO87bzZBGwUY0Aj0aQTHq1mcYxHaebickk8ubQsz6G4Y0hnlIxcmj0WQFKasRy8KFLobi0torRxc2NzYE5Q17KToe24ngyadf2PdbRmfKahoO26mALs6yAMUTyiZBm9ufcIod9fipU8ZCzP0mBIqgmzClQtbonxa43kQ11CGTh7f1ZAxuDPwLlZCZCTZA8c3";
 
+// --- PERMISSION MAP (Must match types.ts) ---
+const ROLE_PERMISSIONS = {
+    'ADMIN': [], // Special case: All access
+    'MEMBER': ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS'],
+    'ACCOUNTANT': ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR'],
+    'DENTIST': ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS'],
+    'SALES': ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'],
+    'OPERATOR': ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
+};
+
 // --- HELPERS (WHATSAPP) ---
 const sendWhatsappMessage = async (to, templateName = 'jaspers_market_plain_text_v1') => {
     if (!to) return;
@@ -281,12 +291,17 @@ export default function(logAudit) {
     // --- COLLABORATION ---
     router.post('/invites', authenticateToken, async (req, res) => {
         const userId = req.user.id;
+        const { roleTemplate } = req.body; // New: receive role template
         try {
             const activeFamilyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id;
             if (!activeFamilyId) return res.status(400).json({error: "Usuário não tem contexto ativo"});
+            
+            // Ensure column exists
+            try { await pool.query(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS role_template TEXT`); } catch(e) {}
+
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             const expiresAt = new Date(); expiresAt.setHours(expiresAt.getHours() + 24);
-            await pool.query(`INSERT INTO invites (code, family_id, created_by, expires_at) VALUES ($1, $2, $3, $4)`, [code, activeFamilyId, userId, expiresAt]);
+            await pool.query(`INSERT INTO invites (code, family_id, created_by, expires_at, role_template) VALUES ($1, $2, $3, $4, $5)`, [code, activeFamilyId, userId, expiresAt, roleTemplate || 'MEMBER']);
             res.json({ code, expiresAt });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -295,11 +310,32 @@ export default function(logAudit) {
         const { code } = req.body;
         const userId = req.user.id;
         try {
+            // Ensure column exists
+            try { await pool.query(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS role_template TEXT`); } catch(e) {}
+
             const invite = (await pool.query('SELECT * FROM invites WHERE code = $1 AND expires_at > NOW()', [code])).rows[0];
             if (!invite) return res.status(404).json({ error: 'Convite inválido ou expirado' });
 
-            const defaultPermissions = JSON.stringify(['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS']);
-            await pool.query(`INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $2, 'MEMBER', $3) ON CONFLICT (user_id, family_id) DO UPDATE SET role = 'MEMBER', permissions = COALESCE(memberships.permissions, $3)`, [userId, invite.family_id, defaultPermissions]);
+            const roleKey = invite.role_template || 'MEMBER';
+            const mappedRole = roleKey === 'ADMIN' ? 'ADMIN' : 'MEMBER'; // DB role column is restricted to ADMIN/MEMBER usually, permissions handle fine-grain.
+            
+            // Get permissions from map
+            let permissionsToApply = [];
+            if (roleKey === 'ADMIN') {
+                // If invite is for admin, give admin role.
+                // If permissions logic requires empty array for admin (as defined in types), send empty.
+                permissionsToApply = []; 
+            } else {
+                permissionsToApply = ROLE_PERMISSIONS[roleKey] || ROLE_PERMISSIONS['MEMBER'];
+            }
+
+            const permissionsJson = JSON.stringify(permissionsToApply);
+
+            await pool.query(
+                `INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $2, $3, $4) 
+                 ON CONFLICT (user_id, family_id) DO UPDATE SET role = $3, permissions = COALESCE(memberships.permissions, $4)`, 
+                [userId, invite.family_id, mappedRole, permissionsJson]
+            );
             await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
             
             const userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
