@@ -5,9 +5,9 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, PieChart, 
   Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
   ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
-  FileText, FileSignature, UserCog
+  FileText, FileSignature, UserCog, Check, Building
 } from 'lucide-react';
-import { logout } from '../services/storageService';
+import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
 
 interface SidebarProps {
@@ -21,6 +21,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser, onUserUpdate, onOpenCollab }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const activeModules = currentUser.settings?.activeModules || {};
   const hasOdonto = activeModules.odonto;
@@ -29,6 +30,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const handleLogout = () => {
     logout();
     window.location.reload();
+  };
+
+  const handleSwitchWorkspace = async (wsId: string) => {
+      if (wsId === currentUser.familyId) return;
+      setSwitching(true);
+      try {
+          await switchContext(wsId);
+          window.location.reload();
+      } catch (e) {
+          console.error(e);
+          setSwitching(false);
+      }
   };
 
   const menuItems = [
@@ -99,6 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
              <div className="relative">
                   <button 
                     onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
+                    disabled={switching}
                     className="flex items-center gap-3 w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left hover:shadow-sm"
                   >
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
@@ -106,14 +120,37 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                       </div>
                       <div className="flex-1 overflow-hidden">
                           <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{currentUser.email}</p>
+                          <p className="text-xs text-gray-500 truncate">{switching ? 'Trocando...' : currentUser.email}</p>
                       </div>
                       <Settings className="w-4 h-4 text-gray-400" />
                   </button>
 
                   {isWorkspaceDropdownOpen && (
-                      <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-scale-up z-50">
+                      <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-scale-up z-50 max-h-[300px] overflow-y-auto">
                           <div className="p-1">
+                              {/* Workspace Switcher */}
+                              {currentUser.workspaces && currentUser.workspaces.length > 0 && (
+                                  <>
+                                      <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                                          Meus Ambientes
+                                      </div>
+                                      {currentUser.workspaces.map(ws => (
+                                          <button
+                                              key={ws.id}
+                                              onClick={() => handleSwitchWorkspace(ws.id)}
+                                              className={`w-full text-left px-4 py-2.5 text-xs font-medium flex items-center justify-between gap-2 rounded-lg transition-colors ${ws.id === currentUser.familyId ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                                          >
+                                              <div className="flex items-center gap-2 overflow-hidden">
+                                                  {ws.entityType === 'PJ' ? <Briefcase className="w-3 h-3 flex-shrink-0" /> : <Building className="w-3 h-3 flex-shrink-0" />}
+                                                  <span className="truncate">{ws.name}</span>
+                                              </div>
+                                              {ws.id === currentUser.familyId && <Check className="w-3 h-3 text-indigo-600" />}
+                                          </button>
+                                      ))}
+                                      <div className="h-px bg-gray-100 my-1"></div>
+                                  </>
+                              )}
+
                               <button 
                                 onClick={() => { if (onOpenCollab) onOpenCollab(); setIsWorkspaceDropdownOpen(false); }}
                                 className="w-full text-left px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 rounded-lg transition-colors"
