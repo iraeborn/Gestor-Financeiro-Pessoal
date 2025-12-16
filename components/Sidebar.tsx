@@ -23,6 +23,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
+  // 1. Determinar permissões do contexto atual
+  const currentWorkspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
+  const isOwner = currentUser.id === currentUser.familyId;
+  // Admin do workspace ou Dono da conta tem acesso total
+  const isAdmin = isOwner || currentWorkspace?.role === 'ADMIN'; 
+  const userPermissions = currentWorkspace?.permissions || [];
+
   const activeModules = currentUser.settings?.activeModules || {};
   const hasOdonto = activeModules.odonto;
   const hasServices = activeModules.services;
@@ -44,8 +51,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       }
   };
 
+  // Função auxiliar para checar permissão individual
+  const canView = (permissionId: string) => {
+      if (isAdmin) return true; // Admins veem tudo que está ativo nos módulos
+      return userPermissions.includes(permissionId);
+  };
+
   const menuItems = [
-    { section: 'Financeiro', items: [
+    { 
+      section: 'Financeiro', 
+      items: [
         { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
         { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: List },
         { id: 'FIN_CALENDAR', label: 'Calendário', icon: Calendar },
@@ -56,24 +71,34 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
         { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit, highlight: true },
         { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
-    ]},
-    ...(hasServices ? [{ section: 'Serviços & Vendas', items: [
+      ].filter(i => canView(i.id)) 
+    },
+    ...(hasServices ? [{ 
+      section: 'Serviços & Vendas', 
+      items: [
         { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
         { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
         { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
         { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
         { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
-    ]}] : []),
-    ...(hasOdonto ? [{ section: 'Odontologia', items: [
+      ].filter(i => canView(i.id))
+    }] : []),
+    ...(hasOdonto ? [{ 
+      section: 'Odontologia', 
+      items: [
         { id: 'ODONTO_AGENDA', label: 'Agenda', icon: Calendar },
         { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: SmilePlus },
         { id: 'ODONTO_PROCEDURES', label: 'Procedimentos', icon: List },
-    ]}] : []),
-    { section: 'Sistema', items: [
+      ].filter(i => canView(i.id))
+    }] : []),
+    { 
+      section: 'Sistema', 
+      items: [
         { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
         { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
-    ]}
+      ].filter(i => canView(i.id))
+    }
   ];
 
   return (
@@ -86,25 +111,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
 
         <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-thin">
             {menuItems.map((section, idx) => (
-                <div key={idx}>
-                    <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{section.section}</p>
-                    <div className="space-y-1">
-                        {section.items.map((item: any) => (
-                            <button
-                                key={item.id}
-                                onClick={() => onChangeView(item.id as ViewMode)}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                    currentView === item.id 
-                                    ? 'bg-indigo-50 text-indigo-700 shadow-sm' 
-                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                }`}
-                            >
-                                <item.icon className={`w-5 h-5 ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400'} ${item.highlight ? 'text-indigo-500' : ''}`} />
-                                {item.label}
-                            </button>
-                        ))}
+                section.items.length > 0 && (
+                    <div key={idx}>
+                        <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{section.section}</p>
+                        <div className="space-y-1">
+                            {section.items.map((item: any) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => onChangeView(item.id as ViewMode)}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                        currentView === item.id 
+                                        ? 'bg-indigo-50 text-indigo-700 shadow-sm' 
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                    }`}
+                                >
+                                    <item.icon className={`w-5 h-5 ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400'} ${item.highlight ? 'text-indigo-500' : ''}`} />
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )
             ))}
         </div>
 
@@ -120,7 +147,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                       </div>
                       <div className="flex-1 overflow-hidden">
                           <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{switching ? 'Trocando...' : currentUser.email}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                              {switching ? 'Trocando...' : (currentWorkspace?.role === 'ADMIN' ? 'Administrador' : 'Membro')}
+                          </p>
                       </div>
                       <Settings className="w-4 h-4 text-gray-400" />
                   </button>

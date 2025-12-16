@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog } from 'lucide-react';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
@@ -437,6 +437,15 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                         : 'Membros têm acesso restrito conforme as permissões abaixo.'}
                                 </p>
                             </div>
+
+                            {editRole === 'ADMIN' && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                                    <p className="text-sm text-amber-800">
+                                        <strong>Atenção:</strong> Usuários Administradores podem visualizar e editar todos os dados, excluir registros e gerenciar outros membros. Use com cautela.
+                                    </p>
+                                </div>
+                            )}
 
                             {editRole === 'MEMBER' && (
                                 <div className="space-y-6">
