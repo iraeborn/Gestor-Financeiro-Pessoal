@@ -1,299 +1,153 @@
-
 import React, { useState } from 'react';
+import { ViewMode, User, EntityType } from '../types';
 import { 
-    LayoutDashboard, Receipt, PieChart, BrainCircuit, Wallet, LogOut, 
-    CalendarDays, Settings, Users, CreditCard, ScrollText, ChevronDown, 
-    Check, Briefcase, SmilePlus, ChevronRight, Stethoscope, Contact, Calendar, ShieldCheck, Tag, Target, Landmark, UserCog, Lock, ShoppingBag, FileText, Wrench, FileSignature
+  LayoutDashboard, List, Calendar, CreditCard, PieChart, 
+  Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
+  ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
+  FileText, FileSignature, UserCog
 } from 'lucide-react';
-import { ViewMode, User, Workspace } from '../types';
-import { logout, switchContext } from '../services/storageService';
-import { useAlert } from './AlertSystem';
+import { logout } from '../services/storageService';
 import ProfileModal from './ProfileModal';
 
 interface SidebarProps {
   currentView: ViewMode;
   onChangeView: (view: ViewMode) => void;
-  onOpenCollab?: () => void; 
-  currentUser?: User | null; // Pass current user to access workspaces
+  currentUser: User;
   onUserUpdate: (u: User) => void;
+  onOpenCollab?: () => void;
 }
 
-interface MenuItem {
-    id: ViewMode;
-    label: string;
-    icon?: React.ElementType;
-}
-
-interface ModuleGroup {
-    id: string;
-    label: string;
-    icon: React.ElementType;
-    items: MenuItem[];
-    isVisible?: boolean; // Control if module is shown (e.g. PJ only)
-}
-
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser, onUserUpdate }) => {
-  const { showAlert } = useAlert();
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser, onUserUpdate, onOpenCollab }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
-      'FINANCE': true,
-      'ODONTO': true,
-      'SYSTEM': true,
-      'SERVICES': true
-  });
-  
-  // Profile Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  const isPJ = currentUser.entityType === EntityType.BUSINESS;
+  const hasOdonto = currentUser.settings?.activeModules?.odonto;
 
   const handleLogout = () => {
     logout();
     window.location.reload();
   };
 
-  const handleSwitchWorkspace = async (ws: Workspace) => {
-      if (ws.id === currentUser?.familyId) {
-          setIsWorkspaceDropdownOpen(false);
-          return;
-      }
-      setSwitching(true);
-      try {
-          await switchContext(ws.id);
-          window.location.reload(); 
-      } catch (e) {
-          showAlert("Erro ao trocar de conta.", "error");
-          setSwitching(false);
-      }
-  };
-
-  const toggleModule = (moduleId: string) => {
-      setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
-  };
-
-  // Find active workspace & permissions
-  const activeWorkspace = currentUser?.workspaces?.find(w => w.id === currentUser.familyId);
-  const workspaceName = activeWorkspace ? activeWorkspace.name : (currentUser?.name || 'Minha Conta');
-  const isPJ = currentUser?.entityType === 'PJ';
-  const showOdonto = isPJ && currentUser?.settings?.activeModules?.odonto;
-  
-  // RBAC Logic
-  const isAdmin = activeWorkspace?.role === 'ADMIN';
-  
-  // Defensive: Ensure permissions is an array, parsing if string (just in case of driver quirks)
-  let rawPermissions = activeWorkspace?.permissions || [];
-  let userPermissions: string[] = [];
-  
-  if (Array.isArray(rawPermissions)) {
-      userPermissions = rawPermissions;
-  } else if (typeof rawPermissions === 'string') {
-      try { userPermissions = JSON.parse(rawPermissions); } catch (e) { userPermissions = []; }
-  }
-
-  const hasPermission = (viewId: string) => {
-      if (isAdmin) return true;
-      return userPermissions.includes(viewId);
-  };
-
-  // Check if user has ANY permission to view modules
-  const hasAnyPermission = isAdmin || userPermissions.length > 0;
-
-  const modules: ModuleGroup[] = [
-      {
-          id: 'FINANCE',
-          label: 'Financeiro',
-          icon: Wallet,
-          isVisible: true,
-          items: [
-              { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
-              { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: Receipt },
-              { id: 'FIN_CALENDAR', label: 'Calendário', icon: CalendarDays },
-              { id: 'FIN_ACCOUNTS', label: 'Minhas Contas', icon: Landmark },
-              { id: 'FIN_CARDS', label: 'Meus Cartões', icon: CreditCard },
-              { id: 'FIN_GOALS', label: 'Metas', icon: Target },
-              { id: 'FIN_REPORTS', label: 'Relatórios', icon: PieChart },
-              { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
-              { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos', icon: Users },
-              { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit },
-          ]
-      },
-      {
-          id: 'SERVICES',
-          label: 'Serviços & Vendas',
-          icon: ShoppingBag,
-          isVisible: isPJ, // Only for PJ
-          items: [
-              { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
-              { id: 'SRV_SALES', label: 'Vendas', icon: Tag },
-              { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
-              { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
-              { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
-              { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
-          ]
-      },
-      {
-          id: 'ODONTO',
-          label: 'Odontologia',
-          icon: SmilePlus,
-          isVisible: !!showOdonto,
-          items: [
-              { id: 'ODONTO_AGENDA', label: 'Agenda', icon: Calendar },
-              { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: Contact },
-              { id: 'ODONTO_PROCEDURES', label: 'Procedimentos', icon: Stethoscope },
-          ]
-      },
-      {
-          id: 'SYSTEM',
-          label: 'Gestão',
-          icon: Settings,
-          isVisible: true,
-          items: [
-              { id: 'SYS_CONTACTS', label: 'Todos Contatos', icon: Users },
-              { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
-              { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
-              { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
-          ]
-      }
+  const menuItems = [
+    { section: 'Financeiro', items: [
+        { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
+        { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: List },
+        { id: 'FIN_CALENDAR', label: 'Calendário', icon: Calendar },
+        { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
+        { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
+        { id: 'FIN_GOALS', label: 'Metas', icon: PieChart },
+        { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
+        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit, highlight: true },
+        { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
+        { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
+    ]},
+    ...(isPJ ? [{ section: 'Serviços & Vendas', items: [
+        { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
+        { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
+        { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
+        { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
+        { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
+    ]}] : []),
+    ...(hasOdonto ? [{ section: 'Odontologia', items: [
+        { id: 'ODONTO_AGENDA', label: 'Agenda', icon: Calendar },
+        { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: SmilePlus },
+        { id: 'ODONTO_PROCEDURES', label: 'Procedimentos', icon: List },
+    ]}] : []),
+    { section: 'Sistema', items: [
+        { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
+        { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
+        { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
+    ]}
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200">
-      
-      {/* Workspace Switcher Header */}
-      <div className="p-4 border-b border-gray-100">
-          <div className="relative">
-              <button 
-                onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-                className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-colors text-left group"
-              >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm ${isPJ ? 'bg-indigo-900' : 'bg-indigo-600'}`}>
-                      {isPJ ? <Briefcase className="w-5 h-5" /> : <Wallet className="w-5 h-5" />}
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                      <p className="text-xs text-gray-500 font-medium truncate uppercase tracking-wider">{isPJ ? 'Empresa' : 'Pessoal'}</p>
-                      <p className="font-bold text-gray-800 truncate text-sm">{workspaceName}</p>
-                  </div>
-                  <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
-              </button>
+    <>
+    <div className="flex flex-col h-full bg-white border-r border-gray-100 shadow-sm">
+        <div className="p-6 flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg">F</div>
+            <span className="font-bold text-xl text-gray-800 tracking-tight">FinManager</span>
+        </div>
 
-              {/* Dropdown */}
-              {isWorkspaceDropdownOpen && (
-                  <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-fade-in">
-                      <div className="py-1">
-                          <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase">Trocar Conta</p>
-                          {currentUser?.workspaces?.map(ws => (
-                              <button
-                                key={ws.id}
-                                onClick={() => handleSwitchWorkspace(ws)}
-                                disabled={switching}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between group transition-colors"
-                              >
-                                  <div className="flex items-center gap-3">
-                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${ws.entityType === 'PJ' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                          {ws.entityType === 'PJ' ? 'PJ' : 'PF'}
-                                      </div>
-                                      <div>
-                                          <p className="text-sm font-semibold text-gray-800">{ws.name}</p>
-                                          <p className="text-xs text-gray-500 capitalize">{ws.role === 'ADMIN' ? 'Administrador' : 'Membro'}</p>
-                                      </div>
-                                  </div>
-                                  {ws.id === currentUser.familyId && <Check className="w-4 h-4 text-indigo-600" />}
-                              </button>
-                          ))}
-                      </div>
-                      {/* Gestão de Perfil Logado */}
-                      <div className="border-t border-gray-100 bg-gray-50 p-2">
-                          <button 
-                            onClick={() => { setIsProfileModalOpen(true); setIsWorkspaceDropdownOpen(false); }}
-                            className="w-full py-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 text-center flex items-center justify-center gap-2 hover:bg-indigo-50 rounded-lg transition-colors"
-                          >
-                              <UserCog className="w-4 h-4" />
-                              Meu Perfil (Editar)
-                          </button>
-                      </div>
-                  </div>
-              )}
-          </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
-        {!hasAnyPermission ? (
-            <div className="text-center p-4 bg-gray-50 rounded-xl border border-gray-100 mt-4">
-                <Lock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm font-bold text-gray-600">Acesso Limitado</p>
-                <p className="text-xs text-gray-400 mt-1">
-                    Você não tem permissões para visualizar módulos nesta conta. Solicite acesso ao administrador.
-                </p>
-            </div>
-        ) : (
-            modules.filter(m => m.isVisible).map((module) => {
-                // Filter items based on permission
-                const visibleItems = module.items.filter(item => hasPermission(item.id));
-                
-                // If no items are visible, hide the whole module
-                if (visibleItems.length === 0) return null;
-
-                return (
-                <div key={module.id} className="space-y-1">
-                    <button 
-                        onClick={() => toggleModule(module.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
-                    >
-                        <span className="flex items-center gap-2">
-                            <module.icon className="w-3 h-3" />
-                            {module.label}
-                        </span>
-                        <ChevronRight className={`w-3 h-3 transition-transform ${expandedModules[module.id] ? 'rotate-90' : ''}`} />
-                    </button>
-                    
-                    {expandedModules[module.id] && (
-                        <div className="space-y-1 animate-fade-in pl-2">
-                            {visibleItems.map(item => {
-                                const Icon = item.icon;
-                                const isActive = currentView === item.id;
-                                return (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => onChangeView(item.id)}
-                                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                                            isActive
-                                            ? 'bg-indigo-50 text-indigo-700 shadow-sm'
-                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                        }`}
-                                    >
-                                        {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-gray-400'}`} />}
-                                        {item.label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
+        <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-thin">
+            {menuItems.map((section, idx) => (
+                <div key={idx}>
+                    <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{section.section}</p>
+                    <div className="space-y-1">
+                        {section.items.map((item: any) => (
+                            <button
+                                key={item.id}
+                                onClick={() => onChangeView(item.id as ViewMode)}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                    currentView === item.id 
+                                    ? 'bg-indigo-50 text-indigo-700 shadow-sm' 
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                }`}
+                            >
+                                <item.icon className={`w-5 h-5 ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400'} ${item.highlight ? 'text-indigo-500' : ''}`} />
+                                {item.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                );
-            })
-        )}
-      </nav>
+            ))}
+        </div>
 
-      <div className="p-4 border-t border-gray-100 mt-auto">
-        <button 
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm font-medium"
-        >
-          <LogOut className="w-5 h-5" />
-          Sair
-        </button>
-      </div>
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+             <div className="relative">
+                  <button 
+                    onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
+                    className="flex items-center gap-3 w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left hover:shadow-sm"
+                  >
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                          {currentUser.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                          <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{currentUser.email}</p>
+                      </div>
+                      <Settings className="w-4 h-4 text-gray-400" />
+                  </button>
 
-      {/* MODAL DE PERFIL */}
-      {currentUser && (
-          <ProfileModal 
-            isOpen={isProfileModalOpen}
-            onClose={() => setIsProfileModalOpen(false)}
-            currentUser={currentUser}
-            onUserUpdate={onUserUpdate}
-          />
-      )}
+                  {isWorkspaceDropdownOpen && (
+                      <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-scale-up z-50">
+                          <div className="p-1">
+                              <button 
+                                onClick={() => { if (onOpenCollab) onOpenCollab(); setIsWorkspaceDropdownOpen(false); }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 rounded-lg transition-colors"
+                              >
+                                  <Users className="w-4 h-4" />
+                                  Convidar / Entrar
+                              </button>
+                              <button 
+                                onClick={() => { setIsProfileModalOpen(true); setIsWorkspaceDropdownOpen(false); }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 rounded-lg transition-colors"
+                              >
+                                  <UserCog className="w-4 h-4" />
+                                  Meu Perfil
+                              </button>
+                              <div className="h-px bg-gray-100 my-1"></div>
+                              <button 
+                                onClick={handleLogout}
+                                className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 rounded-lg transition-colors"
+                              >
+                                  <LogOut className="w-4 h-4" />
+                                  Sair
+                              </button>
+                          </div>
+                      </div>
+                  )}
+             </div>
+        </div>
     </div>
+
+    <ProfileModal 
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={currentUser}
+        onUserUpdate={onUserUpdate}
+    />
+    </>
   );
 };
 

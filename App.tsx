@@ -1,688 +1,258 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  User, AuthResponse, AppState, ViewMode, Transaction, Account, 
+  Contact, Category, FinancialGoal, AppSettings, EntityType, 
+  SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
+  ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice
+} from './types';
+import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
+import { useAlert } from './components/AlertSystem';
+import { Menu } from 'lucide-react';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Sidebar from './components/Sidebar';
+import Auth from './components/Auth';
+import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import TransactionsView from './components/TransactionsView';
-import Reports from './components/Reports';
-import SmartAdvisor from './components/SmartAdvisor';
 import CalendarView from './components/CalendarView';
-import SettingsView from './components/SettingsView';
-import ContactsView from './components/ContactsView';
-import CreditCardsView from './components/CreditCardsView';
 import AccountsView from './components/AccountsView';
+import CreditCardsView from './components/CreditCardsView';
+import GoalsView from './components/GoalsView';
+import Reports from './components/Reports';
+import CategoriesView from './components/CategoriesView';
+import ContactsView from './components/ContactsView';
+import SmartAdvisor from './components/SmartAdvisor';
+import AccessView from './components/AccessView';
 import LogsView from './components/LogsView';
-import Auth from './components/Auth';
-import CollaborationModal from './components/CollaborationModal';
-import LandingPage from './components/LandingPage';
+import SettingsView from './components/SettingsView';
 import AdminDashboard from './components/AdminDashboard';
+import Sidebar from './components/Sidebar';
+import CollaborationModal from './components/CollaborationModal';
 import ServiceModule from './components/ServiceModule';
 import ServicesView from './components/ServicesView';
-import AccessView from './components/AccessView';
-import CategoriesView from './components/CategoriesView'; 
-import GoalsView from './components/GoalsView';
-import { loadInitialData, api, logout, refreshUser } from './services/storageService';
-import { AppState, ViewMode, Transaction, TransactionStatus, Account, User, AppSettings, Contact, Category, UserRole, EntityType, SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project, ServiceClient, ServiceItem, ServiceAppointment, FinancialGoal, TransactionType } from './types';
-import { Menu, Loader2 } from 'lucide-react';
-import { useAlert, useConfirm } from './components/AlertSystem';
-import { io } from 'socket.io-client';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
-  const { showConfirm } = useConfirm();
-
-  // Auth & Routing States
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [showAuth, setShowAuth] = useState(false);
-  const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [registerEntityType, setRegisterEntityType] = useState<EntityType>(EntityType.PERSONAL);
-  const [registerPlan, setRegisterPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
-
-  // App Data States
-  const [state, setState] = useState<AppState>({ 
-      accounts: [], transactions: [], goals: [], contacts: [], categories: [],
-      branches: [], costCenters: [], departments: [], projects: [],
-      serviceClients: [], serviceItems: [], serviceAppointments: [],
-      serviceOrders: [], contracts: [], commercialOrders: [], invoices: []
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Modal States
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
+  const [landingInitType, setLandingInitType] = useState<EntityType>(EntityType.PERSONAL);
+  const [landingInitPlan, setLandingInitPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
+
+  // App State
+  const [data, setData] = useState<AppState>({
+    accounts: [], transactions: [], goals: [], contacts: [], categories: [],
+    branches: [], costCenters: [], departments: [], projects: [],
+    serviceClients: [], serviceItems: [], serviceAppointments: [],
+    serviceOrders: [], commercialOrders: [], contracts: [], invoices: []
+  });
+  const [loading, setLoading] = useState(false);
+  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
+  
+  // UI State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
-  // Constants
-  const ODONTO_TAG = 'ODONTO';
-
-  // --- CORE DATA SYNCHRONIZATION ---
-  
-  const refreshData = useCallback(async (silent = false) => {
-      if (!silent) setIsLoading(true);
-      try {
-          const data = await loadInitialData();
-          setState(data);
-      } catch (error) {
-          console.error("Sync error:", error);
-      } finally {
-          if (!silent) setIsLoading(false);
-      }
+  useEffect(() => {
+    checkAuth();
   }, []);
 
-  // Socket Connection Effect
-  useEffect(() => {
-      if (!currentUser || currentUser.role === UserRole.ADMIN) return;
-
-      const socket = io(); // Connect to same origin
-
-      socket.on('connect', () => {
-          console.log('Connected to WebSocket');
-          // Join specific family room
-          if (currentUser.familyId) {
-              socket.emit('join_family', currentUser.familyId);
-          }
-      });
-
-      socket.on('DATA_UPDATED', (payload) => {
-          console.log('Received update via Socket:', payload);
-          // Optional: Check payload.actorId to ignore self-updates if Optimistic UI was perfect,
-          // but for safety we refresh anyway to sync DB state.
-          refreshData(true);
-      });
-
-      return () => {
-          socket.disconnect();
-      };
-  }, [currentUser, refreshData]);
-
-  // Initial Load
-  useEffect(() => {
-    const init = async () => {
-      const token = localStorage.getItem('token');
-      const userStr = localStorage.getItem('user');
-      
-      if (!token || !userStr) {
-        setIsLoading(false);
-        return; 
-      }
-
+  const checkAuth = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
       try {
-          // 1. Refresh User Session
-          const freshUser = await refreshUser();
-          setCurrentUser(freshUser);
-          
-          if (freshUser.role === UserRole.ADMIN) {
-              setIsLoading(false);
-              return;
-          }
-
-          // 2. Load Initial Data
-          await refreshData();
-
+        const user = await refreshUser();
+        setCurrentUser(user);
+        setShowLanding(false);
+        await loadData();
       } catch (e) {
-          console.error("Session refresh failed:", e);
-          const localUser = JSON.parse(userStr);
-          if ((e as Error).message.includes('401') || (e as Error).message.includes('403')) {
-              logout();
-              setCurrentUser(null);
-              setIsLoading(false);
-              return;
-          }
-          setCurrentUser(localUser);
-          refreshData();
+        localStorage.removeItem('token');
       }
-    };
-    init();
+    }
+    setAuthChecked(true);
+  };
 
-    // Refresh on Window Focus (Fallback)
-    const handleFocus = () => {
-        if (localStorage.getItem('token')) {
-            refreshData(true);
-        }
-    };
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-        window.removeEventListener('focus', handleFocus);
-    };
-  }, [refreshData]);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const initialData = await loadInitialData();
+      setData(initialData);
+    } catch (e) {
+      console.error(e);
+      showAlert("Erro ao carregar dados.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLoginSuccess = async (user: User) => {
     setCurrentUser(user);
-    setShowAuth(false);
-    if (user.role === UserRole.ADMIN) return;
-    await refreshData();
+    setShowLanding(false);
+    await loadData();
   };
 
-  const handleGetStarted = (type: EntityType, plan: SubscriptionPlan) => {
-      setRegisterEntityType(type);
-      setRegisterPlan(plan);
-      setAuthMode('REGISTER');
-      setShowAuth(true);
-  };
-
-  const handleUpdateSettings = (settings: AppSettings) => {
-    if (currentUser) {
-        setCurrentUser({ ...currentUser, settings });
-        showAlert("Configurações salvas com sucesso!", "success");
-    }
-  };
-
-  // --- CRUD HANDLERS ---
-
-  const handleAddTransaction = async (newTransaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
+  // --- CRUD WRAPPERS ---
+  const handleAddTransaction = async (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
     try {
-        const transaction: Transaction = { ...newTransaction, id: crypto.randomUUID() };
-        const promises = [];
-        if (newContact) promises.push(api.saveContact(newContact));
-        if (newCategory) promises.push(api.saveCategory(newCategory));
-        promises.push(api.saveTransaction(transaction));
-        await Promise.all(promises);
-        
-        await refreshData(true); 
-        showAlert("Transação salva com sucesso!", "success");
-    } catch (e: any) {
-        showAlert("Erro ao salvar transação: " + e.message, "error");
-    }
+      if (newContact) await api.saveContact(newContact);
+      if (newCategory) await api.saveCategory(newCategory);
+      
+      const newT = { 
+          ...t, 
+          id: crypto.randomUUID(),
+          contactId: newContact ? newContact.id : t.contactId,
+          category: newCategory ? newCategory.name : t.category
+      };
+      await api.saveTransaction(newT);
+      await loadData(); // Reload to sync balances
+      showAlert("Transação salva com sucesso!");
+    } catch (e) { showAlert("Erro ao salvar transação.", "error"); }
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    const confirm = await showConfirm({
-        title: "Excluir Transação",
-        message: "Tem certeza que deseja excluir esta transação? O saldo será recalculado automaticamente.",
-        variant: "danger",
-        confirmText: "Sim, Excluir"
-    });
-
-    if (!confirm) return;
-
     try {
-        await api.deleteTransaction(id);
-        await refreshData(true);
-        showAlert("Transação excluída.", "success");
-    } catch (e: any) {
-        showAlert("Erro ao excluir transação: " + e.message, "error");
-    }
+      await api.deleteTransaction(id);
+      await loadData();
+      showAlert("Transação excluída.");
+    } catch (e) { showAlert("Erro ao excluir.", "error"); }
   };
 
-  const handleEditTransaction = async (updatedT: Transaction, newContact?: Contact, newCategory?: Category) => {
+  const handleEditTransaction = async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
     try {
-        const promises = [];
-        if (newContact) promises.push(api.saveContact(newContact));
-        if (newCategory) promises.push(api.saveCategory(newCategory));
-        promises.push(api.saveTransaction(updatedT));
-
-        await Promise.all(promises);
-        await refreshData(true);
-        showAlert("Transação atualizada.", "success");
-    } catch (e: any) {
-        showAlert("Erro ao editar transação: " + e.message, "error");
-    }
+      if (newContact) await api.saveContact(newContact);
+      if (newCategory) await api.saveCategory(newCategory);
+      const updatedT = {
+          ...t,
+          contactId: newContact ? newContact.id : t.contactId,
+          category: newCategory ? newCategory.name : t.category
+      };
+      await api.saveTransaction(updatedT);
+      await loadData();
+      showAlert("Transação atualizada.");
+    } catch (e) { showAlert("Erro ao atualizar.", "error"); }
   };
 
-  const handleUpdateStatus = async (t: Transaction) => {
-    const newStatus = t.status === TransactionStatus.PAID 
-        ? TransactionStatus.PENDING 
-        : TransactionStatus.PAID;
-
-    const updatedT = { ...t, status: newStatus };
-    await handleEditTransaction(updatedT);
+  // Specialized Save Wrappers
+  const wrapSave = async (fn: any, item: any, msg: string) => {
+      try { await fn(item); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao salvar.", "error"); }
+  };
+  const wrapDel = async (fn: any, id: string, msg: string) => {
+      try { await fn(id); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao excluir.", "error"); }
   };
 
-  const handleSaveAccount = async (account: Account) => {
-    try {
-        await api.saveAccount(account);
-        await refreshData(true);
-        showAlert("Conta salva com sucesso.", "success");
-    } catch (e: any) {
-        showAlert("Erro ao salvar conta: " + e.message, "error");
-    }
-  };
+  // --- RENDER LOGIC ---
 
-  const handleDeleteAccount = async (id: string) => {
-    try {
-        await api.deleteAccount(id);
-        await refreshData(true);
-        showAlert("Conta excluída.", "success");
-    } catch (e: any) {
-        showAlert("Erro ao excluir conta: " + e.message, "error");
-    }
-  };
-
-  const handleSaveContact = async (contact: Contact) => {
-      try {
-          await api.saveContact(contact);
-          await refreshData(true);
-          showAlert("Contato salvo.", "success");
-      } catch (e: any) {
-          showAlert("Erro ao salvar contato: " + e.message, "error");
-      }
-  };
-
-  const handleDeleteContact = async (id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Contato",
-          message: "Excluir contato? O histórico de transações não será perdido.",
-          variant: "danger"
-      });
-      if(!confirm) return;
-
-      try {
-          await api.deleteContact(id);
-          await refreshData(true);
-          showAlert("Contato excluído.", "success");
-      } catch (e: any) {
-          showAlert("Erro ao excluir contato: " + e.message, "error");
-      }
-  };
-
-  const handleSaveCategory = async (category: Category) => {
-      try {
-          await api.saveCategory(category);
-          await refreshData(true);
-          showAlert("Categoria salva.", "success");
-      } catch (e: any) {
-          showAlert("Erro ao salvar categoria: " + e.message, "error");
-      }
-  };
-
-  const handleDeleteCategory = async (id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Categoria",
-          message: "Tem certeza que deseja excluir esta categoria?",
-          variant: "danger"
-      });
-      if(!confirm) return;
-
-      try {
-          await api.deleteCategory(id);
-          await refreshData(true);
-          showAlert("Categoria excluída.", "success");
-      } catch (e: any) {
-          showAlert("Erro ao excluir categoria: " + e.message, "error");
-      }
-  };
-
-  const handleSaveGoal = async (goal: FinancialGoal) => {
-      try {
-          await api.saveGoal(goal);
-          await refreshData(true);
-      } catch(e: any) { showAlert("Erro ao salvar meta", "error"); }
-  };
-
-  const handleDeleteGoal = async (id: string) => {
-      try {
-          await api.deleteGoal(id);
-          await refreshData(true);
-      } catch(e: any) { showAlert("Erro ao excluir meta", "error"); }
-  };
-
-  const handleSavePJEntity = async (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => {
-      try {
-          if (type === 'company') await api.saveCompanyProfile(data);
-          else if (type === 'branch') await api.saveBranch(data);
-          else if (type === 'costCenter') await api.saveCostCenter(data);
-          else if (type === 'department') await api.saveDepartment(data);
-          else if (type === 'project') await api.saveProject(data);
-          
-          await refreshData(true);
-          showAlert("Dados salvos com sucesso.", "success");
-      } catch (e: any) {
-          showAlert(`Erro ao salvar ${type}: ` + e.message, "error");
-      }
-  };
-
-  const handleDeletePJEntity = async (type: 'branch' | 'costCenter' | 'department' | 'project', id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Item Corporativo",
-          message: "Deseja confirmar a exclusão deste item corporativo?",
-          variant: "danger"
-      });
-      if(!confirm) return;
-
-      try {
-          if (type === 'branch') await api.deleteBranch(id);
-          else if (type === 'costCenter') await api.deleteCostCenter(id);
-          else if (type === 'department') await api.deleteDepartment(id);
-          else if (type === 'project') await api.deleteProject(id);
-          
-          await refreshData(true);
-          showAlert("Item excluído.", "success");
-      } catch (e: any) {
-          showAlert(`Erro ao excluir ${type}: ` + e.message, "error");
-      }
-  };
-
-  // --- GENERIC MODULE HANDLERS ---
-  const handleSaveServiceClient = async (c: Partial<ServiceClient>) => {
-      try {
-          let finalContactId = c.contactId;
-          const contactName = c.contactName;
-
-          if (!finalContactId && contactName) {
-              const newContactId = crypto.randomUUID();
-              const newContact: Contact = { 
-                  id: newContactId, 
-                  name: contactName,
-                  email: c.contactEmail,
-                  phone: c.contactPhone
-              };
-              await api.saveContact(newContact);
-              finalContactId = newContactId;
-          }
-
-          if (!finalContactId) throw new Error("Nome do contato é obrigatório.");
-
-          const clientToSave: ServiceClient = {
-              id: c.id!,
-              contactId: finalContactId,
-              notes: c.notes,
-              birthDate: c.birthDate,
-              moduleTag: ODONTO_TAG,
-              insurance: c.insurance,
-              allergies: c.allergies,
-              medications: c.medications
-          };
-
-          await api.saveServiceClient(clientToSave);
-          await refreshData(true);
-          showAlert("Cliente salvo com sucesso.", "success");
-      } catch(e: any) { showAlert("Erro ao salvar cliente: " + e.message, "error"); }
-  };
-  
-  const handleDeleteServiceClient = async (id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Cliente",
-          message: "Deseja excluir este cliente?",
-          variant: "danger"
-      });
-      if(!confirm) return;
-      await api.deleteServiceClient(id);
-      await refreshData(true);
-      showAlert("Cliente excluído.", "success");
-  };
-  
-  const handleSaveServiceItem = async (s: ServiceItem) => {
-      try {
-          await api.saveServiceItem(s);
-          await refreshData(true);
-          showAlert("Serviço salvo.", "success");
-      } catch(e) { showAlert("Erro ao salvar serviço", "error"); }
-  };
-  
-  const handleDeleteServiceItem = async (id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Serviço",
-          message: "Deseja excluir este serviço?",
-          variant: "danger"
-      });
-      if(!confirm) return;
-      await api.deleteServiceItem(id);
-      await refreshData(true);
-      showAlert("Serviço excluído.", "success");
-  };
-  
-  const handleSaveServiceAppointment = async (a: ServiceAppointment) => {
-      try {
-          await api.saveServiceAppointment(a);
-          await refreshData(true);
-          showAlert("Agendamento salvo.", "success");
-      } catch(e) { showAlert("Erro ao salvar agendamento", "error"); }
-  };
-  
-  const handleDeleteServiceAppointment = async (id: string) => {
-      const confirm = await showConfirm({
-          title: "Excluir Agendamento",
-          message: "Deseja excluir este agendamento?",
-          variant: "danger"
-      });
-      if(!confirm) return;
-      await api.deleteServiceAppointment(id);
-      await refreshData(true);
-      showAlert("Agendamento excluído.", "success");
-  };
-
-  // --- SERVICE MODULE HANDLERS ---
-  const handleSaveOS = async (os: any) => { try { await api.saveServiceOrder(os); await refreshData(true); showAlert("OS salva.", "success"); } catch(e: any) { showAlert("Erro ao salvar OS", "error"); } };
-  const handleDeleteOS = async (id: string) => { try { await api.deleteServiceOrder(id); await refreshData(true); showAlert("OS excluída.", "success"); } catch(e: any) { showAlert("Erro ao excluir OS", "error"); } };
-  const handleSaveOrder = async (o: any) => { try { await api.saveCommercialOrder(o); await refreshData(true); showAlert("Pedido salvo.", "success"); } catch(e: any) { showAlert("Erro ao salvar Pedido", "error"); } };
-  const handleDeleteOrder = async (id: string) => { try { await api.deleteCommercialOrder(id); await refreshData(true); showAlert("Pedido excluído.", "success"); } catch(e: any) { showAlert("Erro ao excluir Pedido", "error"); } };
-  const handleSaveContract = async (c: any) => { try { await api.saveContract(c); await refreshData(true); showAlert("Contrato salvo.", "success"); } catch(e: any) { showAlert("Erro ao salvar Contrato", "error"); } };
-  const handleDeleteContract = async (id: string) => { try { await api.deleteContract(id); await refreshData(true); showAlert("Contrato excluído.", "success"); } catch(e: any) { showAlert("Erro ao excluir Contrato", "error"); } };
-  const handleSaveInvoice = async (i: any) => { try { await api.saveInvoice(i); await refreshData(true); showAlert("Nota salva.", "success"); } catch(e: any) { showAlert("Erro ao salvar Nota", "error"); } };
-  const handleDeleteInvoice = async (id: string) => { try { await api.deleteInvoice(id); await refreshData(true); showAlert("Nota excluída.", "success"); } catch(e: any) { showAlert("Erro ao excluir Nota", "error"); } };
-
-  // --- RENDER ---
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400">Carregando...</div>;
 
   if (!currentUser) {
-      if (showAuth) {
-          return (
-            <Auth 
-                onLoginSuccess={handleLoginSuccess} 
-                initialMode={authMode} 
-                initialEntityType={registerEntityType}
-                initialPlan={registerPlan}
-            />
-          );
-      }
-      return <LandingPage onGetStarted={handleGetStarted} onLogin={() => { setAuthMode('LOGIN'); setShowAuth(true); }} />;
+    if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
+    return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
   }
 
-  if (currentUser.role === UserRole.ADMIN) {
+  if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) { // Simple check for SuperAdmin
       return <AdminDashboard />;
   }
 
-  if (isLoading) {
-      return (
-          <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
-              <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-                  <p className="text-gray-500 font-medium">Sincronizando dados...</p>
-              </div>
-          </div>
-      );
-  }
-
   const renderContent = () => {
+    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
+
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return (
-          <Dashboard 
-            state={state}
-            settings={currentUser.settings}
-            userEntity={currentUser.entityType} 
-            onAddTransaction={handleAddTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
-            onEditTransaction={handleEditTransaction}
-            onUpdateStatus={handleUpdateStatus}
-            onChangeView={setCurrentView}
-          />
-        );
+        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'})} onChangeView={setCurrentView} />;
       case 'FIN_TRANSACTIONS':
-        return (
-          <TransactionsView 
-            transactions={state.transactions} 
-            accounts={state.accounts}
-            contacts={state.contacts}
-            categories={state.categories}
-            settings={currentUser.settings}
-            userEntity={currentUser.entityType}
-            pjData={{
-                branches: state.branches,
-                costCenters: state.costCenters,
-                departments: state.departments,
-                projects: state.projects
-            }}
-            onDelete={handleDeleteTransaction}
-            onEdit={handleEditTransaction}
-            onToggleStatus={handleUpdateStatus}
-            onAdd={handleAddTransaction}
-          />
-        );
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'})} onAdd={handleAddTransaction} />;
       case 'FIN_CALENDAR':
-        return (
-          <CalendarView 
-            transactions={state.transactions}
-            accounts={state.accounts}
-            contacts={state.contacts}
-            categories={state.categories}
-            onAdd={handleAddTransaction}
-            onEdit={handleEditTransaction}
-          />
-        );
+        return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleAddTransaction} onEdit={handleEditTransaction} />;
       case 'FIN_ACCOUNTS':
-        return (
-            <AccountsView 
-                accounts={state.accounts}
-                onSaveAccount={handleSaveAccount}
-                onDeleteAccount={handleDeleteAccount}
-            />
-        );
-      case 'FIN_GOALS':
-        return (
-            <GoalsView 
-                goals={state.goals}
-                accounts={state.accounts}
-                onSaveGoal={handleSaveGoal}
-                onDeleteGoal={handleDeleteGoal}
-                onAddTransaction={handleAddTransaction}
-            />
-        );
+        return <AccountsView accounts={data.accounts} onSaveAccount={async (a) => wrapSave(api.saveAccount, a, "Conta salva")} onDeleteAccount={async (id) => wrapDel(api.deleteAccount, id, "Conta excluída")} />;
       case 'FIN_CARDS':
-        return (
-            <CreditCardsView 
-                accounts={state.accounts}
-                contacts={state.contacts}
-                categories={state.categories}
-                transactions={state.transactions}
-                onSaveAccount={handleSaveAccount}
-                onDeleteAccount={handleDeleteAccount}
-                onAddTransaction={handleAddTransaction}
-            />
-        );
+        return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => wrapSave(api.saveAccount, a, "Cartão salvo")} onDeleteAccount={async (id) => wrapDel(api.deleteAccount, id, "Cartão excluído")} onAddTransaction={handleAddTransaction} />;
+      case 'FIN_GOALS':
+        return <GoalsView goals={data.goals} accounts={data.accounts} onSaveGoal={async (g) => wrapSave(api.saveGoal, g, "Meta salva")} onDeleteGoal={async (id) => wrapDel(api.deleteGoal, id, "Meta excluída")} onAddTransaction={handleAddTransaction} />;
       case 'FIN_REPORTS':
-        return <Reports transactions={state.transactions} />;
-      case 'FIN_ADVISOR':
-        return <SmartAdvisor data={state} />;
+        return <Reports transactions={data.transactions} />;
       case 'FIN_CATEGORIES':
-        return (
-            <CategoriesView 
-                categories={state.categories}
-                onSaveCategory={handleSaveCategory}
-                onDeleteCategory={handleDeleteCategory}
-            />
-        );
+        return <CategoriesView categories={data.categories} onSaveCategory={async (c) => wrapSave(api.saveCategory, c, "Categoria salva")} onDeleteCategory={async (id) => wrapDel(api.deleteCategory, id, "Categoria excluída")} />;
       case 'FIN_CONTACTS':
-      case 'SRV_CLIENTS':
       case 'SYS_CONTACTS':
-        return (
-            <ContactsView 
-                contacts={state.contacts}
-                serviceClients={state.serviceClients}
-                onAddContact={handleSaveContact}
-                onEditContact={handleSaveContact}
-                onDeleteContact={handleDeleteContact}
-            />
-        );
+        return <ContactsView contacts={data.contacts} serviceClients={data.serviceClients} onAddContact={async (c) => wrapSave(api.saveContact, c, "Contato salvo")} onEditContact={async (c) => wrapSave(api.saveContact, c, "Contato atualizado")} onDeleteContact={async (id) => wrapDel(api.deleteContact, id, "Contato excluído")} />;
+      case 'FIN_ADVISOR':
+        return <SmartAdvisor data={data} />;
+      case 'SYS_SETTINGS':
+        return <SettingsView user={currentUser} pjData={{companyProfile: data.companyProfile, branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onUpdateSettings={async (s) => { await updateSettings(s); setCurrentUser({...currentUser, settings: s}); showAlert("Configurações salvas", "success"); }} onOpenCollab={() => setIsCollabModalOpen(true)} onSavePJEntity={async (type, d) => {
+            if(type==='company') await api.saveCompanyProfile(d);
+            if(type==='branch') await api.saveBranch(d);
+            if(type==='costCenter') await api.saveCostCenter(d);
+            if(type==='department') await api.saveDepartment(d);
+            if(type==='project') await api.saveProject(d);
+            await loadData(); showAlert("Item salvo", "success");
+        }} onDeletePJEntity={async (type, id) => {
+            if(type==='branch') await api.deleteBranch(id);
+            if(type==='costCenter') await api.deleteCostCenter(id);
+            if(type==='department') await api.deleteDepartment(id);
+            if(type==='project') await api.deleteProject(id);
+            await loadData(); showAlert("Item excluído", "success");
+        }} />;
+      case 'SYS_ACCESS':
+        return <AccessView currentUser={currentUser} />;
+      case 'SYS_LOGS':
+        return <LogsView />;
       
-      // --- SERVICE MODULE ---
+      // Modules
+      case 'ODONTO_AGENDA':
+      case 'ODONTO_PATIENTS':
+      case 'ODONTO_PROCEDURES':
+        return <ServiceModule 
+            moduleTitle="Odontologia"
+            clientLabel="Paciente"
+            serviceLabel="Procedimento"
+            transactionCategory="Serviços Odontológicos"
+            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'}
+            clients={data.serviceClients.filter(c => c.moduleTag === 'ODONTO' || c.moduleTag === 'GENERAL')}
+            services={data.serviceItems.filter(s => s.moduleTag === 'ODONTO' || s.moduleTag === 'GENERAL')}
+            appointments={data.serviceAppointments.filter(a => a.moduleTag === 'ODONTO' || a.moduleTag === 'GENERAL')}
+            contacts={data.contacts}
+            onSaveClient={async (c) => wrapSave(api.saveServiceClient, { ...c, moduleTag: 'ODONTO' }, "Paciente salvo")}
+            onDeleteClient={async (id) => wrapDel(api.deleteServiceClient, id, "Paciente excluído")}
+            onSaveService={async (s) => wrapSave(api.saveServiceItem, { ...s, moduleTag: 'ODONTO' }, "Procedimento salvo")}
+            onDeleteService={async (id) => wrapDel(api.deleteServiceItem, id, "Procedimento excluído")}
+            onSaveAppointment={async (a) => wrapSave(api.saveServiceAppointment, { ...a, moduleTag: 'ODONTO' }, "Agendamento salvo")}
+            onDeleteAppointment={async (id) => wrapDel(api.deleteServiceAppointment, id, "Agendamento excluído")}
+            onAddTransaction={handleAddTransaction}
+        />;
+      
       case 'SRV_OS':
       case 'SRV_SALES':
       case 'SRV_PURCHASES':
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
-        return (
-            <ServicesView
-                currentView={currentView}
-                serviceOrders={state.serviceOrders || []}
-                commercialOrders={state.commercialOrders || []}
-                contracts={state.contracts || []}
-                invoices={state.invoices || []}
-                contacts={state.contacts}
-                onSaveOS={handleSaveOS}
-                onDeleteOS={handleDeleteOS}
-                onSaveOrder={handleSaveOrder}
-                onDeleteOrder={handleDeleteOrder}
-                onSaveContract={handleSaveContract}
-                onDeleteContract={handleDeleteContract}
-                onSaveInvoice={handleSaveInvoice}
-                onDeleteInvoice={handleDeleteInvoice}
-                onAddTransaction={handleAddTransaction}
-            />
-        );
-
-      case 'SYS_LOGS':
-        return <LogsView />;
-      case 'SYS_SETTINGS':
-        return (
-            <SettingsView 
-                user={currentUser} 
-                pjData={{
-                    companyProfile: state.companyProfile,
-                    branches: state.branches,
-                    costCenters: state.costCenters,
-                    departments: state.departments,
-                    projects: state.projects
-                }}
-                onUpdateSettings={handleUpdateSettings}
-                onOpenCollab={() => setIsCollabModalOpen(true)}
-                onSavePJEntity={handleSavePJEntity}
-                onDeletePJEntity={handleDeletePJEntity}
-            />
-        );
-      case 'SYS_ACCESS':
-        return <AccessView currentUser={currentUser} />;
-
-      // --- ODONTO MODULE ---
-      case 'ODONTO_AGENDA':
-      case 'ODONTO_PATIENTS':
-      case 'ODONTO_PROCEDURES':
-        const odontoClients = state.serviceClients?.filter(c => c.moduleTag === ODONTO_TAG) || [];
-        const odontoServices = state.serviceItems?.filter(s => s.moduleTag === ODONTO_TAG) || [];
-        const odontoAppointments = state.serviceAppointments?.filter(a => a.moduleTag === ODONTO_TAG) || [];
-
-        let section: 'CALENDAR' | 'CLIENTS' | 'SERVICES' = 'CALENDAR';
-        if (currentView === 'ODONTO_PATIENTS') section = 'CLIENTS';
-        if (currentView === 'ODONTO_PROCEDURES') section = 'SERVICES';
-
-        return (
-            <ServiceModule 
-                moduleTitle="Módulo Odonto"
-                clientLabel="Paciente"
-                serviceLabel="Procedimento"
-                transactionCategory="Serviços Odontológicos"
-                
-                activeSection={section}
-
-                clients={odontoClients}
-                services={odontoServices}
-                appointments={odontoAppointments}
-                contacts={state.contacts}
-                
-                onSaveClient={handleSaveServiceClient}
-                onDeleteClient={handleDeleteServiceClient}
-                onSaveService={(s) => handleSaveServiceItem({ ...s, moduleTag: ODONTO_TAG })}
-                onDeleteService={handleDeleteServiceItem}
-                onSaveAppointment={(a) => handleSaveServiceAppointment({ ...a, moduleTag: ODONTO_TAG })}
-                onDeleteAppointment={handleDeleteServiceAppointment}
-                
-                onAddTransaction={handleAddTransaction}
-            />
-        );
+        return <ServicesView 
+            currentView={currentView}
+            serviceOrders={data.serviceOrders}
+            commercialOrders={data.commercialOrders}
+            contracts={data.contracts}
+            invoices={data.invoices}
+            contacts={data.contacts}
+            onSaveOS={async (d) => wrapSave(api.saveServiceOrder, d, "OS salva")}
+            onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")}
+            onSaveOrder={async (d) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo")}
+            onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")}
+            onSaveContract={async (d) => wrapSave(api.saveContract, d, "Contrato salvo")}
+            onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")}
+            onSaveInvoice={async (d) => wrapSave(api.saveInvoice, d, "Nota salva")}
+            onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")}
+            onAddTransaction={handleAddTransaction}
+        />;
 
       default:
-        return <div>Página não encontrada</div>;
+        return <div className="p-8 text-center text-gray-400">Página em construção ou não encontrada.</div>;
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6]">
-      <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200 sticky top-0 z-40">
-        <span className="font-bold text-xl text-gray-800">FinManager</span>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-gray-600">
-          <Menu className="w-6 h-6" />
-        </button>
-      </div>
-
+    <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
+      {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-gray-800/50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-xl" onClick={e => e.stopPropagation()}>
@@ -694,22 +264,37 @@ const App: React.FC = () => {
                 }}
                 currentUser={currentUser}
                 onUserUpdate={setCurrentUser}
+                onOpenCollab={() => setIsCollabModalOpen(true)}
             />
           </div>
         </div>
       )}
 
+      {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
         <Sidebar 
             currentView={currentView} 
             onChangeView={setCurrentView}
             currentUser={currentUser}
             onUserUpdate={setCurrentUser}
+            onOpenCollab={() => setIsCollabModalOpen(true)}
         />
       </div>
 
-      <main className="md:ml-64 p-4 md:p-8 max-w-7xl mx-auto">
-        {renderContent()}
+      {/* Main Content */}
+      <main className="flex-1 md:ml-64 h-screen overflow-y-auto">
+        <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-100 sticky top-0 z-20">
+            <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">F</div>
+                <span className="font-bold text-gray-800">FinManager</span>
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
+                <Menu className="w-6 h-6" />
+            </button>
+        </div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+            {renderContent()}
+        </div>
       </main>
 
       <CollaborationModal 
