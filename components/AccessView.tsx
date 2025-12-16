@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Member, EntityType } from '../types';
+import { User, Member, EntityType, ROLE_DEFINITIONS } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight } from 'lucide-react';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
@@ -16,7 +16,9 @@ const PERMISSION_GROUPS = [
             { id: 'FIN_DASHBOARD', label: 'Visão Geral' },
             { id: 'FIN_TRANSACTIONS', label: 'Lançamentos' },
             { id: 'FIN_CALENDAR', label: 'Calendário' },
+            { id: 'FIN_ACCOUNTS', label: 'Contas' },
             { id: 'FIN_CARDS', label: 'Cartões' },
+            { id: 'FIN_GOALS', label: 'Metas' },
             { id: 'FIN_REPORTS', label: 'Relatórios' },
             { id: 'FIN_CATEGORIES', label: 'Categorias' },
             { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos' },
@@ -29,6 +31,17 @@ const PERMISSION_GROUPS = [
             { id: 'ODONTO_AGENDA', label: 'Agenda' },
             { id: 'ODONTO_PATIENTS', label: 'Pacientes' },
             { id: 'ODONTO_PROCEDURES', label: 'Procedimentos' },
+        ]
+    },
+    {
+        name: 'Serviços & Vendas',
+        items: [
+            { id: 'SRV_OS', label: 'Ordens de Serviço' },
+            { id: 'SRV_SALES', label: 'Vendas' },
+            { id: 'SRV_PURCHASES', label: 'Compras' },
+            { id: 'SRV_CONTRACTS', label: 'Contratos' },
+            { id: 'SRV_NF', label: 'Notas Fiscais' },
+            { id: 'SRV_CLIENTS', label: 'Gestão de Clientes' },
         ]
     },
     {
@@ -59,6 +72,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     // Edit Permissions Modal State
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [editRole, setEditRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
+    const [selectedProfileId, setSelectedProfileId] = useState<string>('CUSTOM');
     const [editPermissions, setEditPermissions] = useState<string[]>([]);
 
     const isPJ = currentUser.entityType === EntityType.BUSINESS;
@@ -128,10 +142,49 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         }
     };
 
+    // Helper: Deep compare permissions arrays to find matching profile
+    const findMatchingProfile = (perms: string[]) => {
+        if (!perms) return 'CUSTOM';
+        const sortedPerms = [...perms].sort();
+        const jsonPerms = JSON.stringify(sortedPerms);
+
+        const match = ROLE_DEFINITIONS.find(r => {
+            if (r.id === 'ADMIN') return false;
+            const sortedDef = [...r.defaultPermissions].sort();
+            return JSON.stringify(sortedDef) === jsonPerms;
+        });
+
+        return match ? match.id : 'CUSTOM';
+    };
+
+    // Filter available roles based on Active Modules
+    const availableRoles = ROLE_DEFINITIONS.filter(r => {
+        if (r.id === 'ADMIN') return false; 
+        if (r.requiredModule) {
+            const activeModules = currentUser.settings?.activeModules as any;
+            if (!activeModules?.[r.requiredModule]) return false;
+        }
+        return true;
+    });
+
     const openEditModal = (member: Member) => {
         setEditingMember(member);
         setEditRole(member.role);
-        setEditPermissions(member.permissions || []);
+        const perms = member.permissions || [];
+        setEditPermissions(perms);
+        
+        // Attempt to auto-select profile
+        setSelectedProfileId(findMatchingProfile(perms));
+    };
+
+    const handleProfileChange = (profileId: string) => {
+        setSelectedProfileId(profileId);
+        if (profileId === 'CUSTOM') return;
+
+        const template = ROLE_DEFINITIONS.find(r => r.id === profileId);
+        if (template) {
+            setEditPermissions([...template.defaultPermissions]);
+        }
     };
 
     const handleSavePermissions = async () => {
@@ -147,11 +200,17 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     };
 
     const togglePermission = (perm: string) => {
+        let newPerms;
         if (editPermissions.includes(perm)) {
-            setEditPermissions(editPermissions.filter(p => p !== perm));
+            newPerms = editPermissions.filter(p => p !== perm);
         } else {
-            setEditPermissions([...editPermissions, perm]);
+            newPerms = [...editPermissions, perm];
         }
+        setEditPermissions(newPerms);
+        
+        // If user manually touches permissions, switch dropdown to Custom unless it matches exactly another profile
+        const match = findMatchingProfile(newPerms);
+        setSelectedProfileId(match);
     };
 
     const countPermissions = (perms: string[] | undefined) => {
@@ -352,7 +411,8 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-scale-up flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
-                            <h2 className="text-lg font-bold text-gray-800">
+                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <UserCog className="w-5 h-5 text-indigo-600" />
                                 Editar Membro: {editingMember.name}
                             </h2>
                             <button onClick={() => setEditingMember(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -362,7 +422,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                         
                         <div className="p-6 overflow-y-auto">
                             <div className="mb-6">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Função</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Função Principal</label>
                                 <select 
                                     value={editRole} 
                                     onChange={e => setEditRole(e.target.value as any)}
@@ -371,42 +431,72 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                     <option value="MEMBER">Membro</option>
                                     <option value="ADMIN">Administrador</option>
                                 </select>
-                                <p className="text-xs text-gray-500 mt-1">Administradores têm acesso total a todas as telas e podem gerenciar a equipe.</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {editRole === 'ADMIN' 
+                                        ? 'Administradores têm acesso total a todas as telas, configurações e podem gerenciar a equipe.'
+                                        : 'Membros têm acesso restrito conforme as permissões abaixo.'}
+                                </p>
                             </div>
 
                             {editRole === 'MEMBER' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-3">Páginas Permitidas</label>
-                                    <div className="space-y-4">
-                                        {PERMISSION_GROUPS.map((group) => (
-                                            <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
-                                                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
-                                                    <span className="text-xs font-bold text-gray-500 uppercase">{group.name}</span>
+                                <div className="space-y-6">
+                                    {/* Profile Selector */}
+                                    <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                                        <label className="block text-xs font-bold text-indigo-700 uppercase mb-2">Perfil de Acesso (Template)</label>
+                                        <select 
+                                            value={selectedProfileId}
+                                            onChange={e => handleProfileChange(e.target.value)}
+                                            className="w-full border border-indigo-200 rounded-lg p-2 text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        >
+                                            <option value="CUSTOM">Personalizado</option>
+                                            {availableRoles.map(role => (
+                                                <option key={role.id} value={role.id}>{role.label}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Selecione um perfil para aplicar permissões padrão automaticamente.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-3">Páginas Permitidas</label>
+                                        <div className="space-y-4">
+                                            {PERMISSION_GROUPS.map((group) => (
+                                                <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
+                                                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
+                                                        <span className="text-xs font-bold text-gray-500 uppercase">{group.name}</span>
+                                                    </div>
+                                                    <div className="p-3 grid grid-cols-2 gap-2">
+                                                        {group.items.map(perm => (
+                                                            <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors border border-transparent hover:border-gray-100">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={editPermissions.includes(perm.id)}
+                                                                    onChange={() => togglePermission(perm.id)}
+                                                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                                                />
+                                                                <span className="text-sm text-gray-700">{perm.label}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                                <div className="p-3 grid grid-cols-2 gap-2">
-                                                    {group.items.map(perm => (
-                                                        <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors border border-transparent hover:border-gray-100">
-                                                            <input 
-                                                                type="checkbox" 
-                                                                checked={editPermissions.includes(perm.id)}
-                                                                onChange={() => togglePermission(perm.id)}
-                                                                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                                            />
-                                                            <span className="text-sm text-gray-700">{perm.label}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0 flex justify-end gap-2">
+                            <button 
+                                onClick={() => setEditingMember(null)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Cancelar
+                            </button>
                             <button 
                                 onClick={handleSavePermissions}
-                                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                                className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
                             >
                                 Salvar Alterações
                             </button>
