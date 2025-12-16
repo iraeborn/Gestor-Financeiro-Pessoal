@@ -93,9 +93,22 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
       joinBtn: isPJ ? "Entrar na Organização" : "Entrar na Família"
   };
 
-  // Filter roles based on context (PF usually doesn't need Dentist/Sales templates explicitly shown unless active, but we show all for flexibility)
-  // For PF, maybe simplify? Let's keep it powerful.
-  const availableRoles = ROLE_DEFINITIONS.filter(r => r.id !== 'ADMIN'); // Admin is implicitly the owner
+  // Filter roles based on context AND active modules
+  const availableRoles = ROLE_DEFINITIONS.filter(r => {
+      // 1. Never show Admin in the quick list (Admin is implicit for owner)
+      if (r.id === 'ADMIN') return false; 
+
+      // 2. Check Module Requirement
+      if (r.requiredModule) {
+          // Type casting to access the dynamic key safely
+          const modKey = r.requiredModule as keyof typeof currentUser.settings.activeModules;
+          const isModuleActive = currentUser.settings?.activeModules?.[modKey] === true;
+          
+          if (!isModuleActive) return false;
+      }
+
+      return true;
+  });
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

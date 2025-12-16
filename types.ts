@@ -363,6 +363,7 @@ export interface RoleTemplate {
     label: string;
     description: string;
     defaultPermissions: string[];
+    requiredModule?: string; // Se definido, o perfil só aparece se o módulo estiver ativo
 }
 
 export const ROLE_DEFINITIONS: RoleTemplate[] = [
@@ -388,7 +389,8 @@ export const ROLE_DEFINITIONS: RoleTemplate[] = [
         id: 'DENTIST', 
         label: 'Profissional Odonto', 
         description: 'Acesso focado na agenda e pacientes.', 
-        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS'] 
+        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS'],
+        requiredModule: 'odonto'
     },
     { 
         id: 'SALES', 
