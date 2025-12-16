@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ViewMode, User, EntityType } from '../types';
 import { 
@@ -21,8 +22,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  const isPJ = currentUser.entityType === EntityType.BUSINESS;
-  const hasOdonto = currentUser.settings?.activeModules?.odonto;
+  const activeModules = currentUser.settings?.activeModules || {};
+  const hasOdonto = activeModules.odonto;
+  const hasServices = activeModules.services;
 
   const handleLogout = () => {
     logout();
@@ -42,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
         { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
     ]},
-    ...(isPJ ? [{ section: 'Serviços & Vendas', items: [
+    ...(hasServices ? [{ section: 'Serviços & Vendas', items: [
         { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
         { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
         { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },

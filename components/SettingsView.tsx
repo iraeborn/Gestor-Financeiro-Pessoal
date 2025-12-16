@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -70,16 +70,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleToggleOdonto = async () => {
-      const isActive = settings.activeModules?.odonto;
+  const handleToggleModule = async (moduleKey: 'odonto' | 'services') => {
+      const currentActive = settings.activeModules?.[moduleKey] || false;
       const newSettings = { 
           ...settings, 
-          activeModules: { ...settings.activeModules, odonto: !isActive } 
+          activeModules: { ...settings.activeModules, [moduleKey]: !currentActive } 
       };
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          if (!isActive) showAlert("Módulo Odonto ativado com sucesso!", "success");
+          if (!currentActive) showAlert(`Módulo ${moduleKey === 'odonto' ? 'Odonto' : 'Serviços'} ativado!`, "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
       }
@@ -268,6 +268,61 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </label>
+                </div>
+            </div>
+        </div>
+
+        {/* --- MÓDULOS ADICIONAIS --- */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-sky-500">
+            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-sky-600" />
+                    Gestão de Módulos do Sistema
+                </h2>
+            </div>
+            <div className="p-6 space-y-6">
+                {/* Módulo Serviços & Vendas */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-sky-50 text-sky-600 rounded-lg">
+                            <Wrench className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-gray-900">Módulo Serviços & Vendas (OS, Contratos)</h3>
+                            <p className="text-sm text-gray-500 max-w-md mt-1">
+                                Gestão de ordens de serviço, contratos recorrentes, pedidos de venda/compra e emissão de notas fiscais.
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleModule('services')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.services ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {settings.activeModules?.services ? <><CheckCircle className="w-4 h-4" /> Ativado</> : "Ativar"}
+                    </button>
+                </div>
+
+                <div className="border-t border-gray-100"></div>
+
+                {/* Módulo Odonto */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-sky-50 text-sky-600 rounded-lg">
+                            <SmilePlus className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-gray-900">Módulo Odonto (Clínica)</h3>
+                            <p className="text-sm text-gray-500 max-w-md mt-1">
+                                Gestão completa de pacientes, agendamentos e procedimentos. Integração automática com o financeiro ao realizar atendimentos.
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleModule('odonto')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.odonto ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {settings.activeModules?.odonto ? <><CheckCircle className="w-4 h-4" /> Ativado</> : "Ativar"}
+                    </button>
                 </div>
             </div>
         </div>
@@ -621,42 +676,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             (activeTab === 'DEPT' && !pjData.departments.length) ||
                             (activeTab === 'PROJ' && !pjData.projects.length) 
                             ) && <p className="text-xs text-gray-400 text-center py-2">Nenhum item cadastrado.</p>}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Add-ons & Modulos Extras */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-sky-500">
-                    <div className="p-6 border-b border-gray-50 bg-gray-50/50">
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <Plus className="w-5 h-5 text-sky-600" />
-                            Módulos Adicionais
-                        </h2>
-                    </div>
-                    <div className="p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-start gap-4">
-                                <div className="p-2 bg-sky-50 text-sky-600 rounded-lg">
-                                    <SmilePlus className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900">Módulo Odonto</h3>
-                                    <p className="text-sm text-gray-500 max-w-md mt-1">
-                                        Gestão completa de pacientes, agendamentos e procedimentos. Integração automática com o financeiro ao realizar atendimentos.
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <button 
-                                onClick={handleToggleOdonto}
-                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.odonto ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                {settings.activeModules?.odonto ? (
-                                    <><CheckCircle className="w-4 h-4" /> Ativado</>
-                                ) : (
-                                    "Ativar"
-                                )}
-                            </button>
                         </div>
                     </div>
                 </div>

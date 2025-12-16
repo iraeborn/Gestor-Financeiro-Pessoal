@@ -49,6 +49,7 @@ export interface AppSettings {
   email?: EmailConfig;
   activeModules?: {
       odonto?: boolean;
+      services?: boolean;
       // future modules
   };
 }
@@ -396,7 +397,8 @@ export const ROLE_DEFINITIONS: RoleTemplate[] = [
         id: 'SALES', 
         label: 'Vendedor', 
         description: 'Acesso a pedidos de venda, clientes e orçamentos.', 
-        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'] 
+        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'],
+        requiredModule: 'services'
     },
     {
         id: 'OPERATOR',
