@@ -100,9 +100,13 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
 
       // 2. Check Module Requirement
       if (r.requiredModule) {
+          const activeModules = currentUser.settings?.activeModules;
+          
+          if (!activeModules) return false;
+
           // Type casting to access the dynamic key safely
-          const modKey = r.requiredModule as keyof typeof currentUser.settings.activeModules;
-          const isModuleActive = currentUser.settings?.activeModules?.[modKey] === true;
+          // Using 'any' here is safe because we just want to check truthiness of the property
+          const isModuleActive = (activeModules as any)[r.requiredModule] === true;
           
           if (!isModuleActive) return false;
       }
