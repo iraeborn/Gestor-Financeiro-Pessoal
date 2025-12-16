@@ -3,7 +3,8 @@ import {
   User, AuthResponse, AppState, ViewMode, Transaction, Account, 
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
-  ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice
+  ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
+  TransactionStatus
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert } from './components/AlertSystem';
@@ -159,9 +160,30 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'})} onChangeView={setCurrentView} />;
+        return <Dashboard 
+            state={data} 
+            settings={currentUser.settings} 
+            userEntity={currentUser.entityType} 
+            onAddTransaction={handleAddTransaction} 
+            onDeleteTransaction={handleDeleteTransaction} 
+            onEditTransaction={handleEditTransaction} 
+            onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} 
+            onChangeView={setCurrentView} 
+        />;
       case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'})} onAdd={handleAddTransaction} />;
+        return <TransactionsView 
+            transactions={data.transactions} 
+            accounts={data.accounts} 
+            contacts={data.contacts} 
+            categories={data.categories} 
+            settings={currentUser.settings} 
+            userEntity={currentUser.entityType} 
+            pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} 
+            onDelete={handleDeleteTransaction} 
+            onEdit={handleEditTransaction} 
+            onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} 
+            onAdd={handleAddTransaction} 
+        />;
       case 'FIN_CALENDAR':
         return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleAddTransaction} onEdit={handleEditTransaction} />;
       case 'FIN_ACCOUNTS':
