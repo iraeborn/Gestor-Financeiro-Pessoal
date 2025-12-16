@@ -10,7 +10,7 @@ const router = express.Router();
 const WHATSAPP_API_URL = "https://graph.facebook.com/v22.0/934237103105071/messages";
 const WHATSAPP_TOKEN = "EAFpabmZBi0U0BQKRhGRsH8eVtgUPLNUoDi2mg2r8bDAj9vfBcolZC9CONlSdqFVug7FXrCKZCGsgxPiIUZBc2kIdnZBbnZAVZAJFOFRk4f3ZA3bsOwEyO87bzZBGwUY0Aj0aQTHq1mcYxHaebickk8ubQsz6G4Y0hnlIxcmj0WQFKasRy8KFLobi0torRxc2NzYE5Q17KToe24ngyadf2PdbRmfKahoO26mALs6yAMUTyiZBm9ufcIod9fipU8ZCzP0mBIqgmzClQtbonxa43kQ11CGTh7f1ZAxuDPwLlZCZCTZA8c3";
 
-// --- PERMISSION MAP (Must match types.ts) ---
+// --- PERMISSION MAP (Must match types.ts ROLE_DEFINITIONS) ---
 const ROLE_PERMISSIONS = {
     'ADMIN': [], // Special case: All access
     'MEMBER': ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS'],
@@ -296,7 +296,7 @@ export default function(logAudit) {
             const activeFamilyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id;
             if (!activeFamilyId) return res.status(400).json({error: "Usuário não tem contexto ativo"});
             
-            // Ensure column exists
+            // Ensure column exists (Migration Lazy)
             try { await pool.query(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS role_template TEXT`); } catch(e) {}
 
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -317,13 +317,11 @@ export default function(logAudit) {
             if (!invite) return res.status(404).json({ error: 'Convite inválido ou expirado' });
 
             const roleKey = invite.role_template || 'MEMBER';
-            const mappedRole = roleKey === 'ADMIN' ? 'ADMIN' : 'MEMBER'; // DB role column is restricted to ADMIN/MEMBER usually, permissions handle fine-grain.
+            const mappedRole = roleKey === 'ADMIN' ? 'ADMIN' : 'MEMBER'; 
             
             // Get permissions from map
             let permissionsToApply = [];
             if (roleKey === 'ADMIN') {
-                // If invite is for admin, give admin role.
-                // If permissions logic requires empty array for admin (as defined in types), send empty.
                 permissionsToApply = []; 
             } else {
                 permissionsToApply = ROLE_PERMISSIONS[roleKey] || ROLE_PERMISSIONS['MEMBER'];
