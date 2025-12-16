@@ -64,7 +64,15 @@ export const getUserWorkspaces = async (userId) => {
         SELECT m.family_id as id, u.name as name, m.role, u.entity_type as "entityType", m.permissions
         FROM memberships m JOIN users u ON m.family_id = u.id WHERE m.user_id = $1
     `, [userId]);
-    return res.rows;
+    
+    // Safety Parse for Permissions (Handle TEXT column acting as JSON)
+    return res.rows.map(w => {
+        let perms = w.permissions;
+        if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch (e) { perms = []; }
+        }
+        return { ...w, permissions: Array.isArray(perms) ? perms : [] };
+    });
 };
 
 export const sanitizeValue = (val) => {

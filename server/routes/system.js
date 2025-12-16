@@ -351,7 +351,17 @@ export default function(logAudit) {
         try {
             const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id || userId;
             const members = await pool.query(`SELECT u.id, u.name, u.email, m.role, u.entity_type, m.permissions FROM users u JOIN memberships m ON u.id = m.user_id WHERE m.family_id = $1`, [familyId]);
-            res.json(members.rows);
+            
+            // Fix: Parse permissions for the list view as well
+            const parsedMembers = members.rows.map(m => {
+                let perms = m.permissions;
+                if (typeof perms === 'string') {
+                    try { perms = JSON.parse(perms); } catch (e) { perms = []; }
+                }
+                return { ...m, permissions: Array.isArray(perms) ? perms : [] };
+            });
+            
+            res.json(parsedMembers);
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 

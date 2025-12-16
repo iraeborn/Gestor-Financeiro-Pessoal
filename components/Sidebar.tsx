@@ -28,7 +28,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const isOwner = currentUser.id === currentUser.familyId;
   // Admin do workspace ou Dono da conta tem acesso total
   const isAdmin = isOwner || currentWorkspace?.role === 'ADMIN'; 
-  const userPermissions = currentWorkspace?.permissions || [];
+  
+  // Defensiva: Garante que userPermissions é sempre array, mesmo se vier string do backend
+  let userPermissions = currentWorkspace?.permissions || [];
+  if (typeof userPermissions === 'string') {
+      try {
+          userPermissions = JSON.parse(userPermissions);
+      } catch (e) {
+          console.error("Erro ao processar permissões:", e);
+          userPermissions = [];
+      }
+  }
 
   const activeModules = currentUser.settings?.activeModules || {};
   const hasOdonto = activeModules.odonto;
@@ -54,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   // Função auxiliar para checar permissão individual
   const canView = (permissionId: string) => {
       if (isAdmin) return true; // Admins veem tudo que está ativo nos módulos
-      return userPermissions.includes(permissionId);
+      return Array.isArray(userPermissions) && userPermissions.includes(permissionId);
   };
 
   const menuItems = [
