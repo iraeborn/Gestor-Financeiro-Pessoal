@@ -68,6 +68,7 @@ export interface Workspace {
     role: string;
     entityType: EntityType;
     permissions?: string[];
+    ownerSettings?: AppSettings; // Configurações herdadas do dono do workspace
 }
 
 export enum UserRole {

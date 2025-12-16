@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ViewMode, User, EntityType } from '../types';
+import { ViewMode, User, EntityType, AppSettings } from '../types';
 import { 
   LayoutDashboard, List, Calendar, CreditCard, PieChart, 
   Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
@@ -23,13 +23,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  // 1. Determinar permissões do contexto atual
+  // 1. Determinar contexto e permissões
   const currentWorkspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
   const isOwner = currentUser.id === currentUser.familyId;
-  // Admin do workspace ou Dono da conta tem acesso total
   const isAdmin = isOwner || currentWorkspace?.role === 'ADMIN'; 
   
-  // Defensiva: Garante que userPermissions é sempre array, mesmo se vier string do backend
+  // Defensiva: Garante que userPermissions é sempre array
   let userPermissions = currentWorkspace?.permissions || [];
   if (typeof userPermissions === 'string') {
       try {
@@ -40,7 +39,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       }
   }
 
-  const activeModules = currentUser.settings?.activeModules || {};
+  // 2. Determinar Módulos Ativos (Prioridade: Config da Empresa > Config Pessoal)
+  // Membros devem herdar os módulos ativos do dono do workspace (ownerSettings)
+  const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
+  const activeModules = workspaceSettings.activeModules || {};
   const hasOdonto = activeModules.odonto;
   const hasServices = activeModules.services;
 
@@ -104,6 +106,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
     { 
       section: 'Sistema', 
       items: [
+        { id: 'SYS_CONTACTS', label: 'Todos Contatos', icon: Users }, // Adicionado SYS_CONTACTS
         { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
         { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },

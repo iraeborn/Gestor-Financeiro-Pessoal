@@ -60,8 +60,9 @@ export const updateAccountBalance = async (client, accountId, amount, type, isRe
 export const familyCheckParam2 = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`;
 
 export const getUserWorkspaces = async (userId) => {
+    // Busca permissões E configurações do dono do workspace (u.settings)
     const res = await pool.query(`
-        SELECT m.family_id as id, u.name as name, m.role, u.entity_type as "entityType", m.permissions
+        SELECT m.family_id as id, u.name as name, m.role, u.entity_type as "entityType", m.permissions, u.settings as "ownerSettings"
         FROM memberships m JOIN users u ON m.family_id = u.id WHERE m.user_id = $1
     `, [userId]);
     
