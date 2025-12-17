@@ -119,11 +119,30 @@ export interface Account {
 
 export interface Contact {
   id: string;
-  name: string;
+  name: string; // Razão Social se PJ
+  fantasyName?: string; // Nome Fantasia
+  type: 'PF' | 'PJ';
   email?: string;
   phone?: string;
-  document?: string;
+  document?: string; // CPF ou CNPJ
+  ie?: string; // Inscrição Estadual
+  im?: string; // Inscrição Municipal
   pixKey?: string;
+  
+  // Address
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+
+  // Financial & Flags
+  isDefaulter?: boolean; // Inadimplente
+  isBlocked?: boolean;   // Bloqueado para novas vendas
+  creditLimit?: number;
+  defaultPaymentMethod?: string; // 'PIX', 'BOLETO', 'CARD'
+  defaultPaymentTerm?: number; // Dias padrão (ex: 30)
 }
 
 export interface Category {

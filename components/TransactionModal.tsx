@@ -242,7 +242,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
              finalContactId = existing.id;
          } else {
              const newId = crypto.randomUUID();
-             newContactObj = { id: newId, name: contactSearch };
+             newContactObj = { 
+                 id: newId, 
+                 name: contactSearch,
+                 type: 'PF' // Default to PF for quick creation
+             };
              finalContactId = newId;
          }
     }

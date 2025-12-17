@@ -15,14 +15,58 @@ export default function(logAudit) {
 
     // --- CONTACTS ---
     router.post('/contacts', authenticateToken, async (req, res) => {
-        const { id, name, email, phone, document, pixKey } = req.body;
+        const { 
+            id, name, email, phone, document, pixKey, type, 
+            fantasyName, ie, im, zipCode, street, number, neighborhood, city, state,
+            isDefaulter, isBlocked, creditLimit, defaultPaymentMethod, defaultPaymentTerm
+        } = req.body;
+        
         try {
             const familyId = await getFamilyId(req.user.id);
+            
+            // Schema Migration Lazy: Ensure columns exist
             await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS family_id TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS fantasy_name TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'PF'`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ie TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS im TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS zip_code TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS street TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS number TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS neighborhood TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS city TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS state TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_defaulter BOOLEAN DEFAULT FALSE`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2) DEFAULT 0`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS default_payment_method TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS default_payment_term INTEGER`);
 
             const existing = (await pool.query('SELECT * FROM contacts WHERE id=$1', [id])).rows[0];
-            const changes = calculateChanges(existing, req.body, { name: 'name', email: 'email', phone: 'phone', document: 'document', pixKey: 'pix_key' });
-            await pool.query(`INSERT INTO contacts (id, name, user_id, family_id, email, phone, document, pix_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET name=$2, email=$5, phone=$6, document=$7, pix_key=$8, deleted_at=NULL`, [id, name, req.user.id, familyId, sanitizeValue(email), sanitizeValue(phone), sanitizeValue(document), sanitizeValue(pixKey)]);
+            const changes = calculateChanges(existing, req.body, { 
+                name: 'name', email: 'email', phone: 'phone', document: 'document', pixKey: 'pix_key',
+                type: 'type', creditLimit: 'credit_limit', isDefaulter: 'is_defaulter', isBlocked: 'is_blocked' 
+            });
+            
+            await pool.query(
+                `INSERT INTO contacts (
+                    id, name, user_id, family_id, email, phone, document, pix_key,
+                    fantasy_name, type, ie, im, zip_code, street, number, neighborhood, city, state,
+                    is_defaulter, is_blocked, credit_limit, default_payment_method, default_payment_term
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) 
+                ON CONFLICT (id) DO UPDATE SET 
+                    name=$2, email=$5, phone=$6, document=$7, pix_key=$8,
+                    fantasy_name=$9, type=$10, ie=$11, im=$12, zip_code=$13, street=$14, number=$15, neighborhood=$16, city=$17, state=$18,
+                    is_defaulter=$19, is_blocked=$20, credit_limit=$21, default_payment_method=$22, default_payment_term=$23,
+                    deleted_at=NULL`, 
+                [
+                    id, name, req.user.id, familyId, sanitizeValue(email), sanitizeValue(phone), sanitizeValue(document), sanitizeValue(pixKey),
+                    sanitizeValue(fantasyName), type || 'PF', sanitizeValue(ie), sanitizeValue(im), 
+                    sanitizeValue(zipCode), sanitizeValue(street), sanitizeValue(number), sanitizeValue(neighborhood), sanitizeValue(city), sanitizeValue(state),
+                    isDefaulter || false, isBlocked || false, creditLimit || 0, sanitizeValue(defaultPaymentMethod), defaultPaymentTerm || 0
+                ]
+            );
+            
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'contact', id, name, existing, changes);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
