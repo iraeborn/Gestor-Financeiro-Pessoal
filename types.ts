@@ -428,7 +428,7 @@ export const ROLE_DEFINITIONS: RoleTemplate[] = [
     {
         id: 'OPERATOR',
         label: 'Operador Financeiro',
-        description: 'Pode lançar contas e OS, sem acesso a relatórios gerenciais.',
-        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
+        description: 'Pode lançar contas e OS, consultar catálogo e compras.',
+        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES', 'SRV_CATALOG']
     }
 ];

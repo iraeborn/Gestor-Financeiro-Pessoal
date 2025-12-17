@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart } from 'lucide-react';
 import { useConfirm } from './AlertSystem';
 
 interface ServicesViewProps {
@@ -37,6 +37,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     
+    // Catalog specific state
+    const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
+    
     // Generic form state maps to the active entity
     const [formData, setFormData] = useState<any>({}); 
 
@@ -60,7 +63,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     // --- Actions ---
     const handleOpenModal = (item?: any) => {
-        setFormData(item || {});
+        if (currentView === 'SRV_CATALOG' && !item) {
+            // Pre-select type based on active tab
+            setFormData({ 
+                type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE'
+            });
+        } else {
+            setFormData(item || {});
+        }
         setIsModalOpen(true);
     };
 
@@ -146,7 +156,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         else if (currentView === 'SRV_PURCHASES') items = commercialOrders.filter(o => o.type === 'PURCHASE');
         else if (currentView === 'SRV_CONTRACTS') items = contracts;
         else if (currentView === 'SRV_NF') items = invoices;
-        else if (currentView === 'SRV_CATALOG') items = serviceItems;
+        else if (currentView === 'SRV_CATALOG') {
+            items = serviceItems.filter(i => {
+                if (catalogTab === 'ALL') return true;
+                return i.type === catalogTab;
+            });
+        }
 
         const filtered = items.filter(i => 
             (i.title || i.description || i.number || i.name || i.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -158,49 +173,67 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         // CATALOG SPECIAL RENDER
         if (currentView === 'SRV_CATALOG') {
             return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {filtered.map(item => {
                         const margin = item.costPrice && item.costPrice > 0 ? ((item.defaultPrice - item.costPrice) / item.costPrice) * 100 : 0;
+                        const isProduct = item.type === 'PRODUCT';
+                        
                         return (
-                            <div key={item.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:border-indigo-300 transition-all group">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`p-1.5 rounded-lg ${item.type === 'PRODUCT' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
-                                            {item.type === 'PRODUCT' ? <Box className="w-4 h-4"/> : <Wrench className="w-4 h-4"/>}
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="font-bold text-gray-800">{item.name}</span>
-                                            {item.code && <span className="text-[10px] text-gray-400 font-mono bg-gray-50 px-1 rounded w-fit">{item.code}</span>}
-                                        </div>
-                                    </div>
-                                    {margin > 0 && (
-                                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded flex items-center gap-1" title="Margem de Lucro Estimada">
-                                            <Percent className="w-3 h-3"/> {Math.round(margin)}%
-                                        </span>
-                                    )}
-                                </div>
+                            <div key={item.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col">
+                                {/* Header Color Strip */}
+                                <div className={`h-1 w-full ${isProduct ? 'bg-amber-400' : 'bg-indigo-500'}`}></div>
                                 
-                                {item.description && <p className="text-xs text-gray-500 mb-3 line-clamp-2">{item.description}</p>}
-
-                                <div className="flex justify-between items-end border-t border-gray-100 pt-3">
-                                    <div>
-                                        <p className="text-xs text-gray-400">Preço Venda</p>
-                                        <p className="text-lg font-bold text-indigo-600">
-                                            {formatCurrency(item.defaultPrice)}
-                                            <span className="text-xs font-normal text-gray-400 ml-1">/ {item.unit || 'un'}</span>
-                                        </p>
-                                    </div>
-                                    {item.costPrice > 0 && (
-                                        <div className="text-right">
-                                            <p className="text-[10px] text-gray-400">Custo</p>
-                                            <p className="text-xs font-medium text-gray-600">{formatCurrency(item.costPrice)}</p>
+                                <div className="p-4 flex-1 flex flex-col">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`p-1.5 rounded-lg shrink-0 ${isProduct ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                                {isProduct ? <Box className="w-4 h-4"/> : <Wrench className="w-4 h-4"/>}
+                                            </div>
+                                            <div className="overflow-hidden">
+                                                <span className="font-bold text-gray-800 block truncate" title={item.name}>{item.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    {item.code && <span className="text-[10px] text-gray-500 font-mono bg-gray-50 px-1.5 rounded border border-gray-100">{item.code}</span>}
+                                                    {item.unit && <span className="text-[10px] text-gray-400 bg-gray-50 px-1 rounded">{item.unit}</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
+                                    </div>
+                                    
+                                    {item.description && <p className="text-xs text-gray-500 mb-4 line-clamp-2 bg-gray-50 p-2 rounded">{item.description}</p>}
+
+                                    <div className="mt-auto">
+                                        {/* Margin Indicator */}
+                                        {margin > 0 && (
+                                            <div className="mb-2">
+                                                <div className="flex justify-between text-[10px] mb-1">
+                                                    <span className="text-gray-400">Margem Estimada</span>
+                                                    <span className="font-bold text-emerald-600">{Math.round(margin)}%</span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full ${margin > 50 ? 'bg-emerald-500' : margin > 20 ? 'bg-indigo-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, margin)}%` }}></div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between items-end border-t border-gray-100 pt-3">
+                                            <div>
+                                                <p className="text-[10px] text-gray-400 uppercase font-bold">Venda</p>
+                                                <p className="text-lg font-bold text-gray-900">{formatCurrency(item.defaultPrice)}</p>
+                                            </div>
+                                            {item.costPrice > 0 && (
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Custo</p>
+                                                    <p className="text-xs font-medium text-gray-500">{formatCurrency(item.costPrice)}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleOpenModal(item)} className="p-1.5 bg-white shadow-sm border border-gray-200 rounded text-indigo-600 hover:bg-indigo-50"><Wrench className="w-3 h-3"/></button>
-                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 bg-white shadow-sm border border-gray-200 rounded text-rose-600 hover:bg-rose-50"><Trash2 className="w-3 h-3"/></button>
+                                {/* Hover Actions */}
+                                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-lg p-1 shadow-sm">
+                                    <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"><Wrench className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5"/></button>
                                 </div>
                             </div>
                         );
@@ -274,12 +307,36 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 </div>
             </div>
 
+            {/* Catalog Specific Tabs */}
+            {currentView === 'SRV_CATALOG' && (
+                <div className="flex bg-gray-100 p-1 rounded-xl w-fit">
+                    <button 
+                        onClick={() => setCatalogTab('ALL')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Todos
+                    </button>
+                    <button 
+                        onClick={() => setCatalogTab('PRODUCT')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab === 'PRODUCT' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Produtos
+                    </button>
+                    <button 
+                        onClick={() => setCatalogTab('SERVICE')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab === 'SERVICE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Serviços
+                    </button>
+                </div>
+            )}
+
             {renderContent()}
 
             {/* UNIVERSAL MODAL */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto animate-scale-up">
                         <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
                             <h2 className="text-lg font-bold text-gray-800">Novo {header.label}</h2>
                             <button onClick={() => setIsModalOpen(false)}><X className="w-5 h-5 text-gray-400" /></button>
@@ -290,30 +347,36 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             {currentView === 'SRV_CATALOG' && (
                                 <>
                                     <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                                        <button type="button" onClick={() => setFormData({...formData, type: 'SERVICE'})} className={`flex-1 py-2 text-xs font-bold rounded ${formData.type !== 'PRODUCT' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Serviço</button>
-                                        <button type="button" onClick={() => setFormData({...formData, type: 'PRODUCT'})} className={`flex-1 py-2 text-xs font-bold rounded ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
+                                        <button type="button" onClick={() => setFormData({...formData, type: 'SERVICE'})} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type !== 'PRODUCT' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}>Serviço</button>
+                                        <button type="button" onClick={() => setFormData({...formData, type: 'PRODUCT'})} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
                                     </div>
                                     
-                                    <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                    <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input type="text" placeholder="Código / SKU" className="border rounded-lg p-2" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} />
-                                        <input type="text" placeholder="Unidade (ex: UN, KG)" className="border rounded-lg p-2" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                        <input type="text" placeholder="Código / SKU" className="border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} />
+                                        <input type="text" placeholder="Unidade (ex: UN, KG)" className="border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                         <div>
-                                            <label className="text-xs text-gray-500 font-bold ml-1">Preço Venda</label>
-                                            <input type="number" step="0.01" className="w-full border rounded-lg p-2" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
+                                            <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Venda</label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
+                                            </div>
                                         </div>
                                         <div>
-                                            <label className="text-xs text-gray-500 font-bold ml-1">Preço Custo</label>
-                                            <input type="number" step="0.01" className="w-full border rounded-lg p-2" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                                            <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Custo</label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm text-gray-600 outline-none focus:border-indigo-500" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                                            </div>
                                         </div>
                                     </div>
-                                    <textarea placeholder="Descrição detalhada para propostas..." className="w-full border rounded-lg p-2 text-sm" rows={3} value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
+                                    <textarea placeholder="Descrição detalhada para propostas..." className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
                                 </>
                             )}
 
-                            {/* OTHER MODALS */}
+                            {/* OTHER MODALS (Keep existing logic) */}
                             {currentView === 'SRV_OS' && (
                                 <>
                                     <input type="text" placeholder="Título da OS" className="w-full border rounded-lg p-2" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} required />
@@ -387,9 +450,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </select>
                             )}
 
-                            <div className="flex justify-end gap-2 pt-2">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium">Cancelar</button>
-                                <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700">Salvar</button>
+                            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">Cancelar</button>
+                                <button type="submit" className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-colors">Salvar</button>
                             </div>
                         </form>
                     </div>
