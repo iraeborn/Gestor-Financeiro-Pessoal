@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
 
@@ -117,11 +117,22 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
                     const data = await res.json();
                     if (data.status === 1 && data.product) {
+                        const p = data.product;
+                        const brand = p.brands || '';
+                        const qty = p.quantity || '';
+                        const cats = p.categories ? p.categories.split(',').slice(0, 3).join(', ') : '';
+                        
+                        let desc = '';
+                        if (brand) desc += `Marca: ${brand}\n`;
+                        if (qty) desc += `Qtd: ${qty}\n`;
+                        if (cats) desc += `Cat: ${cats}`;
+
                         setFormData((prev: any) => ({ 
                             ...prev, 
-                            name: data.product.product_name || prev.name,
+                            name: p.product_name || prev.name,
                             unit: 'UN',
-                            description: data.product.brands ? `Marca: ${data.product.brands}` : ''
+                            description: desc.trim() || prev.description || '',
+                            imageUrl: p.image_front_url || p.image_url || ''
                         }));
                         setProductSource('Open Food Facts');
                         found = true;
@@ -190,7 +201,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 id, 
                 defaultPrice: Number(formData.defaultPrice) || 0, 
                 costPrice: Number(formData.costPrice) || 0,
-                type: formData.type || 'SERVICE'
+                type: formData.type || 'SERVICE',
+                imageUrl: formData.imageUrl
             });
         }
         setIsModalOpen(false);
@@ -308,6 +320,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         </div>
                                     </div>
 
+                                    {item.imageUrl && (
+                                        <div className="w-full h-32 mb-3 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-gray-100">
+                                            <img src={item.imageUrl} alt={item.name} className="h-full object-contain" />
+                                        </div>
+                                    )}
+
                                     <div className="mb-4">
                                         <h3 className="font-bold text-gray-800 text-lg leading-tight mb-1 line-clamp-1" title={item.name}>{item.name}</h3>
                                         <div className="flex items-center gap-2 flex-wrap">
@@ -325,7 +343,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </div>
                                     
                                     {item.description ? (
-                                        <p className="text-xs text-gray-500 mb-4 line-clamp-2 min-h-[2.5em]">{item.description}</p>
+                                        <p className="text-xs text-gray-500 mb-4 line-clamp-3 whitespace-pre-wrap min-h-[2.5em]">{item.description}</p>
                                     ) : (
                                         <div className="min-h-[2.5em]"></div>
                                     )}
@@ -475,6 +493,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'PRODUCT'}))} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
                                     </div>
                                     
+                                    {formData.imageUrl && (
+                                        <div className="flex justify-center mb-2">
+                                            <img src={formData.imageUrl} alt="Produto" className="h-32 object-contain rounded-lg border border-gray-200 bg-white p-1" />
+                                        </div>
+                                    )}
+
                                     <div className="relative">
                                         <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 pr-8 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData((prev: any) => ({...prev, name: e.target.value}))} required />
                                         {loadingProductInfo && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-indigo-500 animate-spin" />}
@@ -521,6 +545,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             </div>
                                         </div>
                                     </div>
+                                    
+                                    <div className="relative">
+                                        <ImageIcon className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                                        <input type="text" placeholder="URL da Imagem (opcional)" className="w-full pl-9 border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.imageUrl || ''} onChange={e => setFormData((prev: any) => ({...prev, imageUrl: e.target.value}))} />
+                                    </div>
+
                                     <textarea placeholder="Descrição detalhada para propostas..." className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData((prev: any) => ({...prev, description: e.target.value}))} />
                                 </>
                             )}
