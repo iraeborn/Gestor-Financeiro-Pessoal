@@ -30,6 +30,9 @@ export default function(logAudit) {
             const departments = await pool.query(`SELECT * FROM departments WHERE family_id = $1`, [activeFamilyId]);
             const projects = await pool.query(`SELECT * FROM projects WHERE family_id = $1`, [activeFamilyId]);
 
+            // Busca os itens do catálogo (Produtos e Serviços)
+            const srvItems = await pool.query(`SELECT * FROM module_services WHERE family_id = $1 AND deleted_at IS NULL`, [activeFamilyId]);
+
             res.json({
                 accounts: accs.rows.map(r => ({ ...r, balance: parseFloat(r.balance) })),
                 transactions: trans.rows.map(r => ({ ...r, amount: parseFloat(r.amount), date: new Date(r.date).toISOString().split('T')[0] })),
@@ -41,8 +44,20 @@ export default function(logAudit) {
                 costCenters: costCenters.rows,
                 departments: departments.rows,
                 projects: projects.rows,
-                serviceClients: [],
-                serviceItems: [],
+                serviceItems: srvItems.rows.map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    code: r.code,
+                    type: r.type,
+                    defaultPrice: parseFloat(r.default_price || 0),
+                    costPrice: parseFloat(r.cost_price || 0),
+                    unit: r.unit,
+                    description: r.description,
+                    moduleTag: r.module_tag,
+                    imageUrl: r.image_url,
+                    brand: r.brand
+                })),
+                serviceClients: [], // Módulos específicos podem popular aqui
                 serviceAppointments: [],
                 serviceOrders: [],
                 commercialOrders: [],

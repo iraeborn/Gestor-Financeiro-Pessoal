@@ -201,7 +201,7 @@ const App: React.FC = () => {
       case 'SYS_CONTACTS':
         return <ContactsView contacts={data.contacts} serviceClients={data.serviceClients} onAddContact={async (c) => wrapSave(api.saveContact, c, "Contato salvo")} onEditContact={async (c) => wrapSave(api.saveContact, c, "Contato atualizado")} onDeleteContact={async (id) => wrapDel(api.deleteContact, id, "Contato excluído")} />;
       
-      case 'SRV_CLIENTS': // View customizada para o módulo de serviços
+      case 'SRV_CLIENTS': 
         return <ContactsView 
             contacts={data.contacts} 
             serviceClients={data.serviceClients} 
@@ -262,7 +262,7 @@ const App: React.FC = () => {
       case 'SRV_PURCHASES':
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
-      case 'SRV_CATALOG': // NEW CASE
+      case 'SRV_CATALOG':
         return <ServicesView 
             currentView={currentView}
             serviceOrders={data.serviceOrders}
@@ -270,8 +270,7 @@ const App: React.FC = () => {
             contracts={data.contracts}
             invoices={data.invoices}
             contacts={data.contacts}
-            // Pass the Catalog Data
-            serviceItems={data.serviceItems.filter(s => s.moduleTag === 'GENERAL')}
+            serviceItems={data.serviceItems || []}
             
             onSaveOS={async (d) => wrapSave(api.saveServiceOrder, d, "OS salva")}
             onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")}
@@ -282,7 +281,6 @@ const App: React.FC = () => {
             onSaveInvoice={async (d) => wrapSave(api.saveInvoice, d, "Nota salva")}
             onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")}
             onAddTransaction={handleAddTransaction}
-            // Catalog Handlers (Reuse api.saveServiceItem but with moduleTag 'GENERAL')
             onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")}
             onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")}
         />;
