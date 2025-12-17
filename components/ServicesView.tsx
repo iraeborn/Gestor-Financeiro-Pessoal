@@ -89,7 +89,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleBarcodeScanned = async (code: string) => {
         setShowScanner(false);
-        setFormData(prev => ({ ...prev, code }));
+        setFormData((prev: any) => ({ ...prev, code }));
         setProductSource('');
         
         if (code.length > 7) {
@@ -112,49 +112,54 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 } 
 
                 // 2. Check Open Food Facts (API Pública rápida)
+                let found = false;
                 try {
                     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
                     const data = await res.json();
                     if (data.status === 1 && data.product) {
-                        setFormData(prev => ({ 
+                        setFormData((prev: any) => ({ 
                             ...prev, 
                             name: data.product.product_name || prev.name,
                             unit: 'UN',
                             description: data.product.brands ? `Marca: ${data.product.brands}` : ''
                         }));
                         setProductSource('Open Food Facts');
-                        setLoadingProductInfo(false);
-                        return;
+                        found = true;
                     }
                 } catch (e) { console.warn("OFF Lookup failed", e); }
 
-                // 3. Check Produto.xyz (Substituindo GS1/Gemini)
+                if (found) {
+                    setLoadingProductInfo(false);
+                    return;
+                }
+
+                // 3. Check Produto.xyz (API Global Alternativa)
                 try {
-                    // Tentativa de busca na API Produto.xyz
                     const res = await fetch(`https://api.produto.xyz/v1/products/${code}`);
-                    
                     if (res.ok) {
                         const data = await res.json();
+                        // Mapping genérico baseado em resposta padrão de APIs de produto
                         if (data && (data.name || data.description)) {
-                            setFormData(prev => ({
+                            setFormData((prev: any) => ({
                                 ...prev,
                                 name: data.name || data.description || prev.name,
-                                description: data.description || '',
+                                description: data.description || prev.description || '',
                                 unit: data.unit || 'UN',
-                                // Se a API retornar preço médio, podemos usar
+                                // Se a API retornar preço médio
                                 defaultPrice: data.average_price || prev.defaultPrice
                             }));
                             setProductSource('Produto.xyz');
                             showAlert("Produto encontrado no Produto.xyz!", "success");
-                            setLoadingProductInfo(false);
-                            return;
+                            found = true;
                         }
                     }
                 } catch (e) {
                     console.warn("Produto.xyz Lookup failed", e);
                 }
 
-                showAlert("Produto não identificado automaticamente.", "info");
+                if (!found) {
+                    showAlert("Produto não identificado automaticamente.", "info");
+                }
 
             } catch (e) {
                 console.log("Erro ao buscar info do produto", e);
@@ -466,12 +471,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             {currentView === 'SRV_CATALOG' && (
                                 <>
                                     <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                                        <button type="button" onClick={() => setFormData({...formData, type: 'SERVICE'})} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type !== 'PRODUCT' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}>Serviço</button>
-                                        <button type="button" onClick={() => setFormData({...formData, type: 'PRODUCT'})} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
+                                        <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'SERVICE'}))} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type !== 'PRODUCT' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}>Serviço</button>
+                                        <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'PRODUCT'}))} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
                                     </div>
                                     
                                     <div className="relative">
-                                        <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 pr-8 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                        <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 pr-8 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData((prev: any) => ({...prev, name: e.target.value}))} required />
                                         {loadingProductInfo && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-indigo-500 animate-spin" />}
                                     </div>
                                     
@@ -484,7 +489,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
                                     <div className="flex gap-2 items-center">
                                         <div className="relative flex-1">
-                                            <input type="text" placeholder="Código / SKU (EAN)" className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} />
+                                            <input type="text" placeholder="Código / SKU (EAN)" className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.code || ''} onChange={e => setFormData((prev: any) => ({...prev, code: e.target.value}))} />
                                         </div>
                                         {/* Scan Button - Only for Products */}
                                         {formData.type === 'PRODUCT' && (
@@ -497,7 +502,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 <ScanBarcode className="w-5 h-5" />
                                             </button>
                                         )}
-                                        <input type="text" placeholder="Unidade" className="w-20 border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                        <input type="text" placeholder="Unidade" className="w-20 border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData((prev: any) => ({...prev, unit: e.target.value}))} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
@@ -505,18 +510,18 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Venda</label>
                                             <div className="relative">
                                                 <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
-                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500" value={formData.defaultPrice} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500" value={formData.defaultPrice} onChange={e => setFormData((prev: any) => ({...prev, defaultPrice: e.target.value}))} required />
                                             </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Custo</label>
                                             <div className="relative">
                                                 <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
-                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm text-gray-600 outline-none focus:border-indigo-500" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm text-gray-600 outline-none focus:border-indigo-500" value={formData.costPrice} onChange={e => setFormData((prev: any) => ({...prev, costPrice: e.target.value}))} />
                                             </div>
                                         </div>
                                     </div>
-                                    <textarea placeholder="Descrição detalhada para propostas..." className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
+                                    <textarea placeholder="Descrição detalhada para propostas..." className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData((prev: any) => ({...prev, description: e.target.value}))} />
                                 </>
                             )}
 
