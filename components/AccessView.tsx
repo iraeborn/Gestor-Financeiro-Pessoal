@@ -39,6 +39,7 @@ const PERMISSION_GROUPS = [
             { id: 'SRV_OS', label: 'Ordens de Serviço' },
             { id: 'SRV_SALES', label: 'Vendas' },
             { id: 'SRV_PURCHASES', label: 'Compras' },
+            { id: 'SRV_CATALOG', label: 'Catálogo de Itens' },
             { id: 'SRV_CONTRACTS', label: 'Contratos' },
             { id: 'SRV_NF', label: 'Notas Fiscais' },
             { id: 'SRV_CLIENTS', label: 'Gestão de Clientes' },
