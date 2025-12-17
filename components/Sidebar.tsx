@@ -93,6 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
         { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
         { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
         { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
+        { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
       ].filter(i => canView(i.id))
     }] : []),
     ...(hasOdonto ? [{ 
@@ -106,7 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
     { 
       section: 'Sistema', 
       items: [
-        { id: 'SYS_CONTACTS', label: 'Todos Contatos', icon: Users }, // Adicionado SYS_CONTACTS
+        { id: 'SYS_CONTACTS', label: 'Todos Contatos', icon: Users }, 
         { id: 'SYS_ACCESS', label: 'Acesso & Equipe', icon: ShieldCheck },
         { id: 'SYS_LOGS', label: 'Logs & Auditoria', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },

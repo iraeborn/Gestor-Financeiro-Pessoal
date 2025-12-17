@@ -9,9 +9,11 @@ interface ContactsViewProps {
   onAddContact: (c: Contact) => void;
   onEditContact: (c: Contact) => void;
   onDeleteContact: (id: string) => void;
+  title?: string;
+  subtitle?: string;
 }
 
-const ContactsView: React.FC<ContactsViewProps> = ({ contacts, serviceClients = [], onAddContact, onEditContact, onDeleteContact }) => {
+const ContactsView: React.FC<ContactsViewProps> = ({ contacts, serviceClients = [], onAddContact, onEditContact, onDeleteContact, title, subtitle }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -81,8 +83,8 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, serviceClients = 
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pessoas & Empresas</h1>
-          <p className="text-gray-500">Gestão unificada de clientes, fornecedores e contatos diversos.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{title || "Pessoas & Empresas"}</h1>
+          <p className="text-gray-500">{subtitle || "Gestão unificada de clientes, fornecedores e contatos diversos."}</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}

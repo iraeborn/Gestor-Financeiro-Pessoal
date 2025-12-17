@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   User, AuthResponse, AppState, ViewMode, Transaction, Account, 
@@ -199,6 +200,18 @@ const App: React.FC = () => {
       case 'FIN_CONTACTS':
       case 'SYS_CONTACTS':
         return <ContactsView contacts={data.contacts} serviceClients={data.serviceClients} onAddContact={async (c) => wrapSave(api.saveContact, c, "Contato salvo")} onEditContact={async (c) => wrapSave(api.saveContact, c, "Contato atualizado")} onDeleteContact={async (id) => wrapDel(api.deleteContact, id, "Contato excluído")} />;
+      
+      case 'SRV_CLIENTS': // View customizada para o módulo de serviços
+        return <ContactsView 
+            contacts={data.contacts} 
+            serviceClients={data.serviceClients} 
+            title="Clientes de Serviços"
+            subtitle="Gerencie sua base de clientes e tomadores de serviço."
+            onAddContact={async (c) => wrapSave(api.saveContact, c, "Cliente salvo")} 
+            onEditContact={async (c) => wrapSave(api.saveContact, c, "Cliente atualizado")} 
+            onDeleteContact={async (id) => wrapDel(api.deleteContact, id, "Cliente excluído")} 
+        />;
+
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={data} />;
       case 'SYS_SETTINGS':
