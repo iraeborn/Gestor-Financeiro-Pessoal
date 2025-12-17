@@ -31,66 +31,41 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
   socket.on('join_family', (familyId) => {
     socket.join(familyId);
-    console.log(`Socket ${socket.id} joined family room: ${familyId}`);
-  });
-  socket.on('disconnect', () => {
-    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 
-// Helper para Auditoria & BROADCAST SOCKET
+// Helper para Auditoria
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null) => {
-    // 1. Persist Log
     await pool.query(
         `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [userId, action, entity, entityId, details, previousState, changes]
     );
-
-    // 2. Real-time Broadcast
     try {
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         const familyId = res.rows[0]?.family_id || userId;
-        io.to(familyId).emit('DATA_UPDATED', {
-            action,
-            entity,
-            actorId: userId,
-            timestamp: new Date()
-        });
-    } catch (e) {
-        console.error("Socket broadcast error:", e);
-    }
+        io.to(familyId).emit('DATA_UPDATED', { action, entity, actorId: userId, timestamp: new Date() });
+    } catch (e) { console.error(e); }
 };
-
-app.use((req, res, next) => {
-    console.log(`[Request] ${req.method} ${req.path}`);
-    next();
-});
 
 app.use(cors());
 app.use(express.json());
 
 // --- ROUTES ---
-app.get('/api/health', async (req, res) => res.json({ status: 'OK' }));
-
-// Mount Routes
+app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 app.use('/api/auth', authRoutes(logAudit));
-app.use('/api', financeRoutes(logAudit)); // Contains initial-data
+app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
-
-// Fallback /api 404
-app.all('/api/*', (req, res) => res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` }));
 
 // Static Files
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath, { index: false }));
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
-    if (!fs.existsSync(indexPath)) return res.status(500).send('Build not found. Run npm run build.');
+    if (!fs.existsSync(indexPath)) return res.status(500).send('Build not found.');
     fs.readFile(indexPath, 'utf8', (err, htmlData) => {
         if (err) return res.status(500).send('Error');
         const envScript = `<script>window.GOOGLE_CLIENT_ID = "${process.env.GOOGLE_CLIENT_ID}";</script>`;
@@ -98,9 +73,11 @@ app.get('*', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
-// Initialize DB then start server
 initDb().then(() => {
-    httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    // Escutando explicitamente em 0.0.0.0 para Cloud Run
+    httpServer.listen(PORT, '0.0.0.0', () => {
+        console.log(`Gestor Financeiro rodando em: http://0.0.0.0:${PORT}`);
+    });
 });
