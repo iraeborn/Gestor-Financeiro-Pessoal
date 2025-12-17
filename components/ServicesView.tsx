@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { useConfirm } from './AlertSystem';
 
 interface ServicesViewProps {
@@ -63,11 +63,18 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     // --- Actions ---
     const handleOpenModal = (item?: any) => {
-        if (currentView === 'SRV_CATALOG' && !item) {
-            // Pre-select type based on active tab
-            setFormData({ 
-                type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE'
-            });
+        if (currentView === 'SRV_CATALOG') {
+            if (item) {
+                // Modo Edição
+                setFormData({ ...item });
+            } else {
+                // Modo Criação
+                setFormData({ 
+                    type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE',
+                    defaultPrice: '',
+                    costPrice: ''
+                });
+            }
         } else {
             setFormData(item || {});
         }
@@ -173,67 +180,94 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         // CATALOG SPECIAL RENDER
         if (currentView === 'SRV_CATALOG') {
             return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {filtered.map(item => {
-                        const margin = item.costPrice && item.costPrice > 0 ? ((item.defaultPrice - item.costPrice) / item.costPrice) * 100 : 0;
+                        // Calculate Markup Margin: (Price - Cost) / Cost
+                        // If Cost is 0, Margin is 100% (pure profit essentially for logic purposes)
+                        const profit = item.defaultPrice - (item.costPrice || 0);
+                        const margin = item.costPrice && item.costPrice > 0 
+                            ? (profit / item.costPrice) * 100 
+                            : (item.defaultPrice > 0 ? 100 : 0);
+                            
                         const isProduct = item.type === 'PRODUCT';
                         
                         return (
-                            <div key={item.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all group overflow-hidden flex flex-col">
-                                {/* Header Color Strip */}
-                                <div className={`h-1 w-full ${isProduct ? 'bg-amber-400' : 'bg-indigo-500'}`}></div>
+                            <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col group overflow-hidden">
+                                {/* Header */}
+                                <div className={`h-1.5 w-full ${isProduct ? 'bg-amber-400' : 'bg-indigo-500'}`}></div>
                                 
-                                <div className="p-4 flex-1 flex flex-col">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded-lg shrink-0 ${isProduct ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                                                {isProduct ? <Box className="w-4 h-4"/> : <Wrench className="w-4 h-4"/>}
-                                            </div>
-                                            <div className="overflow-hidden">
-                                                <span className="font-bold text-gray-800 block truncate" title={item.name}>{item.name}</span>
-                                                <div className="flex items-center gap-2">
-                                                    {item.code && <span className="text-[10px] text-gray-500 font-mono bg-gray-50 px-1.5 rounded border border-gray-100">{item.code}</span>}
-                                                    {item.unit && <span className="text-[10px] text-gray-400 bg-gray-50 px-1 rounded">{item.unit}</span>}
-                                                </div>
-                                            </div>
+                                <div className="p-5 flex-1 flex flex-col">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className={`p-2 rounded-xl shrink-0 ${isProduct ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                            {isProduct ? <Box className="w-5 h-5"/> : <Wrench className="w-5 h-5"/>}
+                                        </div>
+                                        {/* Actions */}
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleOpenModal(item)} 
+                                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                title="Editar"
+                                            >
+                                                <Wrench className="w-4 h-4"/>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(item.id)} 
+                                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                title="Excluir"
+                                            >
+                                                <Trash2 className="w-4 h-4"/>
+                                            </button>
                                         </div>
                                     </div>
-                                    
-                                    {item.description && <p className="text-xs text-gray-500 mb-4 line-clamp-2 bg-gray-50 p-2 rounded">{item.description}</p>}
 
-                                    <div className="mt-auto">
-                                        {/* Margin Indicator */}
-                                        {margin > 0 && (
-                                            <div className="mb-2">
-                                                <div className="flex justify-between text-[10px] mb-1">
-                                                    <span className="text-gray-400">Margem Estimada</span>
-                                                    <span className="font-bold text-emerald-600">{Math.round(margin)}%</span>
-                                                </div>
-                                                <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                                                    <div className={`h-full rounded-full ${margin > 50 ? 'bg-emerald-500' : margin > 20 ? 'bg-indigo-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, margin)}%` }}></div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div className="flex justify-between items-end border-t border-gray-100 pt-3">
-                                            <div>
-                                                <p className="text-[10px] text-gray-400 uppercase font-bold">Venda</p>
-                                                <p className="text-lg font-bold text-gray-900">{formatCurrency(item.defaultPrice)}</p>
-                                            </div>
-                                            {item.costPrice > 0 && (
-                                                <div className="text-right">
-                                                    <p className="text-[10px] text-gray-400 uppercase font-bold">Custo</p>
-                                                    <p className="text-xs font-medium text-gray-500">{formatCurrency(item.costPrice)}</p>
-                                                </div>
+                                    <div className="mb-4">
+                                        <h3 className="font-bold text-gray-800 text-lg leading-tight mb-1 line-clamp-1" title={item.name}>{item.name}</h3>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            {item.code && (
+                                                <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                    SKU: {item.code}
+                                                </span>
+                                            )}
+                                            {item.unit && (
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase">
+                                                    {item.unit}
+                                                </span>
                                             )}
                                         </div>
                                     </div>
-                                </div>
+                                    
+                                    {item.description ? (
+                                        <p className="text-xs text-gray-500 mb-4 line-clamp-2 min-h-[2.5em]">{item.description}</p>
+                                    ) : (
+                                        <div className="min-h-[2.5em]"></div>
+                                    )}
 
-                                {/* Hover Actions */}
-                                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-lg p-1 shadow-sm">
-                                    <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"><Wrench className="w-3.5 h-3.5"/></button>
-                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5"/></button>
+                                    <div className="mt-auto pt-4 border-t border-dashed border-gray-100">
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <p className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">Preço de Venda</p>
+                                                <p className="text-xl font-extrabold text-gray-900">{formatCurrency(item.defaultPrice)}</p>
+                                            </div>
+                                            
+                                            {/* Profit Badge */}
+                                            {item.defaultPrice > 0 && (
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">Margem</p>
+                                                    <div className={`flex items-center justify-end gap-1 px-2 py-1 rounded-lg text-xs font-bold ${margin >= 50 ? 'bg-emerald-50 text-emerald-600' : margin >= 20 ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                        {margin >= 50 ? <TrendingUp className="w-3 h-3"/> : <Percent className="w-3 h-3"/>}
+                                                        {Math.round(margin)}%
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {item.costPrice > 0 && (
+                                            <div className="mt-2 flex justify-between items-center bg-gray-50 p-2 rounded-lg text-xs">
+                                                <span className="text-gray-500">Custo: <strong>{formatCurrency(item.costPrice)}</strong></span>
+                                                <span className="text-emerald-600 font-medium">Lucro: +{formatCurrency(profit)}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -338,7 +372,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto animate-scale-up">
                         <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
-                            <h2 className="text-lg font-bold text-gray-800">Novo {header.label}</h2>
+                            <h2 className="text-lg font-bold text-gray-800">
+                                {formData.id ? 'Editar ' : 'Novo '} {header.label}
+                            </h2>
                             <button onClick={() => setIsModalOpen(false)}><X className="w-5 h-5 text-gray-400" /></button>
                         </div>
                         <form onSubmit={handleSave} className="space-y-4">
@@ -361,14 +397,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Venda</label>
                                             <div className="relative">
                                                 <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
-                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500" value={formData.defaultPrice} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
                                             </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Custo</label>
                                             <div className="relative">
                                                 <span className="absolute left-2 top-2 text-gray-400 text-xs">R$</span>
-                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm text-gray-600 outline-none focus:border-indigo-500" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                                                <input type="number" step="0.01" className="w-full border rounded-lg pl-6 p-2 text-sm text-gray-600 outline-none focus:border-indigo-500" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
                                             </div>
                                         </div>
                                     </div>
