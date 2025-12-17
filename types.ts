@@ -280,6 +280,16 @@ export interface ServiceOrder {
   endDate?: string;
 }
 
+export interface OrderItem {
+    id: string;
+    serviceItemId?: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    costPrice?: number; // Para cálculo de margem individual se necessário
+}
+
 export interface CommercialOrder {
   id: string;
   type: 'SALE' | 'PURCHASE';
@@ -293,6 +303,8 @@ export interface CommercialOrder {
   discountAmount?: number;
   taxAmount?: number;
   
+  items?: OrderItem[]; // Lista de produtos/serviços
+
   date: string;
   status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED';
   transactionId?: string;

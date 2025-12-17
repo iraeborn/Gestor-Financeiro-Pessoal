@@ -51,6 +51,7 @@ export const initDb = async () => {
             gross_amount DECIMAL(15,2), 
             discount_amount DECIMAL(15,2), 
             tax_amount DECIMAL(15,2), 
+            items JSONB DEFAULT '[]',
             date DATE, 
             status TEXT, 
             transaction_id TEXT, 

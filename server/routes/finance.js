@@ -108,6 +108,7 @@ export default function(logAudit) {
                     grossAmount: parseFloat(r.gross_amount || 0),
                     discountAmount: parseFloat(r.discount_amount || 0),
                     taxAmount: parseFloat(r.tax_amount || 0),
+                    items: r.items || [], // Items JSONB
                     date: new Date(r.date).toISOString().split('T')[0],
                     status: r.status,
                     transactionId: r.transaction_id
