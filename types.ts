@@ -286,9 +286,15 @@ export interface CommercialOrder {
   description: string;
   contactId?: string;
   contactName?: string;
-  amount: number;
+  amount: number; // Final Net Amount
+  
+  // New Fields for Professional Sales
+  grossAmount?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  
   date: string;
-  status: 'DRAFT' | 'CONFIRMED' | 'CANCELED';
+  status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED';
   transactionId?: string;
 }
 

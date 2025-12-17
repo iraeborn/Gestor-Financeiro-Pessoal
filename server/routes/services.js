@@ -44,17 +44,21 @@ export default function(logAudit) {
 
     // --- COMMERCIAL ORDERS (Sales/Purchases) ---
     router.post('/services/orders', authenticateToken, async (req, res) => {
-        const { id, type, description, contactId, amount, date, status, transactionId } = req.body;
+        const { id, type, description, contactId, amount, grossAmount, discountAmount, taxAmount, date, status, transactionId } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
+            // Lazy Migration for pricing fields
             await pool.query(`CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL, date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP, deleted_at TIMESTAMP)`);
+            await pool.query(`ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(15,2) DEFAULT 0`);
+            await pool.query(`ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(15,2) DEFAULT 0`);
+            await pool.query(`ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(15,2) DEFAULT 0`);
 
             const existing = (await pool.query('SELECT * FROM commercial_orders WHERE id=$1', [id])).rows[0];
             await pool.query(
-                `INSERT INTO commercial_orders (id, type, description, contact_id, amount, date, status, transaction_id, user_id, family_id, created_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) 
-                 ON CONFLICT (id) DO UPDATE SET type=$2, description=$3, contact_id=$4, amount=$5, date=$6, status=$7, transaction_id=$8, deleted_at=NULL`,
-                [id, type, description, sanitizeValue(contactId), amount || 0, date, status, sanitizeValue(transactionId), req.user.id, familyId]
+                `INSERT INTO commercial_orders (id, type, description, contact_id, amount, gross_amount, discount_amount, tax_amount, date, status, transaction_id, user_id, family_id, created_at) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()) 
+                 ON CONFLICT (id) DO UPDATE SET type=$2, description=$3, contact_id=$4, amount=$5, gross_amount=$6, discount_amount=$7, tax_amount=$8, date=$9, status=$10, transaction_id=$11, deleted_at=NULL`,
+                [id, type, description, sanitizeValue(contactId), amount || 0, grossAmount || amount || 0, discountAmount || 0, taxAmount || 0, date, status, sanitizeValue(transactionId), req.user.id, familyId]
             );
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'order', id, `${type}: ${description}`, existing);
             res.json({ success: true });
