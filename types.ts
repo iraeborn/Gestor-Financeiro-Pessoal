@@ -331,6 +331,7 @@ export interface AuditLog {
     timestamp: string;
     previousState?: any;
     changes?: Record<string, { old: any, new: any }>;
+    isDeleted?: boolean;
 }
 
 export interface NotificationLog {

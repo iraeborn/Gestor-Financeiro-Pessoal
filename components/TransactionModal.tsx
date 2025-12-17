@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode, Loader2 } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
@@ -36,7 +37,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     accountId: '',
     destinationAccountId: '',
     isRecurring: false,
-    recurrenceFrequency: 'MONTHLY' as RecurrenceFrequency,
+    recurrenceFrequency: RecurrenceFrequency.MONTHLY,
     recurrenceEndDate: '',
     interestRate: '0',
     contactId: '',
@@ -79,7 +80,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         accountId: initialData.accountId || '',
         destinationAccountId: initialData.destinationAccountId || '',
         isRecurring: !!initialData.isRecurring,
-        recurrenceFrequency: initialData.recurrenceFrequency || 'MONTHLY',
+        recurrenceFrequency: initialData.recurrenceFrequency || RecurrenceFrequency.MONTHLY,
         recurrenceEndDate: initialData.recurrenceEndDate || '',
         interestRate: initialData.interestRate !== undefined ? initialData.interestRate.toString() : '0',
         contactId: initialData.contactId || '',
@@ -103,7 +104,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         accountId: accounts.length > 0 ? accounts[0].id : '',
         destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
         isRecurring: false,
-        recurrenceFrequency: 'MONTHLY',
+        recurrenceFrequency: RecurrenceFrequency.MONTHLY,
         recurrenceEndDate: '',
         interestRate: '0',
         contactId: '',
@@ -602,9 +603,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                               onChange={(e) => setFormData({ ...formData, recurrenceFrequency: e.target.value as RecurrenceFrequency })}
                               className="block w-full rounded-lg border-gray-200 border px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                           >
-                              <option value="WEEKLY">Semanal</option>
-                              <option value="MONTHLY">Mensal</option>
-                              <option value="YEARLY">Anual</option>
+                              <option value={RecurrenceFrequency.WEEKLY}>Semanal</option>
+                              <option value={RecurrenceFrequency.MONTHLY}>Mensal</option>
+                              <option value={RecurrenceFrequency.YEARLY}>Anual</option>
                           </select>
                       </div>
                       <div>

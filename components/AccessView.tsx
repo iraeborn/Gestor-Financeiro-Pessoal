@@ -170,7 +170,8 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
 
     const openEditModal = (member: Member) => {
         setEditingMember(member);
-        setEditRole(member.role);
+        // Fix: Explicitly cast the role to the expected union type
+        setEditRole(member.role as 'ADMIN' | 'MEMBER');
         const perms = member.permissions || [];
         setEditPermissions(perms);
         
