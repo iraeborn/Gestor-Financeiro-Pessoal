@@ -30,8 +30,40 @@ export default function(logAudit) {
             const departments = await pool.query(`SELECT * FROM departments WHERE family_id = $1`, [activeFamilyId]);
             const projects = await pool.query(`SELECT * FROM projects WHERE family_id = $1`, [activeFamilyId]);
 
-            // Busca os itens do catálogo (Produtos e Serviços)
+            // Catálogo
             const srvItems = await pool.query(`SELECT * FROM module_services WHERE family_id = $1 AND deleted_at IS NULL`, [activeFamilyId]);
+
+            // Vendas e Compras (Commercial Orders)
+            const commOrders = await pool.query(`
+                SELECT o.*, c.name as contact_name 
+                FROM commercial_orders o 
+                LEFT JOIN contacts c ON o.contact_id = c.id 
+                WHERE o.family_id = $1 AND o.deleted_at IS NULL
+            `, [activeFamilyId]);
+
+            // Ordens de Serviço
+            const serviceOrders = await pool.query(`
+                SELECT so.*, c.name as contact_name 
+                FROM service_orders so 
+                LEFT JOIN contacts c ON so.contact_id = c.id 
+                WHERE so.family_id = $1 AND so.deleted_at IS NULL
+            `, [activeFamilyId]);
+
+            // Contratos
+            const contractsRes = await pool.query(`
+                SELECT ct.*, c.name as contact_name 
+                FROM contracts ct 
+                LEFT JOIN contacts c ON ct.contact_id = c.id 
+                WHERE ct.family_id = $1 AND ct.deleted_at IS NULL
+            `, [activeFamilyId]);
+
+            // Notas Fiscais
+            const invoicesRes = await pool.query(`
+                SELECT inv.*, c.name as contact_name 
+                FROM invoices inv 
+                LEFT JOIN contacts c ON inv.contact_id = c.id 
+                WHERE inv.family_id = $1 AND inv.deleted_at IS NULL
+            `, [activeFamilyId]);
 
             res.json({
                 accounts: accs.rows.map(r => ({ ...r, balance: parseFloat(r.balance) })),
@@ -57,12 +89,42 @@ export default function(logAudit) {
                     imageUrl: r.image_url,
                     brand: r.brand
                 })),
-                serviceClients: [], // Módulos específicos podem popular aqui
+                serviceClients: [], 
                 serviceAppointments: [],
-                serviceOrders: [],
-                commercialOrders: [],
-                contracts: [],
-                invoices: []
+                serviceOrders: serviceOrders.rows.map(r => ({
+                    ...r,
+                    totalAmount: parseFloat(r.total_amount || 0),
+                    contactName: r.contact_name,
+                    startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
+                    endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
+                })),
+                commercialOrders: commOrders.rows.map(r => ({
+                    id: r.id,
+                    type: r.type,
+                    description: r.description,
+                    contactId: r.contact_id,
+                    contactName: r.contact_name,
+                    amount: parseFloat(r.amount || 0),
+                    grossAmount: parseFloat(r.gross_amount || 0),
+                    discountAmount: parseFloat(r.discount_amount || 0),
+                    taxAmount: parseFloat(r.tax_amount || 0),
+                    date: new Date(r.date).toISOString().split('T')[0],
+                    status: r.status,
+                    transactionId: r.transaction_id
+                })),
+                contracts: contractsRes.rows.map(r => ({
+                    ...r,
+                    value: parseFloat(r.value || 0),
+                    contactName: r.contact_name,
+                    startDate: new Date(r.start_date).toISOString().split('T')[0],
+                    endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
+                })),
+                invoices: invoicesRes.rows.map(r => ({
+                    ...r,
+                    amount: parseFloat(r.amount || 0),
+                    contactName: r.contact_name,
+                    issueDate: new Date(r.issue_date).toISOString().split('T')[0]
+                }))
             });
         } catch (err) {
             console.error(err);
