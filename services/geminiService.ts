@@ -7,10 +7,9 @@ const formatCurrency = (val: number) =>
 
 export const analyzeFinances = async (data: AppState, userContext?: string): Promise<string> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return "Configuração de IA pendente.";
+  if (!apiKey) return "IA não configurada. Verifique a chave API_KEY.";
 
-  // Initialize GenAI with API key from environment
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   const currentRealBalance = data.accounts.reduce((acc, curr) => acc + curr.balance, 0);
   const pendingIncome = data.transactions
@@ -24,39 +23,37 @@ export const analyzeFinances = async (data: AppState, userContext?: string): Pro
     totalReal: formatCurrency(currentRealBalance),
     totalProjetado: formatCurrency(currentRealBalance + pendingIncome - pendingExpenses),
     contasAtrasadas: data.transactions.filter(t => t.status === TransactionStatus.OVERDUE).length,
-    topCategorias: data.transactions.filter(t => t.type === TransactionType.EXPENSE).slice(0, 10),
-    metas: data.goals
+    contasPendentesMes: data.transactions.filter(t => t.status === TransactionStatus.PENDING).length,
+    metas: data.goals.map(g => ({ nome: g.name, progresso: `${Math.round((g.currentAmount/g.targetAmount)*100)}%` })),
   };
 
   const prompt = `
-    Persona: Você é um Gestor Financeiro Pessoal de elite (estilo Coach Financeiro Pragmático).
-    Seu papel é organizar, analisar e IMPROVISAR soluções para a vida do usuário.
+    Você é o "CFO Pessoal", um gestor financeiro de elite. 
+    Sua missão é dar um diagnóstico preciso e sugerir ações de riqueza.
 
-    DADOS ATUAIS:
+    DADOS DO USUÁRIO:
     ${JSON.stringify(summary, null, 2)}
 
-    ${userContext ? `PERGUNTA DO USUÁRIO: "${userContext}"` : "FAÇA UM DIAGNÓSTICO GERAL PROATIVO."}
+    PERGUNTA/CONTEXTO: "${userContext || "Análise geral proativa"}"
 
-    REGRAS DE RESPOSTA:
-    1. Seja extremamente direto. Use Markdown.
-    2. Identifique 1 PERIGO (ex: conta vencida, saldo projetado negativo).
-    3. Identifique 1 OPORTUNIDADE (ex: sobras para investir em metas).
-    4. Dê 3 PASSOS DE AÇÃO imediatos.
-    5. No final, dê uma nota de 0 a 10 para a saúde financeira atual.
+    FORMATO DE RESPOSTA (Markdown):
+    1. **Status Geral**: Uma frase sobre a saúde atual.
+    2. **Alerta de Risco**: Identifique se há perigo de caixa ou metas em risco.
+    3. **Oportunidade**: Onde o usuário pode economizar ou alocar melhor o saldo projetado.
+    4. **Ação do Gestor**: Dê 3 passos numerados.
+    5. **Nota Financeira**: 0 a 10.
 
-    Tom de voz: Profissional, encorajador, mas sem rodeios.
+    Linguagem: Direta, técnica mas acessível, encorajadora.
   `;
 
   try {
-    // Fix: Updated to recommended model and simplified contents parameter
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    // Fix: Access response text property directly
-    return response.text || "Sem diagnóstico disponível.";
+    return response.text || "O gestor está processando os dados...";
   } catch (error) {
-    console.error(error);
-    return "Erro ao conectar com o cérebro do Gestor.";
+    console.error("Gemini Error:", error);
+    return "Erro ao conectar com o cérebro financeiro. Verifique sua conexão.";
   }
 };

@@ -38,22 +38,22 @@ io.on('connection', (socket) => {
 
 // Helper para Auditoria
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null) => {
-    await pool.query(
-        `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [userId, action, entity, entityId, details, previousState, changes]
-    );
     try {
+        await pool.query(
+            `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, action, entity, entityId, details, previousState, changes]
+        );
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         const familyId = res.rows[0]?.family_id || userId;
         io.to(familyId).emit('DATA_UPDATED', { action, entity, actorId: userId, timestamp: new Date() });
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Audit log error:", e); }
 };
 
 app.use(cors());
 app.use(express.json());
 
 // --- ROUTES ---
-app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
+app.get('/api/health', (req, res) => res.json({ status: 'OK', timestamp: new Date() }));
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
@@ -65,19 +65,25 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath, { index: false }));
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
-    if (!fs.existsSync(indexPath)) return res.status(500).send('Build not found.');
+    if (!fs.existsSync(indexPath)) return res.status(500).send('Application build not found. Please run build process.');
     fs.readFile(indexPath, 'utf8', (err, htmlData) => {
-        if (err) return res.status(500).send('Error');
-        const envScript = `<script>window.GOOGLE_CLIENT_ID = "${process.env.GOOGLE_CLIENT_ID}";</script>`;
+        if (err) return res.status(500).send('Internal Server Error');
+        const envScript = `<script>window.GOOGLE_CLIENT_ID = "${process.env.GOOGLE_CLIENT_ID || ''}";</script>`;
         res.send(htmlData.replace('</head>', `${envScript}</head>`));
     });
 });
 
 const PORT = process.env.PORT || 8080;
 
-initDb().then(() => {
-    // Escutando explicitamente em 0.0.0.0 para Cloud Run
-    httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log(`Gestor Financeiro rodando em: http://0.0.0.0:${PORT}`);
+// IMPORTANTE: Escutar a porta ANTES de tentar conectar ao banco ou qualquer operação lenta
+// Isso garante que o Cloud Run identifique que o container está ativo.
+httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Gestor Financeiro iniciado na porta ${PORT}`);
+    
+    // Iniciar DB em background
+    initDb().then(() => {
+        console.log("✅ Banco de dados sincronizado.");
+    }).catch(err => {
+        console.error("❌ Falha crítica ao conectar no banco de dados:", err);
     });
 });
