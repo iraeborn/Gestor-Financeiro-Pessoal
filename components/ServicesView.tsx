@@ -78,7 +78,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 setFormData({ 
                     type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE',
                     defaultPrice: '',
-                    costPrice: ''
+                    costPrice: '',
+                    brand: ''
                 });
             }
         } else {
@@ -111,28 +112,30 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     return;
                 } 
 
-                // 2. Check Open Food Facts (API Pública rápida)
+                // 2. Check Open Food Facts (API Pública rápida V2)
                 let found = false;
                 try {
-                    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+                    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}`);
                     const data = await res.json();
                     if (data.status === 1 && data.product) {
                         const p = data.product;
                         const brand = p.brands || '';
                         const qty = p.quantity || '';
                         const cats = p.categories ? p.categories.split(',').slice(0, 3).join(', ') : '';
+                        const nutriscore = p.nutriscore_grade ? p.nutriscore_grade.toUpperCase() : '';
                         
                         let desc = '';
-                        if (brand) desc += `Marca: ${brand}\n`;
                         if (qty) desc += `Qtd: ${qty}\n`;
-                        if (cats) desc += `Cat: ${cats}`;
+                        if (cats) desc += `Cat: ${cats}\n`;
+                        if (nutriscore) desc += `Nutri-Score: ${nutriscore}`;
 
                         setFormData((prev: any) => ({ 
                             ...prev, 
                             name: p.product_name || prev.name,
-                            unit: 'UN',
+                            brand: brand,
+                            unit: 'UN', // Pode tentar parsear de p.quantity se desejado
                             description: desc.trim() || prev.description || '',
-                            imageUrl: p.image_front_url || p.image_url || ''
+                            imageUrl: p.image_url || p.image_front_url || ''
                         }));
                         setProductSource('Open Food Facts');
                         found = true;
@@ -149,14 +152,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     const res = await fetch(`https://api.produto.xyz/v1/products/${code}`);
                     if (res.ok) {
                         const data = await res.json();
-                        // Mapping genérico baseado em resposta padrão de APIs de produto
                         if (data && (data.name || data.description)) {
                             setFormData((prev: any) => ({
                                 ...prev,
                                 name: data.name || data.description || prev.name,
                                 description: data.description || prev.description || '',
                                 unit: data.unit || 'UN',
-                                // Se a API retornar preço médio
                                 defaultPrice: data.average_price || prev.defaultPrice
                             }));
                             setProductSource('Produto.xyz');
@@ -202,7 +203,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 defaultPrice: Number(formData.defaultPrice) || 0, 
                 costPrice: Number(formData.costPrice) || 0,
                 type: formData.type || 'SERVICE',
-                imageUrl: formData.imageUrl
+                imageUrl: formData.imageUrl,
+                brand: formData.brand
             });
         }
         setIsModalOpen(false);
@@ -272,7 +274,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
 
         const filtered = items.filter(i => 
-            (i.title || i.description || i.number || i.name || i.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (i.title || i.description || i.number || i.name || i.code || i.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (i.contactName || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
 
@@ -321,8 +323,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </div>
 
                                     {item.imageUrl && (
-                                        <div className="w-full h-32 mb-3 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-gray-100">
+                                        <div className="w-full h-32 mb-3 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-gray-100 relative">
                                             <img src={item.imageUrl} alt={item.name} className="h-full object-contain" />
+                                            {item.brand && (
+                                                <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                    {item.brand}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
@@ -332,6 +339,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             {item.code && (
                                                 <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
                                                     SKU: {item.code}
+                                                </span>
+                                            )}
+                                            {item.brand && !item.imageUrl && (
+                                                <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                    {item.brand}
                                                 </span>
                                             )}
                                             {item.unit && (
@@ -528,6 +540,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         )}
                                         <input type="text" placeholder="Unidade" className="w-20 border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData((prev: any) => ({...prev, unit: e.target.value}))} />
                                     </div>
+
+                                    {formData.type === 'PRODUCT' && (
+                                        <div className="relative">
+                                            <Tag className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                                            <input type="text" placeholder="Marca / Fabricante" className="w-full pl-9 border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.brand || ''} onChange={e => setFormData((prev: any) => ({...prev, brand: e.target.value}))} />
+                                        </div>
+                                    )}
 
                                     <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                         <div>

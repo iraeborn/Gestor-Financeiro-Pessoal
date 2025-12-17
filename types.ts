@@ -10,6 +10,13 @@ export enum SubscriptionPlan {
   TRIAL = 'TRIAL'
 }
 
+export enum TaxRegime {
+  MEI = 'MEI',
+  SIMPLES = 'SIMPLES',
+  PRESUMIDO = 'PRESUMIDO',
+  REAL = 'REAL'
+}
+
 export enum TransactionType {
   INCOME = 'INCOME',
   EXPENSE = 'EXPENSE',
@@ -43,17 +50,8 @@ export enum TransactionClassification {
   INTER_BRANCH = 'INTER_BRANCH'
 }
 
-export enum TaxRegime {
-  MEI = 'MEI',
-  SIMPLES = 'SIMPLES',
-  PRESUMIDO = 'PRESUMIDO',
-  REAL = 'REAL'
-}
-
 export type ViewMode = 
-  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' 
-  | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' 
-  | 'FIN_CONTACTS' 
+  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS'
   | 'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS';
@@ -86,13 +84,22 @@ export interface User {
   email: string;
   familyId: string;
   settings?: AppSettings;
-  role: 'ADMIN' | 'USER' | string;
-  entityType: EntityType; // PF or PJ
-  plan?: SubscriptionPlan;
-  status?: string;
-  trialEndsAt?: string | Date;
-  workspaces?: any[];
+  role: string;
+  entityType: EntityType;
+  plan: SubscriptionPlan;
+  status: string;
+  trialEndsAt?: string; // or Date
   googleId?: string;
+  workspaces?: Workspace[];
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  role: string;
+  entityType: EntityType;
+  permissions: string[];
+  ownerSettings?: AppSettings;
 }
 
 export interface AuthResponse {
@@ -110,38 +117,34 @@ export interface Account {
   dueDay?: number;
 }
 
-export interface Category {
-  id: string;
-  name: string;
-  type: TransactionType;
-}
-
 export interface Contact {
   id: string;
   name: string;
   fantasyName?: string;
-  type: 'PF' | 'PJ' | string;
+  type: 'PF' | 'PJ';
   email?: string;
   phone?: string;
-  document?: string;
-  ie?: string; // Inscricao Estadual
-  im?: string; // Inscricao Municipal
+  document?: string; // CPF/CNPJ
+  ie?: string;
+  im?: string;
   pixKey?: string;
-  
-  // Address
   zipCode?: string;
   street?: string;
   number?: string;
   neighborhood?: string;
   city?: string;
   state?: string;
-
-  // Financial
   isDefaulter?: boolean;
   isBlocked?: boolean;
   creditLimit?: number;
   defaultPaymentMethod?: string;
   defaultPaymentTerm?: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  type: TransactionType;
 }
 
 export interface Transaction {
@@ -150,27 +153,23 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   category: string;
-  date: string; // ISO Date string YYYY-MM-DD
+  date: string; // YYYY-MM-DD
   status: TransactionStatus;
   accountId: string;
-  destinationAccountId?: string; // For transfers
-  
-  isRecurring: boolean;
+  destinationAccountId?: string;
+  isRecurring?: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
-  
   interestRate?: number;
   contactId?: string;
-  goalId?: string; // Linked goal
-  
-  // PJ Fields
+  goalId?: string;
+  // PJ fields
   branchId?: string;
   destinationBranchId?: string;
   costCenterId?: string;
   departmentId?: string;
   projectId?: string;
   classification?: TransactionClassification;
-  
   createdByName?: string;
 }
 
@@ -190,20 +189,17 @@ export interface CompanyProfile {
   cnpj: string;
   taxRegime: TaxRegime;
   cnae: string;
-  secondaryCnaes?: string;
-  
-  zipCode: string;
-  street: string;
-  number: string;
-  neighborhood: string;
   city: string;
   state: string;
-  
-  phone: string;
-  email: string;
-  
   hasEmployees: boolean;
   issuesInvoices: boolean;
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  phone?: string;
+  email?: string;
+  secondaryCnaes?: string;
 }
 
 export interface Branch {
@@ -230,17 +226,17 @@ export interface Project {
 
 // Modules
 export interface ServiceClient {
-    id: string;
-    contactId?: string;
-    contactName?: string;
-    contactEmail?: string;
-    contactPhone?: string;
-    notes?: string;
-    birthDate?: string;
-    insurance?: string;
-    allergies?: string;
-    medications?: string;
-    moduleTag: string;
+  id: string;
+  contactId?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  notes?: string;
+  birthDate?: string;
+  insurance?: string;
+  allergies?: string;
+  medications?: string;
+  moduleTag: string; // 'ODONTO', 'GENERAL', etc
 }
 
 export interface ServiceItem {
@@ -254,170 +250,172 @@ export interface ServiceItem {
     description?: string;
     moduleTag: string;
     imageUrl?: string;
+    brand?: string;
 }
 
 export interface ServiceAppointment {
-    id: string;
-    clientId: string;
-    clientName?: string;
-    serviceId?: string;
-    serviceName?: string;
-    date: string; // ISO Datetime
-    status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
-    notes?: string;
-    transactionId?: string;
-    moduleTag?: string;
+  id: string;
+  clientId: string;
+  clientName?: string;
+  serviceId?: string;
+  serviceName?: string;
+  date: string; // ISO datetime
+  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
+  notes?: string;
+  transactionId?: string;
+  moduleTag: string;
 }
 
+// Service & Sales Module
 export interface ServiceOrder {
-    id: string;
-    number?: number;
-    title: string;
-    description?: string;
-    contactId: string;
-    contactName?: string;
-    status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
-    totalAmount: number;
-    startDate?: string;
-    endDate?: string;
+  id: string;
+  number?: number;
+  title: string;
+  description?: string;
+  contactId?: string;
+  contactName?: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
+  totalAmount: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface CommercialOrder {
-    id: string;
-    type: 'SALE' | 'PURCHASE';
-    description: string;
-    contactId: string;
-    contactName?: string;
-    amount: number;
-    date: string;
-    status: 'DRAFT' | 'CONFIRMED' | 'CANCELED';
-    transactionId?: string;
+  id: string;
+  type: 'SALE' | 'PURCHASE';
+  description: string;
+  contactId?: string;
+  contactName?: string;
+  amount: number;
+  date: string;
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELED';
+  transactionId?: string;
 }
 
 export interface Contract {
-    id: string;
-    title: string;
-    contactId: string;
-    contactName?: string;
-    value: number;
-    startDate: string;
-    endDate?: string;
-    status: 'ACTIVE' | 'EXPIRED' | 'CANCELED';
-    billingDay?: number;
+  id: string;
+  title: string;
+  contactId?: string;
+  contactName?: string;
+  value: number;
+  startDate: string;
+  endDate?: string;
+  status: 'ACTIVE' | 'EXPIRED' | 'CANCELED';
+  billingDay?: number;
 }
 
 export interface Invoice {
-    id: string;
-    number: string;
-    series?: string;
-    type: 'ISS' | 'ICMS';
-    amount: number;
-    issueDate: string;
-    status: 'ISSUED' | 'CANCELED' | 'PAID';
-    contactId: string;
-    contactName?: string;
-    fileUrl?: string;
+  id: string;
+  number?: string;
+  series?: string;
+  type: 'ISS' | 'ICMS';
+  amount: number;
+  issueDate: string;
+  status: 'ISSUED' | 'CANCELED';
+  contactId?: string;
+  contactName?: string;
+  fileUrl?: string;
 }
 
 // System
+export interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions?: string[];
+  entityType?: EntityType;
+}
+
 export interface AuditLog {
-    id: number;
-    userId: string;
-    userName?: string;
-    action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
-    entity: string;
-    entityId: string;
-    details: string;
-    timestamp: string;
-    previousState?: any;
-    changes?: Record<string, { old: any, new: any }>;
-    isDeleted?: boolean;
+  id: number;
+  userId: string;
+  userName?: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
+  entity: string;
+  entityId: string;
+  details: string;
+  timestamp: string;
+  previousState?: any;
+  changes?: Record<string, { old: any, new: any }>;
+  isDeleted?: boolean;
 }
 
 export interface NotificationLog {
-    id: number;
-    userId: string;
-    userName?: string;
-    channel: 'EMAIL' | 'WHATSAPP';
-    recipient: string;
-    subject?: string;
-    content?: string;
-    status: 'SENT' | 'FAILED';
-    createdAt: string;
-}
-
-export interface Member {
-    id: string;
-    name: string;
-    email: string;
-    role: 'ADMIN' | 'MEMBER' | string;
-    entityType?: EntityType;
-    permissions?: string[];
+  id: number;
+  userId: string;
+  userName?: string;
+  channel: 'EMAIL' | 'WHATSAPP';
+  recipient: string;
+  subject?: string;
+  content?: string;
+  status: 'SENT' | 'FAILED';
+  createdAt: string;
 }
 
 export interface AppState {
-    accounts: Account[];
-    transactions: Transaction[];
-    goals: FinancialGoal[];
-    contacts: Contact[];
-    categories: Category[];
-    
-    // PJ
-    companyProfile?: CompanyProfile | null;
-    branches: Branch[];
-    costCenters: CostCenter[];
-    departments: Department[];
-    projects: Project[];
+  accounts: Account[];
+  transactions: Transaction[];
+  goals: FinancialGoal[];
+  contacts: Contact[];
+  categories: Category[];
+  
+  // PJ
+  companyProfile?: CompanyProfile | null;
+  branches: Branch[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  projects: Project[];
 
-    // Modules
-    serviceClients: ServiceClient[];
-    serviceItems: ServiceItem[];
-    serviceAppointments: ServiceAppointment[];
-    
-    // Service Module
-    serviceOrders: ServiceOrder[];
-    commercialOrders: CommercialOrder[];
-    contracts: Contract[];
-    invoices: Invoice[];
+  // Modules
+  serviceClients: ServiceClient[];
+  serviceItems: ServiceItem[];
+  serviceAppointments: ServiceAppointment[];
+  
+  // Services
+  serviceOrders: ServiceOrder[];
+  commercialOrders: CommercialOrder[];
+  contracts: Contract[];
+  invoices: Invoice[];
 }
 
 export const ROLE_DEFINITIONS = [
-    { 
-        id: 'ADMIN', 
-        label: 'Administrador', 
-        description: 'Acesso total ao sistema.',
-        defaultPermissions: [] 
+    {
+        id: 'ADMIN',
+        label: 'Administrador',
+        description: 'Acesso total a todas as funcionalidades e configurações.',
+        defaultPermissions: [] // Admin implicitly has all
     },
-    { 
-        id: 'MEMBER', 
-        label: 'Membro Familiar', 
-        description: 'Visualiza e edita lançamentos, contas e metas.',
-        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS'] 
+    {
+        id: 'MEMBER',
+        label: 'Membro Padrão',
+        description: 'Acesso às finanças do dia a dia, mas sem configurações críticas.',
+        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS']
     },
-    { 
-        id: 'ACCOUNTANT', 
-        label: 'Contador / Auditor', 
-        description: 'Acesso a relatórios e extratos para conferência.',
-        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD'] 
+    {
+        id: 'ACCOUNTANT',
+        label: 'Contador / Auditor',
+        description: 'Visualização de relatórios, extratos e logs para contabilidade.',
+        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR']
     },
-    { 
-        id: 'DENTIST', 
-        label: 'Dentista / Profissional', 
-        description: 'Acesso à agenda e pacientes (Módulo Odonto).',
+    {
+        id: 'DENTIST',
+        label: 'Dentista / Profissional',
+        description: 'Acesso focado na agenda e pacientes (Requer Módulo Odonto).',
         requiredModule: 'odonto',
-        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS'] 
+        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS']
     },
-    { 
-        id: 'SALES', 
-        label: 'Vendedor', 
-        description: 'Acesso a vendas, clientes e emissão de OS.',
+    {
+        id: 'SALES',
+        label: 'Vendedor',
+        description: 'Acesso a vendas, clientes e emissão de notas (Requer Módulo Serviços).',
         requiredModule: 'services',
-        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'] 
+        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS']
     },
-    { 
-        id: 'OPERATOR', 
-        label: 'Operacional', 
-        description: 'Lançamento de despesas e execução de serviços.',
-        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES'] 
+    {
+        id: 'OPERATOR',
+        label: 'Operador Financeiro',
+        description: 'Lançamentos de contas a pagar/receber e ordens de serviço.',
+        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
     }
 ];

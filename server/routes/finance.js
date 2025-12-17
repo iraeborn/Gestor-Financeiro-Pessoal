@@ -53,7 +53,7 @@
                 departments: departments.rows.map(r => ({ id: r.id, name: r.name })),
                 projects: projects.rows.map(r => ({ id: r.id, name: r.name })),
                 serviceClients: clients.rows.map(r => ({ id: r.id, contactId: r.contact_id, contactName: r.contact_name, contactEmail: r.contact_email, contactPhone: r.contact_phone, notes: r.notes, birthDate: r.birth_date ? new Date(r.birth_date).toISOString().split('T')[0] : undefined, insurance: r.insurance, allergies: r.allergies, medications: r.medications, moduleTag: r.module_tag })),
-                serviceItems: services.rows.map(r => ({ id: r.id, name: r.name, code: r.code, defaultPrice: parseFloat(r.default_price), moduleTag: r.module_tag, type: r.type, costPrice: parseFloat(r.cost_price), unit: r.unit, description: r.description, imageUrl: r.image_url })),
+                serviceItems: services.rows.map(r => ({ id: r.id, name: r.name, code: r.code, defaultPrice: parseFloat(r.default_price), moduleTag: r.module_tag, type: r.type, costPrice: parseFloat(r.cost_price), unit: r.unit, description: r.description, imageUrl: r.image_url, brand: r.brand })),
                 serviceAppointments: appts.rows.map(r => ({ id: r.id, clientId: r.client_id, clientName: r.client_name, serviceId: r.service_id, serviceName: r.service_name, date: r.date, status: r.status, notes: r.notes, transactionId: r.transaction_id, moduleTag: r.module_tag })),
                 
                 // Services Module Data Mappers
