@@ -7,9 +7,9 @@ const formatCurrency = (val: number) =>
 
 export const getManagerDiagnostic = async (state: AppState): Promise<string> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return "IA aguardando chave de configuração...";
+  if (!apiKey) return "IA não configurada (.env API_KEY ausente).";
 
-  // Sempre inicializa uma nova instância para garantir o uso da chave mais recente
+  // Inicialização obrigatória por chamada para garantir o contexto de env
   const ai = new GoogleGenAI({ apiKey });
   
   const balance = state.accounts.reduce((acc, a) => acc + a.balance, 0);
@@ -26,17 +26,18 @@ export const getManagerDiagnostic = async (state: AppState): Promise<string> => 
   };
 
   const prompt = `
-    Aja como um Consultor Financeiro (CFO Pessoal) de alto nível.
+    Aja como um Gestor Financeiro Pessoal (CFO de Elite).
+    Sua missão é dar um diagnóstico seco, preciso e estratégico para o usuário.
+
     DADOS DO CLIENTE:
     ${JSON.stringify(summary, null, 2)}
 
-    Sua missão:
-    1. Forneça um diagnóstico seco e direto sobre a saúde financeira.
-    2. Atribua um Score de 0 a 100.
-    3. Identifique o maior perigo imediato.
-    4. Sugira uma ação estratégica para sobrar mais dinheiro este mês.
+    ESTRUTURA DA RESPOSTA (Markdown):
+    1. **Saúde Geral**: Score de 0 a 100 baseado nos dados.
+    2. **Alerta de Risco**: Identifique o perigo imediato (se houver).
+    3. **Sugestão de Lucro**: Onde o usuário pode economizar ou investir para melhorar este mês.
 
-    Formate em Markdown. Seja encorajador, mas pragmático.
+    Linguagem: Profissional, direta, encorajadora mas realista.
   `;
 
   try {
@@ -44,40 +45,42 @@ export const getManagerDiagnostic = async (state: AppState): Promise<string> => 
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "Análise concluída. Verifique os gráficos para detalhes.";
+    // Uso direto da propriedade .text conforme as regras da SDK
+    return response.text || "O Gestor está processando os dados...";
   } catch (e) {
     console.error("Gemini Error:", e);
-    return "O Gestor IA está processando outros relatórios no momento. Tente novamente em alguns instantes.";
+    return "Ocorreu um erro ao consultar o cérebro financeiro. Verifique a conexão.";
   }
 };
 
 export const analyzeFinances = async (state: AppState, userPrompt?: string): Promise<string> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return "Configure a API Key para conversar com o Gestor.";
+  if (!apiKey) return "API Key ausente.";
 
   const ai = new GoogleGenAI({ apiKey });
 
   const context = `
-    Contexto Financeiro:
+    Contexto Financeiro Atual:
     - Saldo Total: R$ ${state.accounts.reduce((acc, a) => acc + a.balance, 0).toFixed(2)}
     - Objetivos: ${state.goals.map(g => g.name).join(', ')}
-    - Últimas Categorias de Gasto: ${Array.from(new Set(state.transactions.filter(t => t.type === TransactionType.EXPENSE).map(t => t.category))).join(', ')}
+    - Fluxo Pendente: ${state.transactions.filter(t => t.status === TransactionStatus.PENDING).length} registros.
   `;
 
   const finalPrompt = userPrompt 
-    ? `${context}\n\nPergunta do Usuário: "${userPrompt}"\n\nResponda como um Gestor Financeiro experiente.`
-    : `${context}\n\nFaça uma breve saudação e ofereça um insight financeiro baseado nesses dados.`;
+    ? `${context}\n\nPergunta do Usuário: "${userPrompt}"\n\nResponda como um mentor financeiro sênior.`
+    : `${context}\n\nFaça uma breve análise do cenário atual e dê uma dica de ouro para o usuário.`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: finalPrompt,
       config: {
-        systemInstruction: "Você é o SmartAdvisor, o cérebro do app FinManager. Você ajuda pessoas a alcançarem a liberdade financeira com dicas baseadas em dados e psicologia econômica brasileira.",
+        systemInstruction: "Você é o SmartAdvisor, consultor financeiro integrado ao FinManager. Seu objetivo é ajudar o usuário a alcançar a independência financeira através de dados reais.",
       }
     });
-    return response.text || "Estou aqui para ajudar com sua gestão financeira.";
+    return response.text || "Estou pronto para analisar suas contas.";
   } catch (e) {
-      return "Houve um erro na análise de consultoria.";
+      console.error("Gemini Advisor Error:", e);
+      return "Houve um erro na consultoria inteligente.";
   }
 };

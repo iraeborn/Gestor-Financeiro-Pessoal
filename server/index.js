@@ -49,12 +49,8 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
 app.use(cors());
 app.use(express.json());
 
-// --- HEALTH CHECK (Essencial para Cloud Run) ---
-app.get('/api/health', (req, res) => res.status(200).json({ 
-    status: 'UP', 
-    uptime: process.uptime(),
-    db_connected: pool.totalCount > 0 
-}));
+// --- HEALTH CHECK ---
+app.get('/api/health', (req, res) => res.status(200).json({ status: 'UP', timestamp: new Date() }));
 
 // --- ROUTES ---
 app.use('/api/auth', authRoutes(logAudit));
@@ -72,20 +68,21 @@ app.get('*', (req, res) => {
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
     } else {
-        res.status(404).send('Frontend build not found. Please run build process.');
+        // Se o build do frontend falhou ou não existe, avisa ao invés de crashar
+        res.status(404).send('Frontend não encontrado. Verifique se o processo de build (npm run build) foi concluído com sucesso.');
     }
 });
 
 const PORT = process.env.PORT || 8080;
 
-// INICIALIZAÇÃO ESTRATÉGICA: Escutar primeiro, conectar depois.
+// INICIALIZAÇÃO CRÍTICA: Escutar a porta IMEDIATAMENTE.
 httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [SERVIDOR] Escutando em http://0.0.0.0:${PORT}`);
+    console.log(`🚀 [SERVIDOR] Rodando na porta ${PORT}`);
     
-    // Inicializa o banco de dados em background para não travar o boot
+    // Inicialização do banco ocorre em paralelo para não bloquear o health check do Cloud Run
     initDb().then(() => {
-        console.log("✅ [DATABASE] Tabelas verificadas e prontas.");
+        console.log("✅ [DB] Conexão e tabelas verificadas.");
     }).catch(err => {
-        console.error("❌ [DATABASE] Erro crítico na inicialização do banco:", err);
+        console.error("❌ [DB] Falha crítica na conexão inicial:", err);
     });
 });
