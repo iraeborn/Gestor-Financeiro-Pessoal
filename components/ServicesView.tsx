@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
-import { useConfirm } from './AlertSystem';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe } from 'lucide-react';
+import { useConfirm, useAlert } from './AlertSystem';
+import QRCodeScanner from './QRCodeScanner';
 
 interface ServicesViewProps {
     currentView: ViewMode;
@@ -34,11 +35,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem
 }) => {
     const { showConfirm } = useConfirm();
+    const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     
     // Catalog specific state
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
+    const [showScanner, setShowScanner] = useState(false);
+    const [loadingProductInfo, setLoadingProductInfo] = useState(false);
+    const [productSource, setProductSource] = useState<string>('');
     
     // Generic form state maps to the active entity
     const [formData, setFormData] = useState<any>({}); 
@@ -63,6 +68,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     // --- Actions ---
     const handleOpenModal = (item?: any) => {
+        setProductSource('');
         if (currentView === 'SRV_CATALOG') {
             if (item) {
                 // Modo Edição
@@ -79,6 +85,84 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             setFormData(item || {});
         }
         setIsModalOpen(true);
+    };
+
+    const handleBarcodeScanned = async (code: string) => {
+        setShowScanner(false);
+        setFormData(prev => ({ ...prev, code }));
+        setProductSource('');
+        
+        if (code.length > 7) {
+            setLoadingProductInfo(true);
+            try {
+                // 1. Check Local Catalog
+                const existing = serviceItems.find(i => i.code === code);
+                if (existing) {
+                    const confirm = await showConfirm({ 
+                        title: 'Produto Existente', 
+                        message: `O produto "${existing.name}" já está no catálogo. Deseja carregar os dados?`,
+                        confirmText: 'Carregar'
+                    });
+                    if (confirm) {
+                        setFormData({ ...existing });
+                        setProductSource('Catálogo Local');
+                    }
+                    setLoadingProductInfo(false);
+                    return;
+                } 
+
+                // 2. Check Open Food Facts (API Pública rápida)
+                try {
+                    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+                    const data = await res.json();
+                    if (data.status === 1 && data.product) {
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            name: data.product.product_name || prev.name,
+                            unit: 'UN',
+                            description: data.product.brands ? `Marca: ${data.product.brands}` : ''
+                        }));
+                        setProductSource('Open Food Facts');
+                        setLoadingProductInfo(false);
+                        return;
+                    }
+                } catch (e) { console.warn("OFF Lookup failed", e); }
+
+                // 3. Check Produto.xyz (Substituindo GS1/Gemini)
+                try {
+                    // Tentativa de busca na API Produto.xyz
+                    const res = await fetch(`https://api.produto.xyz/v1/products/${code}`);
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && (data.name || data.description)) {
+                            setFormData(prev => ({
+                                ...prev,
+                                name: data.name || data.description || prev.name,
+                                description: data.description || '',
+                                unit: data.unit || 'UN',
+                                // Se a API retornar preço médio, podemos usar
+                                defaultPrice: data.average_price || prev.defaultPrice
+                            }));
+                            setProductSource('Produto.xyz');
+                            showAlert("Produto encontrado no Produto.xyz!", "success");
+                            setLoadingProductInfo(false);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Produto.xyz Lookup failed", e);
+                }
+
+                showAlert("Produto não identificado automaticamente.", "info");
+
+            } catch (e) {
+                console.log("Erro ao buscar info do produto", e);
+                showAlert("Não foi possível buscar informações automáticas.", "error");
+            } finally {
+                setLoadingProductInfo(false);
+            }
+        }
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -183,7 +267,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {filtered.map(item => {
                         // Calculate Markup Margin: (Price - Cost) / Cost
-                        // If Cost is 0, Margin is 100% (pure profit essentially for logic purposes)
                         const profit = item.defaultPrice - (item.costPrice || 0);
                         const margin = item.costPrice && item.costPrice > 0 
                             ? (profit / item.costPrice) * 100 
@@ -387,11 +470,36 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <button type="button" onClick={() => setFormData({...formData, type: 'PRODUCT'})} className={`flex-1 py-2 text-xs font-bold rounded transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow text-amber-600' : 'text-gray-500'}`}>Produto</button>
                                     </div>
                                     
-                                    <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input type="text" placeholder="Código / SKU" className="border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} />
-                                        <input type="text" placeholder="Unidade (ex: UN, KG)" className="border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                    <div className="relative">
+                                        <input type="text" placeholder="Nome do Item" className="w-full border rounded-lg p-2 pr-8 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                        {loadingProductInfo && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 text-indigo-500 animate-spin" />}
                                     </div>
+                                    
+                                    {productSource && (
+                                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded w-fit">
+                                            <Globe className="w-3 h-3" />
+                                            Dados preenchidos via: {productSource}
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-2 items-center">
+                                        <div className="relative flex-1">
+                                            <input type="text" placeholder="Código / SKU (EAN)" className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} />
+                                        </div>
+                                        {/* Scan Button - Only for Products */}
+                                        {formData.type === 'PRODUCT' && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => setShowScanner(true)}
+                                                className="bg-gray-800 text-white p-2 rounded-lg hover:bg-black transition-colors"
+                                                title="Ler Código de Barras"
+                                            >
+                                                <ScanBarcode className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                        <input type="text" placeholder="Unidade" className="w-20 border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                         <div>
                                             <label className="text-[10px] text-gray-500 font-bold ml-1 uppercase">Preço Venda</label>
@@ -493,6 +601,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Barcode Scanner Modal */}
+            {showScanner && (
+                <QRCodeScanner 
+                    mode="BARCODE"
+                    onScanSuccess={handleBarcodeScanned}
+                    onClose={() => setShowScanner(false)}
+                />
             )}
         </div>
     );
