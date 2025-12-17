@@ -110,7 +110,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             id: serviceForm.id || crypto.randomUUID(),
             name: serviceForm.name!,
             code: serviceForm.code,
-            defaultPrice: Number(serviceForm.defaultPrice) || 0
+            defaultPrice: Number(serviceForm.defaultPrice) || 0,
+            type: 'SERVICE'
         });
         setServiceModalOpen(false);
     };

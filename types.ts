@@ -218,7 +218,7 @@ export type ViewMode =
   // Odonto
   'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES' |
   // Services & Sales
-  'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS';
+  'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS' | 'SRV_CATALOG';
 
 // --- PJ INTERFACES ---
 
@@ -304,11 +304,16 @@ export interface ServiceClient {
     medications?: string;
 }
 
+// Expanded for Catalog (Products & Services)
 export interface ServiceItem {
     id: string;
-    name: string; // "Limpeza", "Consulta"
-    code?: string;
-    defaultPrice: number;
+    name: string; 
+    code?: string; // SKU or Internal Code
+    type: 'SERVICE' | 'PRODUCT'; // Default SERVICE
+    defaultPrice: number; // Selling Price
+    costPrice?: number;   // Cost Price (For Margin)
+    unit?: string;        // UN, KG, L, HOUR, SESSION
+    description?: string;
     moduleTag: string;
 }
 
@@ -417,7 +422,7 @@ export const ROLE_DEFINITIONS: RoleTemplate[] = [
         id: 'SALES', 
         label: 'Vendedor', 
         description: 'Acesso a pedidos de venda, clientes e orçamentos.', 
-        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS'],
+        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS', 'SRV_CATALOG'],
         requiredModule: 'services'
     },
     {

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, PieChart, 
   Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
   ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
-  FileText, FileSignature, UserCog, Check, Building
+  FileText, FileSignature, UserCog, Check, Building, Package
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -91,6 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
         { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
         { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
         { id: 'SRV_PURCHASES', label: 'Compras', icon: ShoppingBag },
+        { id: 'SRV_CATALOG', label: 'Catálogo', icon: Package },
         { id: 'SRV_CONTRACTS', label: 'Contratos', icon: FileSignature },
         { id: 'SRV_NF', label: 'Notas Fiscais', icon: FileText },
         { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
