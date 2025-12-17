@@ -24,10 +24,7 @@ const httpServer = createServer(app);
 
 // --- Socket.io Setup ---
 const io = new Server(httpServer, {
-  cors: {
-    origin: "*", 
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 io.on('connection', (socket) => {
@@ -46,44 +43,49 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         const familyId = res.rows[0]?.family_id || userId;
         io.to(familyId).emit('DATA_UPDATED', { action, entity, actorId: userId, timestamp: new Date() });
-    } catch (e) { console.error("Audit log error:", e); }
+    } catch (e) { console.error("Audit error:", e); }
 };
 
 app.use(cors());
 app.use(express.json());
 
+// --- HEALTH CHECK (Essencial para Cloud Run) ---
+app.get('/api/health', (req, res) => res.status(200).json({ 
+    status: 'UP', 
+    uptime: process.uptime(),
+    db_connected: pool.totalCount > 0 
+}));
+
 // --- ROUTES ---
-app.get('/api/health', (req, res) => res.json({ status: 'OK', timestamp: new Date() }));
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 
-// Static Files
+// --- STATIC FILES ---
 const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath, { index: false }));
+app.use(express.static(distPath));
+
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
-    if (!fs.existsSync(indexPath)) return res.status(500).send('Application build not found. Please run build process.');
-    fs.readFile(indexPath, 'utf8', (err, htmlData) => {
-        if (err) return res.status(500).send('Internal Server Error');
-        const envScript = `<script>window.GOOGLE_CLIENT_ID = "${process.env.GOOGLE_CLIENT_ID || ''}";</script>`;
-        res.send(htmlData.replace('</head>', `${envScript}</head>`));
-    });
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.status(404).send('Frontend build not found. Please run build process.');
+    }
 });
 
 const PORT = process.env.PORT || 8080;
 
-// IMPORTANTE: Escutar a porta ANTES de tentar conectar ao banco ou qualquer operação lenta
-// Isso garante que o Cloud Run identifique que o container está ativo.
+// INICIALIZAÇÃO ESTRATÉGICA: Escutar primeiro, conectar depois.
 httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Gestor Financeiro iniciado na porta ${PORT}`);
+    console.log(`🚀 [SERVIDOR] Escutando em http://0.0.0.0:${PORT}`);
     
-    // Iniciar DB em background
+    // Inicializa o banco de dados em background para não travar o boot
     initDb().then(() => {
-        console.log("✅ Banco de dados sincronizado.");
+        console.log("✅ [DATABASE] Tabelas verificadas e prontas.");
     }).catch(err => {
-        console.error("❌ Falha crítica ao conectar no banco de dados:", err);
+        console.error("❌ [DATABASE] Erro crítico na inicialização do banco:", err);
     });
 });
