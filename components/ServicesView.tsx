@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem, Category } from '../types';
-/* Added missing 'Package' to lucide-react imports */
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package } from 'lucide-react';
+import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem, Category, Account } from '../types';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
+import ApprovalModal from './ApprovalModal';
 
 interface ServicesViewProps {
     currentView: ViewMode;
@@ -12,12 +12,14 @@ interface ServicesViewProps {
     contracts: Contract[];
     invoices: Invoice[];
     contacts: Contact[];
+    accounts: Account[]; // Adicionado para permitir seleção no modal de aprovação
     serviceItems?: ServiceItem[];
     
     onSaveOS: (os: ServiceOrder, newContact?: Contact) => void;
     onDeleteOS: (id: string) => void;
     onSaveOrder: (o: CommercialOrder, newContact?: Contact) => void;
     onDeleteOrder: (id: string) => void;
+    onApproveOrder?: (order: CommercialOrder, approvalData: any) => void; // Novo callback
     onSaveContract: (c: Contract, newContact?: Contact) => void;
     onDeleteContract: (id: string) => void;
     onSaveInvoice: (i: Invoice, newContact?: Contact) => void;
@@ -28,8 +30,8 @@ interface ServicesViewProps {
 }
 
 const ServicesView: React.FC<ServicesViewProps> = ({ 
-    currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, serviceItems = [],
-    onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem
+    currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, accounts, serviceItems = [],
+    onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem, onApproveOrder
 }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
@@ -38,6 +40,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
     const [formData, setFormData] = useState<any>({}); 
     const [taxPercent, setTaxPercent] = useState<number>(0);
+
+    // Approval State
+    const [isApprovalOpen, setIsApprovalOpen] = useState(false);
+    const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<CommercialOrder | null>(null);
 
     // Contact Search States
     const [contactSearch, setContactSearch] = useState('');
@@ -203,24 +209,17 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
     };
 
-    const handleGenerateTransaction = async (item: any) => {
-        if (await showConfirm({ title: 'Gerar Financeiro', message: 'Deseja criar um lançamento financeiro para este item?', confirmText: 'Sim, Gerar' })) {
-            let trans: any = {
-                description: item.description || item.title || 'Venda/Compra',
-                amount: item.amount,
-                date: new Date().toISOString().split('T')[0],
-                status: TransactionStatus.PENDING,
-                type: item.type === 'PURCHASE' ? TransactionType.EXPENSE : TransactionType.INCOME,
-                category: item.type === 'PURCHASE' ? 'Fornecedores' : 'Vendas/Serviços',
-                contactId: item.contactId,
-                isRecurring: false,
-                accountId: '' 
-            };
-            onAddTransaction(trans);
-            if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') onSaveOrder({ ...item, status: 'CONFIRMED' });
-            else if (currentView === 'SRV_OS') onSaveOS({ ...item, status: 'DONE' });
-            showAlert("Lançamento financeiro gerado com sucesso!", "success");
+    const handleOpenApproval = (item: CommercialOrder) => {
+        setSelectedOrderForApproval(item);
+        setIsApprovalOpen(true);
+    };
+
+    const handleConfirmApproval = (approvalData: any) => {
+        if (onApproveOrder && selectedOrderForApproval) {
+            onApproveOrder(selectedOrderForApproval, approvalData);
         }
+        setIsApprovalOpen(false);
+        setSelectedOrderForApproval(null);
     };
 
     const getStatusColor = (status: string) => {
@@ -330,12 +329,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                         </div>
                         <div className="flex justify-between items-center text-xs text-gray-400">
                              <span>{formatDate(item.date || item.startDate || item.issueDate)}</span>
-                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
-                                <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-400 hover:text-indigo-600 transition-colors"><Wrench className="w-4 h-4"/></button>
-                                {(item.status === 'DRAFT' || item.status === 'APPROVED' || item.status === 'OPEN') && (
-                                    <button onClick={() => handleGenerateTransaction(item)} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors" title="Gerar Lançamento Financeiro">
-                                        <DollarSign className="w-4 h-4"/>
+                             <div className="flex gap-2">
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                    <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-400 hover:text-indigo-600 transition-colors"><Wrench className="w-4 h-4"/></button>
+                                </div>
+                                {item.status === 'DRAFT' && (currentView === 'SRV_SALES') && (
+                                    <button onClick={() => handleOpenApproval(item)} className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase flex items-center gap-1 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
+                                        <Zap className="w-3 h-3 fill-current" /> Aprovar Orçamento
                                     </button>
                                 )}
                              </div>
@@ -544,6 +545,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     </div>
                 </div>
             )}
+
+            <ApprovalModal 
+                isOpen={isApprovalOpen}
+                onClose={() => setIsApprovalOpen(false)}
+                order={selectedOrderForApproval}
+                accounts={accounts}
+                onConfirm={handleConfirmApproval}
+            />
         </div>
     );
 };

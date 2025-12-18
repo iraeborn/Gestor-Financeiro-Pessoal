@@ -5,7 +5,7 @@ import {
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  TransactionStatus
+  TransactionStatus, TransactionType
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert } from './components/AlertSystem';
@@ -116,6 +116,62 @@ const App: React.FC = () => {
     } catch (e) { showAlert("Erro ao excluir.", "error"); }
   };
 
+  // Lógica complexa de aprovação de orçamento
+  const handleApproveOrder = async (order: CommercialOrder, approvalData: any) => {
+      try {
+          setLoading(true);
+          let transactionId = undefined;
+
+          // 1. Gerar Lançamento Financeiro se solicitado
+          if (approvalData.generateTransaction) {
+              transactionId = crypto.randomUUID();
+              const trans: Transaction = {
+                  id: transactionId,
+                  description: `Venda: ${order.description}`,
+                  amount: order.amount,
+                  type: TransactionType.INCOME,
+                  category: 'Vendas e Serviços',
+                  date: new Date().toISOString().split('T')[0],
+                  status: TransactionStatus.PENDING,
+                  accountId: approvalData.accountId,
+                  contactId: order.contactId,
+                  isRecurring: false
+              };
+              await api.saveTransaction(trans);
+          }
+
+          // 2. Gerar Nota Fiscal se solicitado
+          if (approvalData.generateInvoice) {
+              const inv: Invoice = {
+                  id: crypto.randomUUID(),
+                  amount: order.amount,
+                  issueDate: new Date().toISOString().split('T')[0],
+                  status: 'ISSUED',
+                  type: approvalData.invoiceType,
+                  contactId: order.contactId,
+                  number: Math.floor(Math.random() * 10000).toString(),
+                  series: '1'
+              };
+              await api.saveInvoice(inv);
+          }
+
+          // 3. Atualizar status do Pedido
+          const updatedOrder = { 
+              ...order, 
+              status: 'CONFIRMED' as any,
+              transactionId: transactionId || order.transactionId 
+          };
+          await api.saveCommercialOrder(updatedOrder);
+
+          await loadData();
+          showAlert("Orçamento aprovado e venda gerada!", "success");
+      } catch (e) {
+          showAlert("Erro no processo de aprovação.", "error");
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const wrapSave = async (fn: any, item: any, msg: string, newContact?: Contact) => {
       try { 
           if (newContact) await api.saveContact(newContact);
@@ -178,7 +234,7 @@ const App: React.FC = () => {
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
       case 'SRV_CATALOG':
-        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salvo", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
+        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salvo", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
       default:
         return <div className="p-8 text-center text-gray-400">Página em construção ou não encontrada.</div>;
     }
