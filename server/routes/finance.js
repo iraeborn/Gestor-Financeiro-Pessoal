@@ -2,11 +2,54 @@
 import express from 'express';
 import pool from '../db.js';
 import crypto from 'crypto';
-import { authenticateToken, updateAccountBalance, sanitizeValue } from '../middleware.js';
+import multer from 'multer';
+import { Storage } from '@google-cloud/storage';
+import { authenticateToken, updateAccountBalance } from '../middleware.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Configuração do Google Cloud Storage
+const storage = new Storage();
+const bucketName = process.env.GCS_BUCKET_NAME || 'finmanager-attachments';
+const bucket = storage.bucket(bucketName);
 
 export default function(logAudit) {
+    
+    // Novo endpoint para upload de arquivos no GCS
+    router.post('/upload', authenticateToken, upload.array('files'), async (req, res) => {
+        try {
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+            }
+
+            const uploadPromises = req.files.map(file => {
+                const fileName = `attachments/${req.user.id}/${crypto.randomUUID()}-${file.originalname}`;
+                const blob = bucket.file(fileName);
+                const blobStream = blob.createWriteStream({
+                    resumable: false,
+                    metadata: { contentType: file.mimetype }
+                });
+
+                return new Promise((resolve, reject) => {
+                    blobStream.on('error', err => reject(err));
+                    blobStream.on('finish', () => {
+                        // URL Pública (Assumindo que o bucket tem permissão de leitura pública ou via Proxy)
+                        const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
+                        resolve(publicUrl);
+                    });
+                    blobStream.end(file.buffer);
+                });
+            });
+
+            const urls = await Promise.all(uploadPromises);
+            res.json({ urls });
+        } catch (err) {
+            console.error("GCS Upload Error:", err);
+            res.status(500).json({ error: 'Falha ao enviar para o Cloud Storage.' });
+        }
+    });
+
     router.get('/initial-data', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         try {
@@ -78,7 +121,8 @@ export default function(logAudit) {
                     ...r, 
                     amount: parseFloat(r.amount), 
                     date: new Date(r.date).toISOString().split('T')[0],
-                    createdByName: r.created_by_name 
+                    createdByName: r.created_by_name,
+                    receiptUrls: Array.isArray(r.receipt_urls) ? r.receipt_urls : []
                 })),
                 goals: goals.rows.map(r => ({ ...r, targetAmount: parseFloat(r.target_amount), currentAmount: parseFloat(r.current_amount) })),
                 contacts: contacts.rows,
@@ -164,10 +208,10 @@ export default function(logAudit) {
             const isUpdate = existingRes.rows.length > 0;
 
             await client.query(
-                `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10, family_id=$12`,
-                [id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.contactId, userId, familyId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate]
+                `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date, receipt_urls)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10, family_id=$12, receipt_urls=$16`,
+                [id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.contactId, userId, familyId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate, JSON.stringify(t.receiptUrls || [])]
             );
 
             if (t.status === 'PAID') {
@@ -194,126 +238,6 @@ export default function(logAudit) {
             const familyId = familyIdRes.rows[0]?.family_id;
             await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [req.params.id, familyId]);
             await logAudit(pool, req.user.id, 'DELETE', 'transaction', req.params.id, 'Transação removida');
-            res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    // --- ACCOUNTS ---
-    router.post('/accounts', authenticateToken, async (req, res) => {
-        const a = req.body;
-        const userId = req.user.id;
-        try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0]?.family_id || userId;
-            const id = a.id || crypto.randomUUID();
-            const existingRes = await pool.query('SELECT id FROM accounts WHERE id = $1', [id]);
-            const isUpdate = existingRes.rows.length > 0;
-
-            await pool.query(
-                `INSERT INTO accounts (id, name, type, balance, credit_limit, closing_day, due_day, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$5, closing_day=$6, due_day=$7`,
-                [id, a.name, a.type, a.balance, a.creditLimit, a.closingDay, a.dueDay, userId, familyId]
-            );
-            await logAudit(pool, userId, isUpdate ? 'UPDATE' : 'CREATE', 'account', id, a.name);
-            res.json({ success: true, id });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    router.delete('/accounts/:id', authenticateToken, async (req, res) => {
-        try {
-            await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
-            await logAudit(pool, req.user.id, 'DELETE', 'account', req.params.id, 'Conta removida');
-            res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    // --- CONTACTS ---
-    router.post('/contacts', authenticateToken, async (req, res) => {
-        const c = req.body;
-        const userId = req.user.id;
-        try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0]?.family_id || userId;
-            const id = c.id || crypto.randomUUID();
-            const existingRes = await pool.query('SELECT id FROM contacts WHERE id = $1', [id]);
-            const isUpdate = existingRes.rows.length > 0;
-
-            await pool.query(
-                `INSERT INTO contacts (id, name, fantasy_name, type, email, phone, document, ie, im, pix_key, zip_code, street, number, neighborhood, city, state, is_defaulter, is_blocked, credit_limit, default_payment_method, default_payment_term, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-                 ON CONFLICT (id) DO UPDATE SET name=$2, fantasy_name=$3, type=$4, email=$5, phone=$6, document=$7, ie=$8, im=$9, pix_key=$10, zip_code=$11, street=$12, number=$13, neighborhood=$14, city=$15, state=$16, is_defaulter=$17, is_blocked=$18, credit_limit=$19, default_payment_method=$20, default_payment_term=$21, deleted_at=NULL`,
-                [id, c.name, c.fantasyName, c.type, c.email, c.phone, c.document, c.ie, c.im, c.pixKey, c.zipCode, c.street, c.number, c.neighborhood, c.city, c.state, c.isDefaulter, c.isBlocked, c.creditLimit, c.defaultPaymentMethod, c.defaultPaymentTerm, userId, familyId]
-            );
-            await logAudit(pool, userId, isUpdate ? 'UPDATE' : 'CREATE', 'contact', id, c.name);
-            res.json({ success: true, id });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    router.delete('/contacts/:id', authenticateToken, async (req, res) => {
-        try {
-            await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
-            await logAudit(pool, req.user.id, 'DELETE', 'contact', req.params.id, 'Contato removido');
-            res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    // --- CATEGORIES ---
-    router.post('/categories', authenticateToken, async (req, res) => {
-        const c = req.body;
-        const userId = req.user.id;
-        try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0]?.family_id || userId;
-            const id = c.id || crypto.randomUUID();
-            const existingRes = await pool.query('SELECT id FROM categories WHERE id = $1', [id]);
-            const isUpdate = existingRes.rows.length > 0;
-
-            await pool.query(
-                `INSERT INTO categories (id, name, type, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5)
-                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`,
-                [id, c.name, c.type, userId, familyId]
-            );
-            await logAudit(pool, userId, isUpdate ? 'UPDATE' : 'CREATE', 'category', id, c.name);
-            res.json({ success: true, id });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    router.delete('/categories/:id', authenticateToken, async (req, res) => {
-        try {
-            await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
-            await logAudit(pool, req.user.id, 'DELETE', 'category', req.params.id, 'Categoria removida');
-            res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    // --- GOALS ---
-    router.post('/goals', authenticateToken, async (req, res) => {
-        const g = req.body;
-        const userId = req.user.id;
-        try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0]?.family_id || userId;
-            const id = g.id || crypto.randomUUID();
-            const existingRes = await pool.query('SELECT id FROM goals WHERE id = $1', [id]);
-            const isUpdate = existingRes.rows.length > 0;
-
-            await pool.query(
-                `INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (id) DO UPDATE SET name=$2, target_amount=$3, current_amount=$4, deadline=$5`,
-                [id, g.name, g.targetAmount, g.currentAmount, sanitizeValue(g.deadline), userId, familyId]
-            );
-            await logAudit(pool, userId, isUpdate ? 'UPDATE' : 'CREATE', 'goal', id, g.name);
-            res.json({ success: true, id });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    router.delete('/goals/:id', authenticateToken, async (req, res) => {
-        try {
-            await pool.query(`UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
-            await logAudit(pool, req.user.id, 'DELETE', 'goal', req.params.id, 'Meta removida');
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });

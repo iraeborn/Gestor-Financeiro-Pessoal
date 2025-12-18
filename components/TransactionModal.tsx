@@ -54,6 +54,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [showScanner, setShowScanner] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [loadingQR, setLoadingQR] = useState(false);
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
 
   const contactDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
@@ -78,7 +79,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         departmentId: initialData.departmentId || '',
         projectId: initialData.projectId || '',
         classification: initialData.classification || TransactionClassification.STANDARD,
-        receiptUrls: initialData.receiptUrls || []
+        receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : []
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
@@ -101,46 +102,34 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   }, [initialData, isOpen, accounts, contacts]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) setShowContactDropdown(false);
-        if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) setShowCategoryDropdown(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleQRSuccess = async (decodedText: string) => {
-      setShowScanner(false);
-      setLoadingQR(true);
+  const handleAddFiles = async (files: FileList) => {
+      setIsProcessingFiles(true);
       try {
           const token = localStorage.getItem('token');
-          const res = await fetch('/api/scrape-nfce', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
-              body: JSON.stringify({ url: decodedText })
-          });
-          const data = await res.json();
-          if (res.ok) {
-              setFormData(prev => ({
-                  ...prev,
-                  description: data.merchant || 'Compra NFC-e',
-                  amount: data.amount ? data.amount.toString() : prev.amount,
-                  date: data.date || prev.date,
-              }));
-              showAlert(`Nota processada: R$ ${data.amount}`, "success");
-          } else showAlert(data.error || "Erro ao ler nota.", "error");
-      } catch (e) { showAlert("Erro de conexão.", "error"); } finally { setLoadingQR(false); }
-  };
+          const uploadData = new FormData();
+          Array.from(files).forEach(f => uploadData.append('files', f));
 
-  const handleAddFiles = (files: FileList) => {
-      const newUrls = Array.from(files).map(file => URL.createObjectURL(file));
-      setFormData(prev => ({
-          ...prev,
-          receiptUrls: [...prev.receiptUrls, ...newUrls],
-          status: TransactionStatus.PAID // REGRA: Ao anexar, marca como pago
-      }));
-      showAlert(`${files.length} arquivo(s) anexado(s) e status alterado para Pago.`, "success");
+          const res = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+              body: uploadData
+          });
+
+          if (!res.ok) throw new Error("Upload failed");
+          const { urls } = await res.json();
+
+          setFormData(prev => ({
+              ...prev,
+              receiptUrls: [...prev.receiptUrls, ...urls],
+              status: TransactionStatus.PAID
+          }));
+          showAlert(`${files.length} arquivo(s) salvos no Cloud Storage. Status: Pago.`, "success");
+      } catch (e) {
+          showAlert("Erro ao processar arquivos no Storage.", "error");
+          throw e;
+      } finally {
+          setIsProcessingFiles(false);
+      }
   };
 
   const handleRemoveFile = (index: number) => {
@@ -148,6 +137,39 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           ...prev,
           receiptUrls: prev.receiptUrls.filter((_, i) => i !== index)
       }));
+  };
+
+  const handleQRSuccess = async (url: string) => {
+    setShowScanner(false);
+    setLoadingQR(true);
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/scrape-nfce', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            setFormData(prev => ({
+                ...prev,
+                amount: data.amount.toString(),
+                date: data.date,
+                description: data.merchant || prev.description,
+                status: TransactionStatus.PAID
+            }));
+            showAlert("Dados da nota extraídos!", "success");
+        } else {
+            showAlert(data.error || "Erro ao ler QR Code.", "error");
+        }
+    } catch (e) {
+        showAlert("Erro de conexão ao processar nota.", "error");
+    } finally {
+        setLoadingQR(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -204,7 +226,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden animate-scale-up border border-slate-100">
         
-        {/* Header Compacto */}
         <div className="px-8 py-5 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
             <h2 className="text-base font-bold text-slate-800">
                 {initialData?.id ? 'Editar Registro' : 'Novo Registro'}
@@ -221,8 +242,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
         ) : (
         <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[85vh] overflow-y-auto scrollbar-thin">
-          
-          {/* Valor Principal */}
           <div className="space-y-3">
               <div className="relative group">
                 <div className={`absolute left-0 top-1/2 -translate-y-1/2 text-3xl font-black ${typeColors[formData.type]} transition-colors`}>R$</div>
@@ -249,7 +268,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
           </div>
 
-          {/* Tipo de Lançamento */}
           <div className="flex bg-slate-100/50 p-1 rounded-2xl border border-slate-100">
                 {[
                     { id: TransactionType.EXPENSE, label: 'Despesa', icon: Banknote },
@@ -271,7 +289,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 ))}
           </div>
 
-          {/* Grid de Informações */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Descrição</label>
@@ -328,7 +345,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         />
                       </div>
                       {showCategoryDropdown && (
-                          <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                          <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
                               {categories.filter(c => c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())).map(c => (
                                   <button key={c.id} type="button" onClick={() => {setCategorySearch(c.name); setShowCategoryDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors">
                                       {c.name}
@@ -340,7 +357,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
           </div>
 
-          {/* Situação e Comprovante Refatorados */}
           <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação</label>
@@ -360,12 +376,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
               </div>
 
-              {/* Seção de Comprovante Refatorada */}
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Documentos Digitais</label>
                   <div className="mt-1">
                       <button 
                         type="button" 
+                        disabled={isProcessingFiles}
                         onClick={() => setShowAttachments(true)}
                         className={`w-full flex items-center justify-between gap-2 py-2.5 px-4 rounded-xl text-[10px] font-black transition-all border ${
                             formData.receiptUrls.length > 0 
@@ -374,8 +390,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                            {formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />}
-                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivo(s)` : 'Anexar Comprovantes'}</span>
+                            {isProcessingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : (formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />)}
+                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arq. na Nuvem` : 'Cloud Storage'}</span>
                         </div>
                         <Plus className="w-3 h-3" />
                       </button>
@@ -383,12 +399,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
           </div>
 
-          {/* Rodapé */}
           <div className="pt-6 flex items-center justify-end gap-4 border-t border-slate-50">
               <button type="button" onClick={onClose} className="px-6 py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
               <button
                   type="submit"
-                  className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl shadow-slate-200 active:scale-95"
+                  disabled={isProcessingFiles}
+                  className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl shadow-slate-200 active:scale-95 disabled:opacity-50"
               >
                   {initialData?.id ? 'Atualizar' : 'Salvar Registro'}
               </button>

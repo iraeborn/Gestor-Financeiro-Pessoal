@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye, Paperclip } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye, Paperclip, Loader2 } from 'lucide-react';
 import AttachmentModal from './AttachmentModal';
 
 interface TransactionListProps {
@@ -25,6 +25,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 }) => {
   
   const [activeAttachmentT, setActiveAttachmentT] = useState<Transaction | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -54,13 +55,28 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
   };
 
-  const handleAddFiles = (t: Transaction, files: FileList) => {
+  const handleAddFiles = async (t: Transaction, files: FileList) => {
       if (!onUpdateAttachments) return;
-      
-      const newUrls = Array.from(files).map(file => URL.createObjectURL(file));
-      const updatedUrls = [...(t.receiptUrls || []), ...newUrls];
-      
-      onUpdateAttachments(t, updatedUrls);
+      setIsProcessing(true);
+      try {
+          const token = localStorage.getItem('token');
+          const uploadData = new FormData();
+          Array.from(files).forEach(f => uploadData.append('files', f));
+
+          const res = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+              body: uploadData
+          });
+
+          if (!res.ok) throw new Error("GCS Upload Error");
+          const { urls } = await res.json();
+          
+          const updatedUrls = [...(t.receiptUrls || []), ...urls];
+          onUpdateAttachments(t, updatedUrls);
+      } finally {
+          setIsProcessing(false);
+      }
   };
 
   const handleRemoveFile = (t: Transaction, index: number) => {
@@ -170,8 +186,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    
-                    {/* Botão de Anexos Refatorado */}
                     <button 
                         onClick={() => setActiveAttachmentT(t)} 
                         className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
@@ -179,7 +193,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                             ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' 
                             : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
                         }`}
-                        title={hasAttachments ? "Visualizar Anexos" : "Anexar Comprovante"}
+                        title={hasAttachments ? "Visualizar Anexos na Nuvem" : "Subir p/ Cloud Storage"}
                     >
                         {hasAttachments ? (
                             <>
@@ -200,7 +214,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     </button>
                     
                     <button 
-                        /* Fixed: Use t.id instead of id */
                         onClick={() => onDelete(t.id)} 
                         className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         title="Excluir"
@@ -215,7 +228,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </table>
       </div>
 
-      {/* Modal de Anexos */}
       {activeAttachmentT && (
           <AttachmentModal 
             isOpen={!!activeAttachmentT}

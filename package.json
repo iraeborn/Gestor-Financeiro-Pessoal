@@ -1,7 +1,7 @@
 
 {
   "name": "finance-manager",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "start:server": "node server/index.js"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.7.0",
     "@google/genai": "*",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -20,6 +21,7 @@
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.344.0",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.10",
     "pg": "^8.11.3",
     "react": "^18.2.0",
