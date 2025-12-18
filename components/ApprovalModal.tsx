@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { X, CheckCircle, DollarSign, FileText, Building2, AlertCircle } from 'lucide-react';
-import { CommercialOrder, Account, TransactionStatus, TransactionType } from '../types';
+import { CommercialOrder, Account } from '../types';
 
 interface ApprovalModalProps {
   isOpen: boolean;
@@ -39,12 +39,12 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
                 </div>
                 <div>
                     <h2 className="text-2xl font-black">Aprovar Orçamento</h2>
-                    <p className="text-indigo-100 text-sm">Converta este orçamento em uma venda real.</p>
+                    <p className="text-indigo-100 text-sm">Configure o faturamento desta venda.</p>
                 </div>
             </div>
             <div className="bg-white/10 rounded-2xl p-4 mt-4 border border-white/10">
                 <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold uppercase opacity-70 tracking-widest">Valor da Venda</span>
+                    <span className="text-xs font-bold uppercase opacity-70 tracking-widest">Valor Total</span>
                     <span className="text-2xl font-black">{formatCurrency(order.amount)}</span>
                 </div>
             </div>
@@ -52,6 +52,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
 
         <div className="p-8 space-y-6">
             <div className="space-y-4">
+                {/* Lançamento Financeiro */}
                 <label className="flex items-start gap-4 p-4 rounded-2xl border-2 border-slate-50 hover:border-indigo-100 transition-all cursor-pointer group">
                     <div className={`mt-1 p-2 rounded-xl transition-colors ${generateTransaction ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                         <DollarSign className="w-5 h-5" />
@@ -61,7 +62,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
                             <span className="font-bold text-slate-800">Gerar Receita no Financeiro</span>
                             <input type="checkbox" checked={generateTransaction} onChange={e => setGenerateTransaction(e.target.checked)} className="w-5 h-5 rounded-lg text-indigo-600 focus:ring-indigo-500" />
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">Cria um lançamento de "Contas a Receber" pendente vinculado a esta venda.</p>
+                        <p className="text-xs text-slate-500 mt-1">Cria um lançamento de "Contas a Receber" com referência ao pedido.</p>
                     </div>
                 </label>
 
@@ -81,6 +82,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
                     </div>
                 )}
 
+                {/* Nota Fiscal */}
                 <label className="flex items-start gap-4 p-4 rounded-2xl border-2 border-slate-50 hover:border-indigo-100 transition-all cursor-pointer group">
                     <div className={`mt-1 p-2 rounded-xl transition-colors ${generateInvoice ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
                         <FileText className="w-5 h-5" />
@@ -90,7 +92,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
                             <span className="font-bold text-slate-800">Emitir Nota Fiscal</span>
                             <input type="checkbox" checked={generateInvoice} onChange={e => setGenerateInvoice(e.target.checked)} className="w-5 h-5 rounded-lg text-indigo-600 focus:ring-indigo-500" />
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">Registra a emissão de uma Nota Fiscal de Serviço ou Produto.</p>
+                        <p className="text-xs text-slate-500 mt-1">Registra a emissão de uma Nota Fiscal.</p>
                     </div>
                 </label>
 
@@ -104,7 +106,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
 
             <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase">Ao confirmar, o status deste pedido mudará para "Confirmado" e os registros financeiros serão criados instantaneamente.</p>
+                <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase">Ao confirmar, o status deste pedido mudará para "Confirmado".</p>
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -113,7 +115,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, onClose, order, a
                     onClick={() => onConfirm({ accountId, generateTransaction, generateInvoice, invoiceType })}
                     className="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black text-base hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center gap-2"
                 >
-                    <CheckCircle className="w-5 h-5" /> Confirmar Venda
+                    <CheckCircle className="w-5 h-5" /> Confirmar e Aprovar
                 </button>
             </div>
         </div>

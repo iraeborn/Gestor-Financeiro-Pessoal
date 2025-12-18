@@ -8,7 +8,7 @@ import {
   TransactionStatus, TransactionType
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
-import { useAlert } from './components/AlertSystem';
+import { useAlert, useConfirm } from './components/AlertSystem';
 import { Menu } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -35,6 +35,7 @@ import ServicesView from './components/ServicesView';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
+  const { showConfirm } = useConfirm();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [showLanding, setShowLanding] = useState(true);
@@ -64,9 +65,8 @@ const App: React.FC = () => {
       });
 
       socket.on('DATA_UPDATED', (payload) => {
-        // Se a alteração não foi feita por mim, recarrego os dados silenciosamente
         if (payload.actorId !== currentUser.id) {
-          loadData(true); // true para modo silencioso (sem spinner de tela cheia)
+          loadData(true);
         }
       });
 
@@ -139,12 +139,11 @@ const App: React.FC = () => {
     } catch (e) { showAlert("Erro ao excluir.", "error"); }
   };
 
-  // Lógica de Comprovantes Refatorada: Suporta múltiplos URLs e marca como PAGO
   const handleUpdateAttachments = async (t: Transaction, urls: string[]) => {
       try {
           setLoading(true);
           const wasPaid = t.status === TransactionStatus.PAID;
-          const isNowPaid = urls.length > (t.receiptUrls?.length || 0); // Se aumentou o número de anexos, garantimos o PAGO
+          const isNowPaid = urls.length > (t.receiptUrls?.length || 0);
           
           const updatedT = { 
               ...t, 
@@ -167,18 +166,19 @@ const App: React.FC = () => {
       }
   };
 
-  // Lógica complexa de aprovação de orçamento
+  // Lógica de aprovação de orçamento atualizada com fluxos de prompt
   const handleApproveOrder = async (order: CommercialOrder, approvalData: any) => {
       try {
           setLoading(true);
           let transactionId = undefined;
+          const orderRef = order.id.substring(0, 8).toUpperCase();
 
-          // 1. Gerar Lançamento Financeiro se solicitado
+          // 1. Gerar Lançamento Financeiro com Referência na Descrição
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = {
                   id: transactionId,
-                  description: `Venda: ${order.description}`,
+                  description: `Venda: ${order.description} (Ref: #${orderRef})`,
                   amount: order.amount,
                   type: TransactionType.INCOME,
                   category: 'Vendas e Serviços',
@@ -214,11 +214,38 @@ const App: React.FC = () => {
           };
           await api.saveCommercialOrder(updatedOrder);
 
-          await loadData();
-          showAlert("Orçamento aprovado e venda gerada!", "success");
+          // 4. Carregar dados atualizados antes do prompt para garantir consistência visual no fundo
+          await loadData(true);
+          setLoading(false);
+
+          // 5. Perguntar sobre a OS (Prompt Condicional)
+          const confirmOS = await showConfirm({
+              title: "Operação Concluída",
+              message: "Venda aprovada com sucesso! Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
+              confirmText: "Sim, criar OS",
+              cancelText: "Não, apenas aprovar"
+          });
+
+          if (confirmOS) {
+              const newOS: ServiceOrder = {
+                  id: crypto.randomUUID(),
+                  title: order.description,
+                  description: `OS gerada automaticamente a partir do orçamento #${orderRef}.`,
+                  contactId: order.contactId,
+                  totalAmount: order.amount,
+                  status: 'OPEN',
+                  startDate: new Date().toISOString().split('T')[0]
+              };
+              await api.saveServiceOrder(newOS);
+              await loadData(true);
+              showAlert("Venda aprovada e OS criada!", "success");
+          } else {
+              showAlert("Venda aprovada!", "success");
+          }
+
       } catch (e) {
+          console.error(e);
           showAlert("Erro no processo de aprovação.", "error");
-      } finally {
           setLoading(false);
       }
   };
@@ -256,7 +283,7 @@ const App: React.FC = () => {
       case 'FIN_ACCOUNTS':
         return <AccountsView accounts={data.accounts} onSaveAccount={async (a) => wrapSave(api.saveAccount, a, "Conta salva")} onDeleteAccount={async (id) => wrapDel(api.deleteAccount, id, "Conta excluída")} />;
       case 'FIN_CARDS':
-        return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => wrapSave(api.saveAccount, a, "Cartão salva")} onDeleteAccount={async (id) => wrapDel(api.deleteAccount, id, "Cartão excluída")} onAddTransaction={handleAddTransaction} />;
+        return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => wrapSave(api.saveAccount, a, "Cartão salva")} onDeleteAccount={async (id) => wrapDel(api.deleteAccount, id, "Conta excluída")} onAddTransaction={handleAddTransaction} />;
       case 'FIN_GOALS':
         return <GoalsView goals={data.goals} accounts={data.accounts} onSaveGoal={async (g) => wrapSave(api.saveGoal, g, "Meta salva")} onDeleteGoal={async (id) => wrapDel(api.deleteGoal, id, "Meta excluída")} onAddTransaction={handleAddTransaction} />;
       case 'FIN_REPORTS':
