@@ -21,6 +21,7 @@ interface TransactionsViewProps {
   onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
   onAdd: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
+  onUploadReceipt?: (t: Transaction, file: File) => void;
 }
 
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
@@ -34,7 +35,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   onDelete, 
   onEdit, 
   onToggleStatus,
-  onAdd
+  onAdd,
+  onUploadReceipt
 }) => {
   const { showConfirm } = useConfirm();
   const [searchTerm, setSearchTerm] = useState('');
@@ -293,6 +295,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         onDelete={handleDelete}
         onEdit={handleOpenEdit}
         onToggleStatus={handleStatusToggle}
+        onUploadReceipt={onUploadReceipt}
       />
 
       <TransactionModal 

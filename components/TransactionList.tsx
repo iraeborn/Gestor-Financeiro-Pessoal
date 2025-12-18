@@ -1,19 +1,30 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, User, UserCircle } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
   accounts?: Account[];
-  contacts?: Contact[]; // Injected to resolve names
+  contacts?: Contact[];
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   onToggleStatus: (t: Transaction) => void;
+  onUploadReceipt?: (t: Transaction, file: File) => void;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, accounts = [], contacts = [], onDelete, onEdit, onToggleStatus }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ 
+  transactions, 
+  accounts = [], 
+  contacts = [], 
+  onDelete, 
+  onEdit, 
+  onToggleStatus,
+  onUploadReceipt
+}) => {
   
+  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -42,12 +53,11 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
     }
   };
 
-  const getRecurrenceLabel = (t: Transaction) => {
-    if (!t.isRecurring) return null;
-    const freqMap: Record<string, string> = { 'WEEKLY': 'Semanal', 'MONTHLY': 'Mensal', 'YEARLY': 'Anual' };
-    const label = freqMap[t.recurrenceFrequency || 'MONTHLY'];
-    const end = t.recurrenceEndDate ? `até ${formatDate(t.recurrenceEndDate)}` : 'contínuo';
-    return `${label}, ${end}`;
+  const handleFileChange = (t: Transaction, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onUploadReceipt) {
+        onUploadReceipt(t, file);
+    }
   };
 
   if (transactions.length === 0) {
@@ -111,7 +121,6 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                 <td className="px-6 py-4 text-gray-600">
                     {contactName ? (
                         <div className="flex items-center gap-1.5">
-                            <User className="w-3 h-3 text-gray-400" />
                             <span className="truncate max-w-[120px]">{contactName}</span>
                         </div>
                     ) : (
@@ -150,9 +159,47 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                   </button>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onEdit(t)} className="text-indigo-600 hover:text-indigo-800 font-medium text-xs">Editar</button>
-                    <button onClick={() => onDelete(t.id)} className="text-rose-600 hover:text-rose-800 font-medium text-xs">Excluir</button>
+                  <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Botão de Comprovante */}
+                    <div className="relative">
+                        <input 
+                            type="file" 
+                            className="hidden" 
+                            /* Fix: Ensure callback ref returns void by wrapping assignment in braces */
+                            ref={el => { fileInputRefs.current[t.id] = el; }}
+                            onChange={(e) => handleFileChange(t, e)}
+                            accept="image/*,application/pdf"
+                        />
+                        {t.receiptUrl ? (
+                            <a href={t.receiptUrl} target="_blank" rel="noreferrer" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Ver Comprovante">
+                                <FileCheck className="w-4 h-4" />
+                            </a>
+                        ) : (
+                            <button 
+                                onClick={() => fileInputRefs.current[t.id]?.click()} 
+                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Anexar Comprovante"
+                            >
+                                <FilePlus className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+
+                    <button 
+                        onClick={() => onEdit(t)} 
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Editar"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    
+                    <button 
+                        onClick={() => onDelete(t.id)} 
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="Excluir"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </td>
               </tr>

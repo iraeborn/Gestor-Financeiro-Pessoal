@@ -139,6 +139,30 @@ const App: React.FC = () => {
     } catch (e) { showAlert("Erro ao excluir.", "error"); }
   };
 
+  // Lógica de Comprovante: Ao anexar, marcar automaticamente como PAGO
+  const handleUploadReceipt = async (t: Transaction, file: File) => {
+      try {
+          setLoading(true);
+          // Em um ambiente real, faríamos o upload para o S3/GCS
+          // Aqui simulamos uma URL de retorno
+          const fakeUrl = URL.createObjectURL(file); 
+          
+          const updatedT = { 
+              ...t, 
+              receiptUrl: fakeUrl, 
+              status: TransactionStatus.PAID // MARCA COMO PAGO AUTOMATICAMENTE
+          };
+          
+          await api.saveTransaction(updatedT);
+          await loadData(true);
+          showAlert("Comprovante anexado e transação quitada!", "success");
+      } catch (e) {
+          showAlert("Erro ao processar comprovante.", "error");
+      } finally {
+          setLoading(false);
+      }
+  };
+
   // Lógica complexa de aprovação de orçamento
   const handleApproveOrder = async (order: CommercialOrder, approvalData: any) => {
       try {
@@ -222,7 +246,7 @@ const App: React.FC = () => {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
       case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} />;
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} onUploadReceipt={handleUploadReceipt} />;
       case 'FIN_CALENDAR':
         return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleAddTransaction} onEdit={handleEditTransaction} />;
       case 'FIN_ACCOUNTS':
@@ -250,7 +274,6 @@ const App: React.FC = () => {
       case 'ODONTO_AGENDA':
       case 'ODONTO_PATIENTS':
       case 'ODONTO_PROCEDURES':
-        /* Fixed typo: deleteServiceService changed to deleteServiceItem */
         return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Serviços Odontológicos" activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'} clients={data.serviceClients.filter(c => c.moduleTag === 'ODONTO' || c.moduleTag === 'GENERAL')} services={data.serviceItems.filter(s => s.moduleTag === 'ODONTO' || s.moduleTag === 'GENERAL')} appointments={data.serviceAppointments.filter(a => a.moduleTag === 'ODONTO' || a.moduleTag === 'GENERAL')} contacts={data.contacts} onSaveClient={async (c) => wrapSave(api.saveServiceClient, { ...c, moduleTag: 'ODONTO' }, "Paciente salvo")} onDeleteClient={async (id) => wrapDel(api.deleteServiceClient, id, "Paciente excluído")} onSaveService={async (s) => wrapSave(api.saveServiceItem, { ...s, moduleTag: 'ODONTO' }, "Procedimento salvo")} onDeleteService={async (id) => wrapDel(api.deleteServiceItem, id, "Procedimento excluído")} onSaveAppointment={async (a) => wrapSave(api.saveServiceAppointment, { ...a, moduleTag: 'ODONTO' }, "Agendamento salvo")} onDeleteAppointment={async (id) => wrapDel(api.deleteServiceAppointment, id, "Agendamento excluído")} onAddTransaction={handleAddTransaction} />;
       case 'SRV_OS':
       case 'SRV_SALES':
