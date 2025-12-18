@@ -1,13 +1,13 @@
 
 import React, { useRef, useState } from 'react';
-import { X, FilePlus, Trash2, Download, Eye, FileText, Loader2, CloudUpload } from 'lucide-react';
+import { X, FilePlus, Trash2, Download, Eye, FileText, Loader2, UploadCloud } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 
 interface AttachmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   urls: string[];
-  onAdd: (files: FileList) => Promise<void>; // Agora é uma Promise
+  onAdd: (files: FileList) => Promise<void>;
   onRemove: (index: number) => void;
   title?: string;
 }
@@ -28,6 +28,7 @@ const AttachmentModal: React.FC<AttachmentModalProps> = ({ isOpen, onClose, urls
         showAlert("Erro ao subir arquivos para a nuvem.", "error");
       } finally {
         setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     }
   };
@@ -63,14 +64,14 @@ const AttachmentModal: React.FC<AttachmentModalProps> = ({ isOpen, onClose, urls
         <div className="flex-1 overflow-y-auto p-8 space-y-4">
             {urls.length === 0 && !isUploading ? (
                 <div className="py-12 text-center">
-                    <CloudUpload className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                    <UploadCloud className="w-12 h-12 text-slate-200 mx-auto mb-4" />
                     <p className="text-slate-500 font-medium">Nenhum anexo encontrado.</p>
                     <p className="text-xs text-slate-400 mt-1">Sua movimentação será salva no Google Cloud Storage.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-3">
                     {urls.map((url, idx) => {
-                        const isImage = url.includes('image') || url.startsWith('blob:') || url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                        const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.includes('image');
                         return (
                             <div key={idx} className="group flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-2xl hover:border-indigo-200 transition-all">
                                 <div className="flex items-center gap-4 overflow-hidden">

@@ -4,19 +4,20 @@ import pool from '../db.js';
 import crypto from 'crypto';
 import multer from 'multer';
 import { Storage } from '@google-cloud/storage';
-import { authenticateToken, updateAccountBalance } from '../middleware.js';
+import { authenticateToken, updateAccountBalance, sanitizeValue } from '../middleware.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configuração do Google Cloud Storage
+// Assume-se que o ambiente tem as credenciais configuradas (Application Default Credentials)
 const storage = new Storage();
 const bucketName = process.env.GCS_BUCKET_NAME || 'finmanager-attachments';
 const bucket = storage.bucket(bucketName);
 
 export default function(logAudit) {
     
-    // Novo endpoint para upload de arquivos no GCS
+    // NOVO: Endpoint para upload de arquivos no GCS
     router.post('/upload', authenticateToken, upload.array('files'), async (req, res) => {
         try {
             if (!req.files || req.files.length === 0) {
@@ -34,7 +35,7 @@ export default function(logAudit) {
                 return new Promise((resolve, reject) => {
                     blobStream.on('error', err => reject(err));
                     blobStream.on('finish', () => {
-                        // URL Pública (Assumindo que o bucket tem permissão de leitura pública ou via Proxy)
+                        // URL de acesso público ao objeto
                         const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
                         resolve(publicUrl);
                     });

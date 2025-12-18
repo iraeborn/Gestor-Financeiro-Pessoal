@@ -115,7 +115,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               body: uploadData
           });
 
-          if (!res.ok) throw new Error("Upload failed");
+          if (!res.ok) throw new Error("Falha no upload");
           const { urls } = await res.json();
 
           setFormData(prev => ({
@@ -123,9 +123,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               receiptUrls: [...prev.receiptUrls, ...urls],
               status: TransactionStatus.PAID
           }));
-          showAlert(`${files.length} arquivo(s) salvos no Cloud Storage. Status: Pago.`, "success");
+          showAlert(`${files.length} arquivo(s) enviados com sucesso.`, "success");
       } catch (e) {
-          showAlert("Erro ao processar arquivos no Storage.", "error");
+          showAlert("Erro ao enviar arquivos para o Storage.", "error");
           throw e;
       } finally {
           setIsProcessingFiles(false);
@@ -391,7 +391,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       >
                         <div className="flex items-center gap-2">
                             {isProcessingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : (formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />)}
-                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arq. na Nuvem` : 'Cloud Storage'}</span>
+                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivos (Nuvem)` : 'Anexar Comprovantes'}</span>
                         </div>
                         <Plus className="w-3 h-3" />
                       </button>

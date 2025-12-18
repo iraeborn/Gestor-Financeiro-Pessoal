@@ -69,11 +69,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
               body: uploadData
           });
 
-          if (!res.ok) throw new Error("GCS Upload Error");
+          if (!res.ok) throw new Error("Upload Error");
           const { urls } = await res.json();
           
           const updatedUrls = [...(t.receiptUrls || []), ...urls];
           onUpdateAttachments(t, updatedUrls);
+          // Atualiza a referência local caso o modal esteja aberto
+          setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
       } finally {
           setIsProcessing(false);
       }
@@ -83,6 +85,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
       if (!onUpdateAttachments) return;
       const updatedUrls = (t.receiptUrls || []).filter((_, i) => i !== index);
       onUpdateAttachments(t, updatedUrls);
+      setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
   };
 
   if (transactions.length === 0) {
