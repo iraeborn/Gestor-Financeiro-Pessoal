@@ -2,7 +2,7 @@
 import express from 'express';
 import pool from '../db.js';
 import crypto from 'crypto';
-import { authenticateToken, updateAccountBalance } from '../middleware.js';
+import { authenticateToken, updateAccountBalance, sanitizeValue } from '../middleware.js';
 
 const router = express.Router();
 
@@ -13,7 +13,6 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const activeFamilyId = userRes.rows[0]?.family_id || userId;
 
-            // Filtro inteligente: Busca pelo activeFamilyId OU pelo próprio userId caso o family_id ainda esteja nulo (resiliência)
             const buildFilter = (alias = '') => {
                 const prefix = alias ? `${alias}.` : '';
                 return `(${prefix}family_id = $1 OR (${prefix}family_id IS NULL AND ${prefix}user_id = $1))`;
@@ -112,7 +111,7 @@ export default function(logAudit) {
                     startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
                     endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
                 })),
-                commercialOrders: commOrders.rows.map(r => ({
+                commercialOrders: commercialOrders.rows.map(r => ({
                     id: r.id,
                     type: r.type,
                     description: r.description,
@@ -149,6 +148,7 @@ export default function(logAudit) {
         }
     });
 
+    // --- TRANSACTIONS ---
     router.post('/transactions', authenticateToken, async (req, res) => {
         const t = req.body;
         const userId = req.user.id;
@@ -159,13 +159,6 @@ export default function(logAudit) {
             
             await client.query('BEGIN');
             const id = t.id || crypto.randomUUID();
-
-            if (t.id) {
-                const check = await client.query('SELECT family_id FROM transactions WHERE id=$1', [t.id]);
-                if (check.rows.length > 0 && check.rows[0].family_id !== familyId) {
-                    throw new Error("Transação não pertence a este ambiente.");
-                }
-            }
 
             await client.query(
                 `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date)
@@ -189,6 +182,133 @@ export default function(logAudit) {
         } finally {
             client.release();
         }
+    });
+
+    router.delete('/transactions/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
+            const familyId = familyIdRes.rows[0]?.family_id;
+            await pool.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [req.params.id, familyId]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- ACCOUNTS ---
+    router.post('/accounts', authenticateToken, async (req, res) => {
+        const a = req.body;
+        const userId = req.user.id;
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+            const id = a.id || crypto.randomUUID();
+            await pool.query(
+                `INSERT INTO accounts (id, name, type, balance, credit_limit, closing_day, due_day, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$5, closing_day=$6, due_day=$7`,
+                [id, a.name, a.type, a.balance, a.creditLimit, a.closingDay, a.dueDay, userId, familyId]
+            );
+            res.json({ success: true, id });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/accounts/:id', authenticateToken, async (req, res) => {
+        try {
+            await pool.query(`UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- CONTACTS ---
+    router.post('/contacts', authenticateToken, async (req, res) => {
+        const c = req.body;
+        const userId = req.user.id;
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+            const id = c.id || crypto.randomUUID();
+            
+            // Garantir que as colunas extras existam (Lazy Migration)
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS fantasy_name TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS type TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ie TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS im TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS zip_code TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS street TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS number TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS neighborhood TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS city TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS state TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_defaulter BOOLEAN`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2)`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS default_payment_method TEXT`);
+            await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS default_payment_term INTEGER`);
+
+            await pool.query(
+                `INSERT INTO contacts (id, name, fantasy_name, type, email, phone, document, ie, im, pix_key, zip_code, street, number, neighborhood, city, state, is_defaulter, is_blocked, credit_limit, default_payment_method, default_payment_term, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, fantasy_name=$3, type=$4, email=$5, phone=$6, document=$7, ie=$8, im=$9, pix_key=$10, zip_code=$11, street=$12, number=$13, neighborhood=$14, city=$15, state=$16, is_defaulter=$17, is_blocked=$18, credit_limit=$19, default_payment_method=$20, default_payment_term=$21, deleted_at=NULL`,
+                [id, c.name, c.fantasyName, c.type, c.email, c.phone, c.document, c.ie, c.im, c.pixKey, c.zipCode, c.street, c.number, c.neighborhood, c.city, c.state, c.isDefaulter, c.isBlocked, c.creditLimit, c.defaultPaymentMethod, c.defaultPaymentTerm, userId, familyId]
+            );
+            res.json({ success: true, id });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/contacts/:id', authenticateToken, async (req, res) => {
+        try {
+            await pool.query(`UPDATE contacts SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- CATEGORIES ---
+    router.post('/categories', authenticateToken, async (req, res) => {
+        const c = req.body;
+        const userId = req.user.id;
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+            const id = c.id || crypto.randomUUID();
+            await pool.query(
+                `INSERT INTO categories (id, name, type, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`,
+                [id, c.name, c.type, userId, familyId]
+            );
+            res.json({ success: true, id });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/categories/:id', authenticateToken, async (req, res) => {
+        try {
+            await pool.query(`UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- GOALS ---
+    router.post('/goals', authenticateToken, async (req, res) => {
+        const g = req.body;
+        const userId = req.user.id;
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+            const id = g.id || crypto.randomUUID();
+            await pool.query(
+                `INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, target_amount=$3, current_amount=$4, deadline=$5`,
+                [id, g.name, g.targetAmount, g.currentAmount, sanitizeValue(g.deadline), userId, familyId]
+            );
+            res.json({ success: true, id });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/goals/:id', authenticateToken, async (req, res) => {
+        try {
+            await pool.query(`UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $2)`, [req.params.id, req.user.id]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     return router;
