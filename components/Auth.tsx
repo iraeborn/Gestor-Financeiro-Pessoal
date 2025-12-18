@@ -45,16 +45,24 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
 
   useEffect(() => {
     const win = window as any;
-    const clientId = process.env.GOOGLE_CLIENT_ID || win.GOOGLE_CLIENT_ID;
+    // O valor __GOOGLE_CLIENT_ID__ é substituído pelo servidor no index.html
+    // Mas ele também pode estar em win.GOOGLE_CLIENT_ID se o script de injeção rodou
+    const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" 
+        ? win.GOOGLE_CLIENT_ID 
+        : process.env.GOOGLE_CLIENT_ID;
 
     if (mode === 'LOGIN') {
       let retryCount = 0;
-      const maxRetries = 10;
+      const maxRetries = 15;
 
       const initGoogle = () => {
         if (win.google?.accounts?.id) {
-          if (!clientId) {
-            console.warn("Google Client ID não configurado nas variáveis de ambiente.");
+          if (!clientId || clientId === "" || clientId === "undefined") {
+            console.warn("Google Client ID não disponível no momento. Tentativa:", retryCount);
+            if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(initGoogle, 1000);
+            }
             return;
           }
 
@@ -80,16 +88,15 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
               );
             }
           } catch (e) {
-            console.error("Erro ao renderizar botão do Google:", e);
+            console.error("Erro ao inicializar Google Auth:", e);
           }
         } else if (retryCount < maxRetries) {
           retryCount++;
-          setTimeout(initGoogle, 500); // Tenta novamente em 500ms
+          setTimeout(initGoogle, 500);
         }
       };
 
-      // Pequeno delay para garantir que o elemento DOM 'googleSignInDiv' foi montado pelo React
-      setTimeout(initGoogle, 100);
+      setTimeout(initGoogle, 200);
     }
   }, [mode]);
 

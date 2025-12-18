@@ -59,27 +59,44 @@ app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 
-// --- STATIC FILES ---
+// --- STATIC FILES & ENV INJECTION ---
 const distPath = path.join(__dirname, '../dist');
+
+// Interceptamos a requisição do index.html para injetar variáveis do Cloud Run
+app.get('/', (req, res) => {
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        let content = fs.readFileSync(indexPath, 'utf8');
+        
+        // Substitui os placeholders pelas variáveis de ambiente reais do servidor (Cloud Run)
+        const googleId = process.env.GOOGLE_CLIENT_ID || "";
+        content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
+        
+        res.send(content);
+    } else {
+        res.status(404).send('Frontend não encontrado.');
+    }
+});
+
 app.use(express.static(distPath));
 
+// Fallback para SPA (também com injeção)
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
+        let content = fs.readFileSync(indexPath, 'utf8');
+        const googleId = process.env.GOOGLE_CLIENT_ID || "";
+        content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
+        res.send(content);
     } else {
-        // Se o build do frontend falhou ou não existe, avisa ao invés de crashar
-        res.status(404).send('Frontend não encontrado. Verifique se o processo de build (npm run build) foi concluído com sucesso.');
+        res.status(404).send('Frontend não encontrado.');
     }
 });
 
 const PORT = process.env.PORT || 8080;
 
-// INICIALIZAÇÃO CRÍTICA: Escutar a porta IMEDIATAMENTE.
 httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVIDOR] Rodando na porta ${PORT}`);
-    
-    // Inicialização do banco ocorre em paralelo para não bloquear o health check do Cloud Run
     initDb().then(() => {
         console.log("✅ [DB] Conexão e tabelas verificadas.");
     }).catch(err => {
