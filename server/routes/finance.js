@@ -13,14 +13,14 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const activeFamilyId = userRes.rows[0]?.family_id || userId;
 
+            // Filtro inteligente: Busca pelo activeFamilyId OU pelo próprio userId caso o family_id ainda esteja nulo (resiliência)
             const buildFilter = (alias = '') => {
                 const prefix = alias ? `${alias}.` : '';
-                return `${prefix}family_id = $1`;
+                return `(${prefix}family_id = $1 OR (${prefix}family_id IS NULL AND ${prefix}user_id = $1))`;
             };
 
             const accs = await pool.query(`SELECT * FROM accounts WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             
-            // Transações com nome do criador
             const trans = await pool.query(`
                 SELECT t.*, u.name as created_by_name 
                 FROM transactions t 
@@ -33,7 +33,6 @@ export default function(logAudit) {
             const contacts = await pool.query(`SELECT * FROM contacts WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             let categories = await pool.query(`SELECT * FROM categories WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             
-            // Perfil da empresa vinculada ao family_id (ID do proprietário)
             const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
             
             const branches = await pool.query(`SELECT * FROM branches WHERE family_id = $1`, [activeFamilyId]);
@@ -43,22 +42,20 @@ export default function(logAudit) {
 
             const srvItems = await pool.query(`SELECT * FROM module_services WHERE family_id = $1 AND deleted_at IS NULL`, [activeFamilyId]);
 
-            // Vendas com nome do criador
             const commOrders = await pool.query(`
                 SELECT o.*, c.name as contact_name, u.name as created_by_name
                 FROM commercial_orders o 
                 LEFT JOIN contacts c ON o.contact_id = c.id 
                 JOIN users u ON o.user_id = u.id
-                WHERE o.family_id = $1 AND o.deleted_at IS NULL
+                WHERE ${buildFilter('o')} AND o.deleted_at IS NULL
             `, [activeFamilyId]);
 
-            // OS com nome do criador
             const serviceOrders = await pool.query(`
                 SELECT so.*, c.name as contact_name, u.name as created_by_name
                 FROM service_orders so 
                 LEFT JOIN contacts c ON so.contact_id = c.id 
                 JOIN users u ON so.user_id = u.id
-                WHERE so.family_id = $1 AND so.deleted_at IS NULL
+                WHERE ${buildFilter('so')} AND so.deleted_at IS NULL
             `, [activeFamilyId]);
 
             const contractsRes = await pool.query(`
@@ -66,14 +63,14 @@ export default function(logAudit) {
                 FROM contracts ct 
                 LEFT JOIN contacts c ON ct.contact_id = c.id 
                 JOIN users u ON ct.user_id = u.id
-                WHERE ct.family_id = $1 AND ct.deleted_at IS NULL
+                WHERE ${buildFilter('ct')} AND ct.deleted_at IS NULL
             `, [activeFamilyId]);
 
             const invoicesRes = await pool.query(`
                 SELECT inv.*, c.name as contact_name 
                 FROM invoices inv 
                 LEFT JOIN contacts c ON inv.contact_id = c.id 
-                WHERE inv.family_id = $1 AND inv.deleted_at IS NULL
+                WHERE ${buildFilter('inv')} AND inv.deleted_at IS NULL
             `, [activeFamilyId]);
 
             res.json({
@@ -163,7 +160,6 @@ export default function(logAudit) {
             await client.query('BEGIN');
             const id = t.id || crypto.randomUUID();
 
-            // Proteção contra atualização de transação de outra família
             if (t.id) {
                 const check = await client.query('SELECT family_id FROM transactions WHERE id=$1', [t.id]);
                 if (check.rows.length > 0 && check.rows[0].family_id !== familyId) {
@@ -174,7 +170,7 @@ export default function(logAudit) {
             await client.query(
                 `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10`,
+                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10, family_id=$12`,
                 [id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, t.destinationAccountId, t.contactId, userId, familyId, t.isRecurring, t.recurrenceFrequency, t.recurrenceEndDate]
             );
 

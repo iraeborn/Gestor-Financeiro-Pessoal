@@ -111,7 +111,15 @@ export const initDb = async () => {
         for (const q of queries) {
             await pool.query(q);
         }
-        console.log("✅ [DATABASE] Estrutura comercial verificada.");
+
+        // --- AUTO-REPARO DE DADOS (MIGRAÇÃO DE CONTEXTO) ---
+        // Garante que registros PF antigos sem family_id apareçam para o usuário
+        const tablesToFix = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'service_orders', 'commercial_orders', 'contracts', 'invoices'];
+        for (const table of tablesToFix) {
+            await pool.query(`UPDATE ${table} SET family_id = user_id WHERE family_id IS NULL AND user_id IS NOT NULL`);
+        }
+
+        console.log("✅ [DATABASE] Estrutura verificada e dados sincronizados.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }
