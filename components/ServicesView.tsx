@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem, Category, Account } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap } from 'lucide-react';
+import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem, Category, Account, CompanyProfile, TaxRegime } from '../types';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 
@@ -12,14 +12,15 @@ interface ServicesViewProps {
     contracts: Contract[];
     invoices: Invoice[];
     contacts: Contact[];
-    accounts: Account[]; // Adicionado para permitir seleção no modal de aprovação
+    accounts: Account[];
+    companyProfile?: CompanyProfile | null; // Adicionado para lógica de impostos
     serviceItems?: ServiceItem[];
     
     onSaveOS: (os: ServiceOrder, newContact?: Contact) => void;
     onDeleteOS: (id: string) => void;
     onSaveOrder: (o: CommercialOrder, newContact?: Contact) => void;
     onDeleteOrder: (id: string) => void;
-    onApproveOrder?: (order: CommercialOrder, approvalData: any) => void; // Novo callback
+    onApproveOrder?: (order: CommercialOrder, approvalData: any) => void;
     onSaveContract: (c: Contract, newContact?: Contact) => void;
     onDeleteContract: (id: string) => void;
     onSaveInvoice: (i: Invoice, newContact?: Contact) => void;
@@ -30,7 +31,7 @@ interface ServicesViewProps {
 }
 
 const ServicesView: React.FC<ServicesViewProps> = ({ 
-    currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, accounts, serviceItems = [],
+    currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, accounts, companyProfile, serviceItems = [],
     onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem, onApproveOrder
 }) => {
     const { showConfirm } = useConfirm();
@@ -49,6 +50,18 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Helper para sugestão de impostos baseado no regime
+    const getTaxSuggestion = (regime?: TaxRegime) => {
+        if (!regime) return 0;
+        switch (regime) {
+            case TaxRegime.MEI: return 0; // MEI paga fixo via DAS
+            case TaxRegime.SIMPLES: return 6; // Alíquota inicial comum serviço
+            case TaxRegime.PRESUMIDO: return 15;
+            case TaxRegime.REAL: return 18;
+            default: return 0;
+        }
+    };
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -97,7 +110,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const header = getTitle();
 
     const handleOpenModal = (item?: any) => {
-        setTaxPercent(0);
         if (item && item.contactId) {
             const c = contacts.find(c => c.id === item.contactId);
             setContactSearch(c ? c.name : '');
@@ -115,6 +127,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 if (base > 0) setTaxPercent(Math.round(((item.taxAmount || 0) / base) * 100));
             } else {
                 setFormData({ status: 'DRAFT', date: new Date().toISOString().split('T')[0], grossAmount: 0, discountAmount: 0, taxAmount: 0, items: [] });
+                // Aplicar sugestão de imposto para novos orçamentos baseada no regime PJ
+                setTaxPercent(getTaxSuggestion(companyProfile?.taxRegime));
             }
         } else {
             setFormData(item || {});
@@ -507,8 +521,20 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                         <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Soma Bruta</label><p className="text-xl font-bold text-gray-800">{formatCurrency(pricing.gross)}</p></div>
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Desconto (R$)</label><input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-rose-600 font-bold" value={formData.discountAmount || ''} onChange={e => setFormData({...formData, discountAmount: e.target.value})} /></div>
-                                                            <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Impostos (%)</label><input type="number" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-gray-600" value={taxPercent} onChange={e => setTaxPercent(Number(e.target.value))} /></div>
+                                                            <div>
+                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 flex justify-between">
+                                                                    Impostos (%)
+                                                                    {companyProfile?.taxRegime === 'MEI' && <span className="text-[8px] text-emerald-600">MEI Isento</span>}
+                                                                </label>
+                                                                <input type="number" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-gray-600" value={taxPercent} onChange={e => setTaxPercent(Number(e.target.value))} />
+                                                            </div>
                                                         </div>
+                                                        {companyProfile?.taxRegime && (
+                                                            <div className="bg-indigo-50/50 p-2 rounded-lg flex items-center gap-2 border border-indigo-100">
+                                                                <Info className="w-3 h-3 text-indigo-500" />
+                                                                <p className="text-[9px] text-indigo-700 font-bold uppercase tracking-tight">Regime: {companyProfile.taxRegime}</p>
+                                                            </div>
+                                                        )}
                                                         <div className="pt-4 border-t border-gray-200 space-y-2">
                                                             <div className="flex justify-between text-2xl font-extrabold text-indigo-700"><span>Líquido</span><span>{formatCurrency(pricing.net)}</span></div>
                                                         </div>
