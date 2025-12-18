@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem, Category } from '../types';
+/* Added missing 'Package' to lucide-react imports */
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface ServicesViewProps {
@@ -11,22 +12,19 @@ interface ServicesViewProps {
     contracts: Contract[];
     invoices: Invoice[];
     contacts: Contact[];
-    serviceItems?: ServiceItem[]; // Catalog Items
+    serviceItems?: ServiceItem[];
     
-    // CRUD Handlers
-    onSaveOS: (os: ServiceOrder) => void;
+    onSaveOS: (os: ServiceOrder, newContact?: Contact) => void;
     onDeleteOS: (id: string) => void;
-    onSaveOrder: (o: CommercialOrder) => void;
+    onSaveOrder: (o: CommercialOrder, newContact?: Contact) => void;
     onDeleteOrder: (id: string) => void;
-    onSaveContract: (c: Contract) => void;
+    onSaveContract: (c: Contract, newContact?: Contact) => void;
     onDeleteContract: (id: string) => void;
-    onSaveInvoice: (i: Invoice) => void;
+    onSaveInvoice: (i: Invoice, newContact?: Contact) => void;
     onDeleteInvoice: (id: string) => void;
     onSaveCatalogItem?: (i: ServiceItem) => void;
     onDeleteCatalogItem?: (id: string) => void;
-    
-    // Integration
-    onAddTransaction: (t: any) => void; // Shortcut to create financial record
+    onAddTransaction: (t: any) => void;
 }
 
 const ServicesView: React.FC<ServicesViewProps> = ({ 
@@ -37,43 +35,44 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // Catalog specific state
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
-    
-    // Generic form state
     const [formData, setFormData] = useState<any>({}); 
-
-    // --- Pricing Logic for Sales ---
     const [taxPercent, setTaxPercent] = useState<number>(0);
+
+    // Contact Search States
+    const [contactSearch, setContactSearch] = useState('');
+    const [showContactDropdown, setShowContactDropdown] = useState(false);
+    const contactDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+                setShowContactDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const pricing = useMemo(() => {
         if (currentView !== 'SRV_SALES' && currentView !== 'SRV_PURCHASES') return null;
-        
         const items = (formData.items || []) as OrderItem[];
         const gross = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
         const disc = Number(formData.discountAmount) || 0;
-        
-        // Impostos sobre o valor pós-desconto
         const taxes = (gross - disc) * (taxPercent / 100);
         const net = gross - disc - (currentView === 'SRV_SALES' ? taxes : 0);
-
-        // Margem Global
         const totalCost = items.reduce((sum, item) => sum + ((Number(item.costPrice) || 0) * (item.quantity || 1)), 0);
         const profit = net - totalCost;
         const margin = totalCost > 0 ? (profit / totalCost) * 100 : 100;
-
         return { gross, disc, taxes, net, totalCost, profit, margin };
     }, [formData.items, formData.discountAmount, taxPercent, currentView]);
 
-    // Sincroniza o valor final (net) com o campo 'amount' que é o valor oficial salvo
     useEffect(() => {
         if (pricing && (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES')) {
             setFormData((prev: any) => ({ ...prev, amount: pricing.net }));
         }
     }, [pricing?.net, currentView]);
 
-    // --- Helpers ---
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
 
@@ -91,32 +90,25 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const header = getTitle();
 
-    // --- Actions ---
     const handleOpenModal = (item?: any) => {
         setTaxPercent(0);
+        if (item && item.contactId) {
+            const c = contacts.find(c => c.id === item.contactId);
+            setContactSearch(c ? c.name : '');
+        } else {
+            setContactSearch('');
+        }
+
         if (currentView === 'SRV_CATALOG') {
             if (item) setFormData({ ...item });
             else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '' });
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
-                setFormData({ 
-                    ...item, 
-                    grossAmount: item.grossAmount || item.amount, 
-                    discountAmount: item.discountAmount || 0, 
-                    taxAmount: item.taxAmount || 0,
-                    items: item.items || []
-                });
+                setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
                 const base = (item.grossAmount || item.amount) - (item.discountAmount || 0);
                 if (base > 0) setTaxPercent(Math.round(((item.taxAmount || 0) / base) * 100));
             } else {
-                setFormData({ 
-                    status: 'DRAFT', 
-                    date: new Date().toISOString().split('T')[0], 
-                    grossAmount: 0, 
-                    discountAmount: 0, 
-                    taxAmount: 0,
-                    items: [] 
-                });
+                setFormData({ status: 'DRAFT', date: new Date().toISOString().split('T')[0], grossAmount: 0, discountAmount: 0, taxAmount: 0, items: [] });
             }
         } else {
             setFormData(item || {});
@@ -124,7 +116,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         setIsModalOpen(true);
     };
 
-    // --- Item List Management ---
     const handleAddItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
         const newItem: OrderItem = {
@@ -136,11 +127,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             totalPrice: catalogItem?.defaultPrice || 0,
             costPrice: catalogItem?.costPrice
         };
-        
-        setFormData((prev: any) => ({
-            ...prev,
-            items: [...(prev.items || []), newItem]
-        }));
+        setFormData((prev: any) => ({ ...prev, items: [...(prev.items || []), newItem] }));
     };
 
     const handleUpdateItem = (itemId: string, field: keyof OrderItem, value: any) => {
@@ -158,19 +145,31 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     const handleRemoveItem = (itemId: string) => {
-        setFormData((prev: any) => ({
-            ...prev,
-            items: (prev.items || []).filter((i: OrderItem) => i.id !== itemId)
-        }));
+        setFormData((prev: any) => ({ ...prev, items: (prev.items || []).filter((i: OrderItem) => i.id !== itemId) }));
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        let finalContactId = formData.contactId;
+        let newContactObj: Contact | undefined;
+
+        if (contactSearch) {
+            const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
+            if (existing) {
+                finalContactId = existing.id;
+            } else {
+                const newId = crypto.randomUUID();
+                newContactObj = { id: newId, name: contactSearch, type: 'PF' };
+                finalContactId = newId;
+            }
+        }
+
         const id = formData.id || crypto.randomUUID();
-        const common = { id, contactId: formData.contactId };
+        const common = { id, contactId: finalContactId };
 
         if (currentView === 'SRV_OS') {
-            onSaveOS({ ...formData, ...common, totalAmount: Number(formData.totalAmount) || 0, status: formData.status || 'OPEN' });
+            onSaveOS({ ...formData, ...common, totalAmount: Number(formData.totalAmount) || 0, status: formData.status || 'OPEN' }, newContactObj);
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const type = currentView === 'SRV_SALES' ? 'SALE' : 'PURCHASE';
             onSaveOrder({ 
@@ -182,11 +181,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 items: formData.items || [],
                 date: formData.date || new Date().toISOString().split('T')[0], 
                 status: formData.status || 'DRAFT' 
-            });
+            }, newContactObj);
         } else if (currentView === 'SRV_CONTRACTS') {
-            onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' });
+            onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
-            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issueDate: formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' });
+            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issueDate: formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
         } else if (currentView === 'SRV_CATALOG' && onSaveCatalogItem) {
             onSaveCatalogItem({ ...formData, id, defaultPrice: Number(formData.defaultPrice) || 0, costPrice: Number(formData.costPrice) || 0, type: formData.type || 'SERVICE' });
         }
@@ -205,7 +204,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     const handleGenerateTransaction = async (item: any) => {
-        if (await showConfirm({ title: 'Gerar Financeiro', message: 'Deseja criar um lançamento financeiro (Conta a Receber/Pagar) para este item?', confirmText: 'Sim, Gerar' })) {
+        if (await showConfirm({ title: 'Gerar Financeiro', message: 'Deseja criar um lançamento financeiro para este item?', confirmText: 'Sim, Gerar' })) {
             let trans: any = {
                 description: item.description || item.title || 'Venda/Compra',
                 amount: item.amount,
@@ -240,25 +239,27 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return map[status] || status;
     };
 
-    const renderContent = () => {
-        let items: any[] = [];
-        if (currentView === 'SRV_OS') items = serviceOrders;
-        else if (currentView === 'SRV_SALES') items = commercialOrders.filter(o => o.type === 'SALE');
-        else if (currentView === 'SRV_PURCHASES') items = commercialOrders.filter(o => o.type === 'PURCHASE');
-        else if (currentView === 'SRV_CONTRACTS') items = contracts;
-        else if (currentView === 'SRV_NF') items = invoices;
-        else if (currentView === 'SRV_CATALOG') items = serviceItems.filter(i => catalogTab === 'ALL' || i.type === catalogTab);
+    const filteredItemsBySearch = (items: any[]) => items.filter(i => 
+        (i.title || i.description || i.name || i.code || i.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (i.contactName || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-        const filtered = items.filter(i => 
-            (i.title || i.description || i.name || i.code || i.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (i.contactName || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
+    const renderGridContent = () => {
+        let rawItems: any[] = [];
+        if (currentView === 'SRV_OS') rawItems = serviceOrders;
+        else if (currentView === 'SRV_SALES') rawItems = commercialOrders.filter(o => o.type === 'SALE');
+        else if (currentView === 'SRV_PURCHASES') rawItems = commercialOrders.filter(o => o.type === 'PURCHASE');
+        else if (currentView === 'SRV_CONTRACTS') rawItems = contracts;
+        else if (currentView === 'SRV_NF') rawItems = invoices;
+        else if (currentView === 'SRV_CATALOG') rawItems = serviceItems.filter(i => catalogTab === 'ALL' || i.type === catalogTab);
+
+        const filtered = filteredItemsBySearch(rawItems);
 
         if (filtered.length === 0) return (
             <div className="bg-white rounded-3xl p-12 text-center border border-gray-100 shadow-sm">
                 <Box className="w-16 h-16 text-gray-200 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-800">Nenhum registro encontrado</h3>
-                <p className="text-gray-500 max-w-xs mx-auto">Tente ajustar sua busca ou adicione um novo item para começar.</p>
+                <p className="text-gray-500 max-w-sm mx-auto">Tente ajustar sua busca ou adicione um novo item para começar.</p>
             </div>
         );
 
@@ -311,7 +312,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 {getStatusLabel(item.status)}
                             </span>
                         </div>
-                        
                         <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-1">
                             <div className="flex justify-between text-xs">
                                 <span className="text-gray-500">Valor Bruto</span>
@@ -328,7 +328,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 <span className={currentView === 'SRV_PURCHASES' ? 'text-rose-600' : 'text-emerald-600'}>{formatCurrency(item.amount)}</span>
                             </div>
                         </div>
-
                         <div className="flex justify-between items-center text-xs text-gray-400">
                              <span>{formatDate(item.date || item.startDate || item.issueDate)}</span>
                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -372,7 +371,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 </div>
             )}
 
-            {renderContent()}
+            {renderGridContent()}
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -382,228 +381,160 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
                         </div>
                         <form onSubmit={handleSave} className="space-y-8">
-                            
-                            {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') && (
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                    {/* LADO ESQUERDO: Lista de Itens */}
-                                    <div className="lg:col-span-2 space-y-6">
-                                        <div className="flex justify-between items-center">
-                                            <h3 className="font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wider text-xs">
-                                                <Box className="w-4 h-4 text-indigo-500"/> Itens do Orçamento
-                                            </h3>
-                                            <div className="flex gap-2">
-                                                <select 
-                                                    className="border border-gray-200 rounded-lg p-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-500" 
-                                                    onChange={e => { if(e.target.value) handleAddItem(e.target.value); e.target.value = ''; }}
-                                                >
-                                                    <option value="">+ Catálogo</option>
-                                                    {serviceItems.map(i => <option key={i.id} value={i.id}>{i.name} ({formatCurrency(i.defaultPrice)})</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => handleAddItem()} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                                                    + Item Avulso
-                                                </button>
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2 space-y-6">
+                                    {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') ? (
+                                        <>
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wider text-xs">
+                                                    <Box className="w-4 h-4 text-indigo-500"/> Itens do Orçamento
+                                                </h3>
+                                                <div className="flex gap-2">
+                                                    <select className="border border-gray-200 rounded-lg p-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-indigo-500" onChange={e => { if(e.target.value) handleAddItem(e.target.value); e.target.value = ''; }}>
+                                                        <option value="">+ Catálogo</option>
+                                                        {serviceItems.map(i => <option key={i.id} value={i.id}>{i.name} ({formatCurrency(i.defaultPrice)})</option>)}
+                                                    </select>
+                                                    <button type="button" onClick={() => handleAddItem()} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">+ Item Avulso</button>
+                                                </div>
                                             </div>
-                                        </div>
-
-                                        <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden shadow-inner">
-                                            <table className="w-full text-left border-collapse">
-                                                <thead className="bg-gray-100/80 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-200">
-                                                    <tr>
-                                                        <th className="px-4 py-3">Descrição do Produto/Serviço</th>
-                                                        <th className="px-4 py-3 w-20">Qtd</th>
-                                                        <th className="px-4 py-3 w-32">Preço Un.</th>
-                                                        <th className="px-4 py-3 w-32">Total</th>
-                                                        <th className="px-4 py-3 w-10"></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-200">
-                                                    {(formData.items || []).map((item: OrderItem) => (
-                                                        <tr key={item.id} className="bg-white hover:bg-indigo-50/20 transition-colors">
-                                                            <td className="px-4 py-2">
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={item.description} 
-                                                                    onChange={e => handleUpdateItem(item.id, 'description', e.target.value)}
-                                                                    className="w-full bg-transparent border-none focus:ring-0 text-sm font-medium text-gray-800"
-                                                                    placeholder="Nome do item..."
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-2">
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={item.quantity} 
-                                                                    onChange={e => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
-                                                                    className="w-full bg-transparent border-none focus:ring-0 text-sm"
-                                                                    min="1"
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-2">
-                                                                <input 
-                                                                    type="number" 
-                                                                    step="0.01"
-                                                                    value={item.unitPrice} 
-                                                                    onChange={e => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))}
-                                                                    className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold"
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-2 text-sm font-bold text-gray-900">
-                                                                {formatCurrency(item.totalPrice)}
-                                                            </td>
-                                                            <td className="px-4 py-2 text-right">
-                                                                <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                    {(formData.items || []).length === 0 && (
+                                            <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden shadow-inner">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead className="bg-gray-100/80 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-200">
                                                         <tr>
-                                                            <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-xs italic">
-                                                                Clique em "Adicionar Item" para compor seu orçamento.
-                                                            </td>
+                                                            <th className="px-4 py-3">Descrição do Produto/Serviço</th>
+                                                            <th className="px-4 py-3 w-20">Qtd</th>
+                                                            <th className="px-4 py-3 w-32">Preço Un.</th>
+                                                            <th className="px-4 py-3 w-32">Total</th>
+                                                            <th className="px-4 py-3 w-10"></th>
                                                         </tr>
-                                                    )}
-                                                </tbody>
-                                            </table>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-200">
+                                                        {(formData.items || []).map((item: OrderItem) => (
+                                                            <tr key={item.id} className="bg-white hover:bg-indigo-50/20 transition-colors">
+                                                                <td className="px-4 py-2"><input type="text" value={item.description} onChange={e => handleUpdateItem(item.id, 'description', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-sm font-medium text-gray-800" placeholder="Nome do item..."/></td>
+                                                                <td className="px-4 py-2"><input type="number" value={item.quantity} onChange={e => handleUpdateItem(item.id, 'quantity', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-sm" min="1"/></td>
+                                                                <td className="px-4 py-2"><input type="number" step="0.01" value={item.unitPrice} onChange={e => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold"/></td>
+                                                                <td className="px-4 py-2 text-sm font-bold text-gray-900">{formatCurrency(item.totalPrice)}</td>
+                                                                <td className="px-4 py-2 text-right"><button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
+                                                            </tr>
+                                                        ))}
+                                                        {(formData.items || []).length === 0 && (<tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-xs italic">Clique em "Adicionar Item" para compor seu orçamento.</td></tr>)}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    ) : currentView === 'SRV_CATALOG' ? (
+                                        <div className="space-y-4 max-w-2xl mx-auto">
+                                            <div className="flex bg-gray-100 p-1 rounded-xl mb-4 border border-gray-200">
+                                                <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'SERVICE'}))} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${formData.type !== 'PRODUCT' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500'}`}>Serviço</button>
+                                                <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'PRODUCT'}))} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow-md text-amber-600' : 'text-gray-500'}`}>Produto</button>
+                                            </div>
+                                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Nome do Item</label><input type="text" placeholder="Ex: Mouse Sem Fio..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required /></div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="block text-xs font-bold text-gray-700 mb-1">Preço de Venda</label><input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required /></div>
+                                                <div><label className="block text-xs font-bold text-gray-700 mb-1">Custo Unitário</label><input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} /></div>
+                                            </div>
+                                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Descrição</label><textarea placeholder="Detalhes..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
                                         </div>
-                                        
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título do Pedido</label>
-                                                <input type="text" placeholder="Ex: Projeto Reforma, Venda Mensal..." className="w-full border border-gray-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} required />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cliente / Fornecedor</label>
-                                                <select className="w-full border border-gray-200 rounded-xl p-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500" value={formData.contactId || ''} onChange={e => setFormData({...formData, contactId: e.target.value})} required>
-                                                    <option value="">Selecione um contato...</option>
-                                                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* LADO DIREITO: Totais e Calculadora */}
-                                    <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100 flex flex-col justify-between shadow-inner">
-                                        <div className="space-y-4">
-                                            <h3 className="font-bold text-gray-700 flex items-center gap-2 border-b border-gray-200 pb-2"><ReceiptText className="w-4 h-4 text-indigo-500"/> Resumo Financeiro</h3>
-                                            
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Soma dos Itens (Bruto)</label>
-                                                    <p className="text-xl font-bold text-gray-800">{formatCurrency(pricing?.gross || 0)}</p>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Desconto (R$)</label>
-                                                        <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-rose-600 font-bold focus:ring-2 focus:ring-rose-500 outline-none" value={formData.discountAmount || ''} onChange={e => setFormData({...formData, discountAmount: e.target.value})} />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Impostos (%)</label>
-                                                        <input type="number" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none" value={taxPercent} onChange={e => setTaxPercent(Number(e.target.value))} />
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-4 border-t border-gray-200 space-y-2">
-                                                    <div className="flex justify-between text-xs text-gray-500 font-medium">
-                                                        <span>Impostos Estimados</span>
-                                                        <span>{formatCurrency(pricing?.taxes || 0)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between text-2xl font-extrabold text-indigo-700">
-                                                        <span>Valor Líquido</span>
-                                                        <span>{formatCurrency(pricing?.net || 0)}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4 pt-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Data</label>
-                                                    <input type="date" className="w-full border border-gray-200 rounded-xl p-2 text-xs outline-none" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} required />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status</label>
-                                                    <select className="w-full border border-gray-200 rounded-xl p-2 text-xs bg-white" value={formData.status || 'DRAFT'} onChange={e => setFormData({...formData, status: e.target.value})}>
-                                                        <option value="DRAFT">Orçamento</option>
-                                                        <option value="APPROVED">Aprovado</option>
-                                                        <option value="CONFIRMED">Vendido</option>
+                                    ) : (
+                                        <div className="space-y-4 max-w-2xl mx-auto">
+                                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Título</label><input type="text" placeholder="Ex: Manutenção..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.title || formData.description || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value})} required /></div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="block text-xs font-bold text-gray-700 mb-1">Valor</label><input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.totalAmount || formData.amount || formData.value || ''} onChange={e => setFormData({...formData, totalAmount: e.target.value, amount: e.target.value, value: e.target.value})} /></div>
+                                                <div><label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
+                                                    <select className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white" value={formData.status || 'OPEN'} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                                        <option value="OPEN">Aberto / Orçamento</option>
+                                                        <option value="IN_PROGRESS">Em Andamento</option>
+                                                        <option value="DONE">Concluído</option>
                                                         <option value="CANCELED">Cancelado</option>
                                                     </select>
                                                 </div>
                                             </div>
                                         </div>
+                                    )}
 
-                                        {/* Painel de Margem */}
-                                        {pricing && pricing.totalCost > 0 && (
-                                            <div className={`mt-6 p-4 rounded-2xl border transition-colors ${pricing.margin > 30 ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] font-bold uppercase text-gray-500 flex items-center gap-1"><TrendingUp className="w-3 h-3"/> Lucro Estimado</span>
-                                                    <span className={`text-xs font-extrabold ${pricing.margin > 30 ? 'text-emerald-700' : 'text-amber-700'}`}>{Math.round(pricing.margin)}%</span>
+                                    {currentView !== 'SRV_CATALOG' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') ? null : (
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título do Pedido</label>
+                                                    <input type="text" placeholder="Ex: Projeto Reforma..." className="w-full border border-gray-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} required />
                                                 </div>
-                                                <p className="font-extrabold text-gray-800 text-lg">{formatCurrency(pricing.profit)}</p>
-                                                <p className="text-[9px] text-gray-400 mt-1 italic">Custo total dos itens: {formatCurrency(pricing.totalCost)}</p>
+                                            )}
+                                            
+                                            {/* Busca de Contato Inteligente */}
+                                            <div className="relative" ref={contactDropdownRef}>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pessoa / Empresa</label>
+                                                <div className="relative">
+                                                    <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                                                    <input 
+                                                        type="text" 
+                                                        value={contactSearch} 
+                                                        onFocus={() => setShowContactDropdown(true)} 
+                                                        onChange={(e) => {setContactSearch(e.target.value); setShowContactDropdown(true);}} 
+                                                        className="w-full pl-9 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white" 
+                                                        placeholder="Buscar ou criar..." 
+                                                    />
+                                                </div>
+                                                {showContactDropdown && (
+                                                    <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                                                        {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
+                                                            <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors flex items-center justify-between">
+                                                                {c.name}
+                                                            </button>
+                                                        ))}
+                                                        {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
+                                                            <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
+                                                                <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {currentView === 'SRV_CATALOG' && (
-                                <div className="space-y-4 max-w-2xl mx-auto">
-                                     <div className="flex bg-gray-100 p-1 rounded-xl mb-4 border border-gray-200">
-                                        <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'SERVICE'}))} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${formData.type !== 'PRODUCT' ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500'}`}>Serviço</button>
-                                        <button type="button" onClick={() => setFormData((prev: any) => ({...prev, type: 'PRODUCT'}))} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${formData.type === 'PRODUCT' ? 'bg-white shadow-md text-amber-600' : 'text-gray-500'}`}>Produto</button>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Nome do Item</label>
-                                        <input type="text" placeholder="Ex: Mouse Sem Fio, Consultoria VIP..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">Preço de Venda</label>
-                                            <input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} required />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">Custo Unitário</label>
-                                            <input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Descrição</label>
-                                        <textarea placeholder="Detalhes técnicos ou descrição do serviço..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows={3} value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
-                                    </div>
-                                </div>
-                            )}
+                                {/* LADO DIREITO: Resumo Financeiro */}
+                                {currentView !== 'SRV_CATALOG' && (
+                                    <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100 flex flex-col shadow-inner h-fit">
+                                        <h3 className="font-bold text-gray-700 flex items-center gap-2 border-b border-gray-200 pb-2 mb-4"><ReceiptText className="w-4 h-4 text-indigo-500"/> Resumo</h3>
+                                        <div className="space-y-4">
+                                            {(pricing) ? (
+                                                <>
+                                                    <div className="space-y-4">
+                                                        <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Soma Bruta</label><p className="text-xl font-bold text-gray-800">{formatCurrency(pricing.gross)}</p></div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Desconto (R$)</label><input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-rose-600 font-bold" value={formData.discountAmount || ''} onChange={e => setFormData({...formData, discountAmount: e.target.value})} /></div>
+                                                            <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Impostos (%)</label><input type="number" className="w-full border border-gray-200 rounded-xl p-2 text-sm text-gray-600" value={taxPercent} onChange={e => setTaxPercent(Number(e.target.value))} /></div>
+                                                        </div>
+                                                        <div className="pt-4 border-t border-gray-200 space-y-2">
+                                                            <div className="flex justify-between text-2xl font-extrabold text-indigo-700"><span>Líquido</span><span>{formatCurrency(pricing.net)}</span></div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor do Registro</label><p className="text-2xl font-extrabold text-indigo-700">{formatCurrency(Number(formData.totalAmount || formData.amount || formData.value || 0))}</p></div>
+                                                </div>
+                                            )}
 
-                            {/* OS, NF e Contratos podem ser simplificados ou manter a estrutura anterior */}
-                            {currentView === 'SRV_OS' && (
-                                <div className="space-y-4 max-w-2xl mx-auto">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Título da OS</label>
-                                        <input type="text" placeholder="Ex: Manutenção Servidor, Pintura Escritório..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} required />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">Valor Total</label>
-                                            <input type="number" step="0.01" placeholder="0,00" className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.totalAmount || ''} onChange={e => setFormData({...formData, totalAmount: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">Status</label>
-                                            <select className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500" value={formData.status || 'OPEN'} onChange={e => setFormData({...formData, status: e.target.value})}>
-                                                <option value="OPEN">Aberta</option>
-                                                <option value="IN_PROGRESS">Em Andamento</option>
-                                                <option value="DONE">Concluída</option>
-                                                <option value="CANCELED">Cancelada</option>
-                                            </select>
+                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                                                <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Data</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2 text-xs" value={formData.date || formData.startDate || formData.issueDate || ''} onChange={e => setFormData({...formData, date: e.target.value, startDate: e.target.value, issueDate: e.target.value})} required /></div>
+                                                <div><label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status</label>
+                                                    <select className="w-full border border-gray-200 rounded-xl p-2 text-xs bg-white" value={formData.status || 'DRAFT'} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                                        {currentView === 'SRV_OS' ? (
+                                                            <><option value="OPEN">Aberto</option><option value="IN_PROGRESS">Em Curso</option><option value="DONE">Concluído</option><option value="CANCELED">Cancelado</option></>
+                                                        ) : (
+                                                            <><option value="DRAFT">Orçamento</option><option value="APPROVED">Aprovado</option><option value="CONFIRMED">Confirmado</option><option value="CANCELED">Cancelado</option></>
+                                                        )}
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-700 mb-1">Cliente Solicitante</label>
-                                        <select className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500" value={formData.contactId || ''} onChange={e => setFormData({...formData, contactId: e.target.value})} required>
-                                            <option value="">Selecione o Cliente...</option>
-                                            {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 text-gray-500 hover:bg-gray-100 rounded-xl font-bold transition-all">Cancelar</button>
