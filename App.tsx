@@ -10,6 +10,7 @@ import {
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert } from './components/AlertSystem';
 import { Menu } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
@@ -53,6 +54,28 @@ const App: React.FC = () => {
 
   useEffect(() => { checkAuth(); }, []);
 
+  // --- WebSocket Real-time Sync ---
+  useEffect(() => {
+    if (currentUser?.familyId) {
+      const socket = io(window.location.origin);
+      
+      socket.on('connect', () => {
+        socket.emit('join_family', currentUser.familyId);
+      });
+
+      socket.on('DATA_UPDATED', (payload) => {
+        // Se a alteração não foi feita por mim, recarrego os dados silenciosamente
+        if (payload.actorId !== currentUser.id) {
+          loadData(true); // true para modo silencioso (sem spinner de tela cheia)
+        }
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [currentUser?.familyId, currentUser?.id]);
+
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -68,15 +91,15 @@ const App: React.FC = () => {
     setAuthChecked(true);
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const initialData = await loadInitialData();
       setData(initialData);
     } catch (e) {
       showAlert("Erro ao carregar dados.", "error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -227,6 +250,7 @@ const App: React.FC = () => {
       case 'ODONTO_AGENDA':
       case 'ODONTO_PATIENTS':
       case 'ODONTO_PROCEDURES':
+        /* Fixed typo: deleteServiceService changed to deleteServiceItem */
         return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Serviços Odontológicos" activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'} clients={data.serviceClients.filter(c => c.moduleTag === 'ODONTO' || c.moduleTag === 'GENERAL')} services={data.serviceItems.filter(s => s.moduleTag === 'ODONTO' || s.moduleTag === 'GENERAL')} appointments={data.serviceAppointments.filter(a => a.moduleTag === 'ODONTO' || a.moduleTag === 'GENERAL')} contacts={data.contacts} onSaveClient={async (c) => wrapSave(api.saveServiceClient, { ...c, moduleTag: 'ODONTO' }, "Paciente salvo")} onDeleteClient={async (id) => wrapDel(api.deleteServiceClient, id, "Paciente excluído")} onSaveService={async (s) => wrapSave(api.saveServiceItem, { ...s, moduleTag: 'ODONTO' }, "Procedimento salvo")} onDeleteService={async (id) => wrapDel(api.deleteServiceItem, id, "Procedimento excluído")} onSaveAppointment={async (a) => wrapSave(api.saveServiceAppointment, { ...a, moduleTag: 'ODONTO' }, "Agendamento salvo")} onDeleteAppointment={async (id) => wrapDel(api.deleteServiceAppointment, id, "Agendamento excluído")} onAddTransaction={handleAddTransaction} />;
       case 'SRV_OS':
       case 'SRV_SALES':
