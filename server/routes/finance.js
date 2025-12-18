@@ -7,38 +7,72 @@ import { Storage } from '@google-cloud/storage';
 import { authenticateToken, updateAccountBalance, sanitizeValue } from '../middleware.js';
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // Limite de 10MB por arquivo
+});
 
 // Configuração do Google Cloud Storage
-// Assume-se que o ambiente tem as credenciais configuradas (Application Default Credentials)
+// Certifique-se que as credenciais do GCP estão configuradas no ambiente (ADC ou Service Account JSON)
 const storage = new Storage();
 const bucketName = process.env.GCS_BUCKET_NAME || 'finmanager-attachments';
 const bucket = storage.bucket(bucketName);
 
 export default function(logAudit) {
     
-    // NOVO: Endpoint para upload de arquivos no GCS
+    // Rota de Upload: Salva arquivos na pasta 'attachments/' no bucket
     router.post('/upload', authenticateToken, upload.array('files'), async (req, res) => {
         try {
             if (!req.files || req.files.length === 0) {
                 return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
             }
 
+            // Validar se o bucket existe antes de iniciar o stream
+            const [exists] = await bucket.exists();
+            if (!exists) {
+                console.error(`[CRÍTICO] Bucket "${bucketName}" não encontrado no Google Cloud.`);
+                return res.status(500).json({ error: `Configuração incorreta: Bucket ${bucketName} inexistente.` });
+            }
+
             const uploadPromises = req.files.map(file => {
-                const fileName = `attachments/${req.user.id}/${crypto.randomUUID()}-${file.originalname}`;
+                // Sanitização básica do nome do arquivo
+                const cleanName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
+                // Estrutura: attachments/[id_usuario]/[uuid]-[nome]
+                const fileName = `attachments/${req.user.id}/${crypto.randomUUID()}-${cleanName}`;
+                
                 const blob = bucket.file(fileName);
                 const blobStream = blob.createWriteStream({
                     resumable: false,
-                    metadata: { contentType: file.mimetype }
+                    metadata: { 
+                        contentType: file.mimetype,
+                        cacheControl: 'public, max-age=31536000'
+                    }
                 });
 
                 return new Promise((resolve, reject) => {
-                    blobStream.on('error', err => reject(err));
-                    blobStream.on('finish', () => {
-                        // URL de acesso público ao objeto
-                        const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
-                        resolve(publicUrl);
+                    blobStream.on('error', err => {
+                        console.error("[GCS Stream Error]", err);
+                        reject(err);
                     });
+
+                    blobStream.on('finish', async () => {
+                        try {
+                            // Tenta tornar o arquivo público. 
+                            // Nota: Se o bucket estiver em "Uniform Bucket-Level Access", isso falhará.
+                            // Recomenda-se configurar a permissão "Storage Object Viewer" para "allUsers" no nível do bucket.
+                            try {
+                                await blob.makePublic();
+                            } catch (e) {
+                                console.warn(`[GCS IAM] Falha ao executar makePublic() em ${fileName}. Verifique as permissões de ACL do bucket.`);
+                            }
+                            
+                            const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
+                            resolve(publicUrl);
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+
                     blobStream.end(file.buffer);
                 });
             });
@@ -46,8 +80,8 @@ export default function(logAudit) {
             const urls = await Promise.all(uploadPromises);
             res.json({ urls });
         } catch (err) {
-            console.error("GCS Upload Error:", err);
-            res.status(500).json({ error: 'Falha ao enviar para o Cloud Storage.' });
+            console.error("GCS Processing Error:", err);
+            res.status(500).json({ error: 'Erro ao processar o envio para nuvem: ' + err.message });
         }
     });
 
