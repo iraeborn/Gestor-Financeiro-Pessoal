@@ -27,19 +27,14 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       legalName: '',
       cnae: '',
       secondaryCnaes: '',
-      
-      // Endereço
       zipCode: '',
       street: '',
       number: '',
       neighborhood: '',
       city: '',
       state: '',
-      
-      // Contato
       phone: '',
       email: '',
-
       taxRegime: TaxRegime.SIMPLES,
       hasEmployees: false,
       issuesInvoices: false
@@ -49,26 +44,52 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Cast window to any to access custom properties and google object injected by scripts
     const win = window as any;
-    const clientId = win.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
- 
-    if (win.google && clientId && mode === 'LOGIN') {
-      try {
-        win.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: handleGoogleCallback
-        });
-        const buttonDiv = document.getElementById("googleSignInDiv");
-        if (buttonDiv) {
-          win.google.accounts.id.renderButton(
-            buttonDiv,
-            { theme: "outline", size: "large", width: "100%" } 
-          );
+    const clientId = process.env.GOOGLE_CLIENT_ID || win.GOOGLE_CLIENT_ID;
+
+    if (mode === 'LOGIN') {
+      let retryCount = 0;
+      const maxRetries = 10;
+
+      const initGoogle = () => {
+        if (win.google?.accounts?.id) {
+          if (!clientId) {
+            console.warn("Google Client ID não configurado nas variáveis de ambiente.");
+            return;
+          }
+
+          try {
+            win.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: handleGoogleCallback,
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
+
+            const buttonDiv = document.getElementById("googleSignInDiv");
+            if (buttonDiv) {
+              win.google.accounts.id.renderButton(
+                buttonDiv,
+                { 
+                  theme: "outline", 
+                  size: "large", 
+                  width: buttonDiv.offsetWidth || 350,
+                  text: "signin_with",
+                  shape: "rectangular"
+                } 
+              );
+            }
+          } catch (e) {
+            console.error("Erro ao renderizar botão do Google:", e);
+          }
+        } else if (retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(initGoogle, 500); // Tenta novamente em 500ms
         }
-      } catch (e) {
-        console.error("Erro ao inicializar botão do Google:", e);
-      }
+      };
+
+      // Pequeno delay para garantir que o elemento DOM 'googleSignInDiv' foi montado pelo React
+      setTimeout(initGoogle, 100);
     }
   }, [mode]);
 
@@ -91,7 +112,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       try {
           const data = await consultCnpj(cnpj);
           if (data) {
-              // Mapear CNAEs Secundários
               let secCnaesStr = '';
               if (data.cnaes_secundarios && Array.isArray(data.cnaes_secundarios)) {
                   secCnaesStr = data.cnaes_secundarios.map((item: any) => `${item.codigo} - ${item.descricao}`).join('\n');
@@ -103,24 +123,17 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                   legalName: data.razao_social,
                   cnae: `${data.cnae_fiscal} - ${data.cnae_fiscal_descricao}`,
                   secondaryCnaes: secCnaesStr,
-                  
-                  // Mapeamento Endereço
                   zipCode: data.cep,
                   street: `${data.descricao_tipo_de_logradouro || ''} ${data.logradouro}`.trim(),
                   number: data.numero,
                   neighborhood: data.bairro,
                   city: data.municipio,
                   state: data.uf,
-                  
-                  // Mapeamento Contato
                   phone: data.ddd_telefone_1,
                   email: data.email
               }));
               
-              if (data.nome_fantasia || data.razao_social) {
-                  setName(data.nome_fantasia || data.razao_social); 
-              }
-              // Tentar preencher email se vier da receita e estiver vazio
+              if (data.nome_fantasia || data.razao_social) setName(data.nome_fantasia || data.razao_social);
               if (data.email && !email) setEmail(data.email.toLowerCase());
           }
       } catch (e) {
@@ -134,14 +147,11 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       let data;
       if (mode === 'LOGIN') {
         data = await login(email, password);
       } else {
-        // Register Flow
-        // Se for PJ, passamos companyData
         const pjPayload = entityType === EntityType.BUSINESS ? { ...companyData, cnpj } : undefined;
         data = await register(name, email, password, entityType, plan, pjPayload);
       }
@@ -153,12 +163,10 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     }
   };
 
-  // Se estiver no modo CHECKOUT/REGISTRO, mostra o fluxo de cadastro e "pagamento"
   if (mode === 'CHECKOUT' || mode === 'REGISTER') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
-                {/* Lado esquerdo: Resumo do Pedido */}
                 <div className="bg-slate-900 p-8 text-white md:w-1/3 flex flex-col justify-between">
                     <div>
                         <h2 className="text-xl font-bold mb-4">Resumo do Pedido</h2>
@@ -187,7 +195,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                     </div>
                 </div>
 
-                {/* Lado direito: Form */}
                 <div className="p-8 md:w-2/3 max-h-[90vh] overflow-y-auto">
                     <h2 className="text-2xl font-bold text-gray-900 mb-6">Criar Conta</h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -195,7 +202,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                             <button
                                 type="button"
                                 onClick={() => setEntityType(EntityType.PERSONAL)}
-                                className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${entityType === EntityType.PERSONAL ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500'}`}
+                                className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${entityType === EntityType.PERSONAL ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-50'}`}
                             >
                                 <UserIcon className="w-5 h-5" />
                                 <span className="text-xs font-bold">Pessoa Física</span>
@@ -203,14 +210,13 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                             <button
                                 type="button"
                                 onClick={() => setEntityType(EntityType.BUSINESS)}
-                                className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${entityType === EntityType.BUSINESS ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500'}`}
+                                className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${entityType === EntityType.BUSINESS ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-50'}`}
                             >
                                 <Briefcase className="w-5 h-5" />
                                 <span className="text-xs font-bold">Pessoa Jurídica</span>
                             </button>
                         </div>
 
-                        {/* SECTION: PJ LOOKUP */}
                         {entityType === EntityType.BUSINESS && (
                             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-4 animate-fade-in">
                                 <div className="flex gap-2 items-end">
@@ -234,7 +240,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                         {loadingCnpj ? '...' : <Search className="w-4 h-4" />}
                                     </button>
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
@@ -245,7 +250,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                         <input type="text" value={companyData.tradeName} onChange={e => setCompanyData({...companyData, tradeName: e.target.value})} className="w-full p-2 rounded border text-sm" />
                                     </div>
                                 </div>
-
                                 <div className="grid grid-cols-3 gap-2">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
@@ -255,60 +259,19 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                         <label className="block text-xs font-medium text-gray-600 mb-1">Endereço</label>
                                         <input type="text" value={companyData.street} onChange={e => setCompanyData({...companyData, street: e.target.value})} className="w-full p-2 rounded border text-sm" />
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
-                                        <input type="text" value={companyData.number} onChange={e => setCompanyData({...companyData, number: e.target.value})} className="w-full p-2 rounded border text-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
-                                        <input type="text" value={companyData.neighborhood} onChange={e => setCompanyData({...companyData, neighborhood: e.target.value})} className="w-full p-2 rounded border text-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Cidade/UF</label>
-                                        <input type="text" value={`${companyData.city}/${companyData.state}`} disabled className="w-full p-2 rounded border text-sm bg-gray-100" />
-                                    </div>
                                 </div>
-
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Atividade Principal (CNAE)</label>
-                                    <input type="text" value={companyData.cnae} onChange={e => setCompanyData({...companyData, cnae: e.target.value})} className="w-full p-2 rounded border text-sm" />
-                                </div>
-
-                                {companyData.secondaryCnaes && (
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">CNAEs Secundários</label>
-                                        <textarea 
-                                            value={companyData.secondaryCnaes} 
-                                            readOnly 
-                                            className="w-full p-2 rounded border text-xs bg-gray-50 h-20 overflow-y-auto resize-none"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-600 mb-1">Regime Tributário</label>
-                                        <select 
-                                            value={companyData.taxRegime} 
-                                            onChange={e => setCompanyData({...companyData, taxRegime: e.target.value as TaxRegime})}
-                                            className="w-full p-2 rounded border text-sm bg-white"
-                                        >
-                                            <option value={TaxRegime.MEI}>MEI</option>
-                                            <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
-                                            <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
-                                            <option value={TaxRegime.REAL}>Lucro Real</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex flex-col gap-2 pt-2">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" checked={companyData.hasEmployees} onChange={e => setCompanyData({...companyData, hasEmployees: e.target.checked})} className="rounded text-indigo-600" />
-                                            <span className="text-xs text-gray-700">Possui Funcionários?</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" checked={companyData.issuesInvoices} onChange={e => setCompanyData({...companyData, issuesInvoices: e.target.checked})} className="rounded text-indigo-600" />
-                                            <span className="text-xs text-gray-700">Emite Nota Fiscal?</span>
-                                        </label>
-                                    </div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Regime Tributário</label>
+                                    <select 
+                                        value={companyData.taxRegime} 
+                                        onChange={e => setCompanyData({...companyData, taxRegime: e.target.value as TaxRegime})}
+                                        className="w-full p-2 rounded border text-sm bg-white"
+                                    >
+                                        <option value={TaxRegime.MEI}>MEI</option>
+                                        <option value={TaxRegime.SIMPLES}>Simples Nacional</option>
+                                        <option value={TaxRegime.PRESUMIDO}>Lucro Presumido</option>
+                                        <option value={TaxRegime.REAL}>Lucro Real</option>
+                                    </select>
                                 </div>
                             </div>
                         )}
@@ -349,18 +312,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                             />
                         </div>
 
-                        {/* Simulação de Checkout - Em app real, aqui iriam os inputs do Cartão */}
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-4">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Dados de Pagamento (Simulação)</p>
-                            <div className="flex gap-2">
-                                <input type="text" disabled placeholder="**** **** **** 4242" className="flex-1 bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-400 cursor-not-allowed"/>
-                                <input type="text" disabled placeholder="MM/AA" className="w-20 bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-400 cursor-not-allowed"/>
-                            </div>
-                            <p className="text-[10px] text-gray-400 mt-2">
-                                * Nenhum valor será cobrado hoje. Seu período de teste de 15 dias começa agora.
-                            </p>
-                        </div>
-
                         {error && (
                             <div className="flex items-center gap-2 text-rose-600 text-sm bg-rose-50 p-3 rounded-lg">
                                 <AlertCircle className="w-4 h-4" />
@@ -388,10 +339,9 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       );
   }
 
-  // LOGIN MODE
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col md:flex-row">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="p-8 w-full">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-900">FinManager</h1>
@@ -455,7 +405,8 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                 </div>
              </div>
              
-             <div className="mt-6 min-h-[48px]" id="googleSignInDiv"></div>
+             {/* Contêiner do Botão do Google */}
+             <div className="mt-6 flex justify-center min-h-[50px]" id="googleSignInDiv"></div>
           </div>
 
           <div className="mt-6 text-center">
