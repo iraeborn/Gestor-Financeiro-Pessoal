@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode, Loader2 } from 'lucide-react';
+// Added TrendingUp to the imports from lucide-react
+import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, ArrowRightLeft, Percent, User, Plus, FileText, Briefcase, MapPin, Calculator, FolderKanban, Users, Banknote, History, QrCode, Loader2, Check, Clock, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, Branch, CostCenter, Department, Project, TransactionClassification, AccountType } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
@@ -13,9 +14,7 @@ interface TransactionModalProps {
   contacts: Contact[];
   categories?: Category[];
   initialData?: Partial<Transaction> | null;
-  // User context
   userEntity?: EntityType;
-  // PJ Data
   branches?: Branch[];
   costCenters?: CostCenter[];
   departments?: Department[];
@@ -27,6 +26,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
 }) => {
   const { showAlert } = useAlert();
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -41,7 +41,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     recurrenceEndDate: '',
     interestRate: '0',
     contactId: '',
-    // PJ Fields
     branchId: '',
     destinationBranchId: '',
     costCenterId: '',
@@ -50,21 +49,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     classification: TransactionClassification.STANDARD
   });
 
-  // Autocomplete Contact State
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Autocomplete Category State
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
-  // QR Code State
   const [showScanner, setShowScanner] = useState(false);
   const [loadingQR, setLoadingQR] = useState(false);
 
-  const hasAccounts = accounts && accounts.length > 0;
   const isPJ = userEntity === EntityType.BUSINESS;
 
   useEffect(() => {
@@ -93,180 +88,79 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
+      if (initialData.isRecurring || isPJ) setShowAdvanced(true);
     } else {
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         description: '',
         amount: '',
         type: TransactionType.EXPENSE,
-        category: '',
         date: new Date().toISOString().split('T')[0],
         status: TransactionStatus.PAID,
         accountId: accounts.length > 0 ? accounts[0].id : '',
         destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
-        isRecurring: false,
-        recurrenceFrequency: RecurrenceFrequency.MONTHLY,
-        recurrenceEndDate: '',
-        interestRate: '0',
         contactId: '',
-        branchId: branches[0]?.id || '',
-        destinationBranchId: '',
-        costCenterId: '',
-        departmentId: '',
-        projectId: '',
         classification: TransactionClassification.STANDARD
-      });
+      }));
       setContactSearch('');
       setCategorySearch('');
+      setShowAdvanced(isPJ);
     }
-  }, [initialData, isOpen, accounts, contacts, branches]);
+  }, [initialData, isOpen, accounts, contacts]);
 
-  // Click outside listener
   useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-          if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
-              setShowContactDropdown(false);
-          }
-          if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
-              setShowCategoryDropdown(false);
-          }
-      };
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+    const handleClickOutside = (event: MouseEvent) => {
+        if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) setShowContactDropdown(false);
+        if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) setShowCategoryDropdown(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Update logic when classification changes
-  useEffect(() => {
-      if (formData.classification === TransactionClassification.CASH_REPLENISHMENT) {
-          setFormData(prev => ({ ...prev, type: TransactionType.TRANSFER }));
-          // Suggest description
-          if (!formData.description) setFormData(prev => ({...prev, description: 'Suprimento de Caixa'}));
-      } else if (formData.classification === TransactionClassification.INTER_BRANCH) {
-          setFormData(prev => ({ ...prev, type: TransactionType.TRANSFER }));
-          if (!formData.description) setFormData(prev => ({...prev, description: 'Transf. entre Filiais'}));
-      } else if (formData.classification === TransactionClassification.ADVANCE) {
-          setFormData(prev => ({ ...prev, type: TransactionType.EXPENSE })); // Typically expense first
-      }
-  }, [formData.classification]);
 
   const handleQRSuccess = async (decodedText: string) => {
       setShowScanner(false);
       setLoadingQR(true);
-      
       try {
           const token = localStorage.getItem('token');
           const res = await fetch('/api/scrape-nfce', {
               method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': token ? `Bearer ${token}` : ''
-              },
+              headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
               body: JSON.stringify({ url: decodedText })
           });
-
           const data = await res.json();
-
           if (res.ok) {
-              // Smart Account Selection based on payment type
-              let suggestedAccountId = formData.accountId;
-              if (data.paymentType) {
-                  if (data.paymentType === 'CREDIT') {
-                      const card = accounts.find(a => a.type === AccountType.CARD);
-                      if (card) suggestedAccountId = card.id;
-                  } else if (data.paymentType === 'CASH') {
-                      const wallet = accounts.find(a => a.type === AccountType.WALLET);
-                      if (wallet) suggestedAccountId = wallet.id;
-                  } else if (data.paymentType === 'PIX' || data.paymentType === 'DEBIT') {
-                      const bank = accounts.find(a => a.type === AccountType.BANK);
-                      if (bank) suggestedAccountId = bank.id;
-                  }
-              }
-
               setFormData(prev => ({
                   ...prev,
                   description: data.merchant || 'Compra NFC-e',
-                  type: TransactionType.EXPENSE,
                   amount: data.amount ? data.amount.toString() : prev.amount,
                   date: data.date || prev.date,
-                  accountId: suggestedAccountId
               }));
-              showAlert(`Nota lida com sucesso! Valor: R$ ${data.amount}`, "success");
-          } else {
-              showAlert(data.error || "Erro ao ler nota fiscal.", "error");
-          }
-      } catch (e) {
-          console.error("Erro parse QR", e);
-          showAlert("Erro ao conectar com o serviço de leitura.", "error");
-      } finally {
-          setLoadingQR(false);
-      }
+              showAlert(`Nota processada: R$ ${data.amount}`, "success");
+          } else showAlert(data.error || "Erro ao ler nota.", "error");
+      } catch (e) { showAlert("Erro de conexão.", "error"); } finally { setLoadingQR(false); }
   };
-
-  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.accountId) return showAlert("Selecione uma conta.", "warning");
     
-    if (!formData.accountId) {
-        showAlert("Atenção: Você precisa selecionar uma conta.", "warning");
-        return;
-    }
-
-    if (formData.type === TransactionType.TRANSFER) {
-        if (!formData.destinationAccountId) {
-            showAlert("Selecione a conta de destino para a transferência.", "warning");
-            return;
-        }
-        if (formData.accountId === formData.destinationAccountId) {
-            showAlert("A conta de origem e destino não podem ser a mesma.", "warning");
-            return;
-        }
-        
-        if (formData.classification === TransactionClassification.INTER_BRANCH) {
-            if (!formData.branchId || !formData.destinationBranchId) {
-                showAlert("Para transferências entre filiais, selecione a filial de origem e a de destino.", "warning");
-                return;
-            }
-            if (formData.branchId === formData.destinationBranchId) {
-                showAlert("A filial de origem e destino devem ser diferentes.", "warning");
-                return;
-            }
-        }
-    }
-
-    // --- Contact Logic ---
     let finalContactId = formData.contactId;
     let newContactObj: Contact | undefined;
-
     if (!finalContactId && contactSearch && formData.type !== TransactionType.TRANSFER) {
          const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
-         if (existing) {
-             finalContactId = existing.id;
-         } else {
+         if (existing) finalContactId = existing.id;
+         else {
              const newId = crypto.randomUUID();
-             newContactObj = { 
-                 id: newId, 
-                 name: contactSearch,
-                 type: 'PF' // Default to PF for quick creation
-             };
+             newContactObj = { id: newId, name: contactSearch, type: 'PF' };
              finalContactId = newId;
          }
     }
 
-    // --- Category Logic ---
     let finalCategory = categorySearch;
     let newCategoryObj: Category | undefined;
-    
-    // Se digitou algo na busca que não bate com nada existente, cria nova categoria
     if (categorySearch && formData.type !== TransactionType.TRANSFER) {
         const existingCat = categories.find(c => c.name.toLowerCase() === categorySearch.toLowerCase() && c.type === formData.type);
-        if (!existingCat) {
-             // Create New Category
-             newCategoryObj = { 
-                 id: crypto.randomUUID(), 
-                 name: categorySearch,
-                 type: formData.type
-             };
-        }
+        if (!existingCat) newCategoryObj = { id: crypto.randomUUID(), name: categorySearch, type: formData.type };
     }
 
     onSave({
@@ -277,13 +171,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       date: formData.date,
       status: formData.status,
       accountId: formData.accountId,
-      destinationAccountId: (formData.type === TransactionType.TRANSFER && formData.destinationAccountId) ? formData.destinationAccountId : undefined,
+      destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
       isRecurring: formData.isRecurring,
       recurrenceFrequency: formData.isRecurring ? formData.recurrenceFrequency : undefined,
       recurrenceEndDate: (formData.isRecurring && formData.recurrenceEndDate) ? formData.recurrenceEndDate : undefined,
       interestRate: parseFloat(formData.interestRate) || 0,
       contactId: finalContactId || undefined,
-      // PJ
       branchId: isPJ ? formData.branchId : undefined,
       destinationBranchId: isPJ && formData.classification === TransactionClassification.INTER_BRANCH ? formData.destinationBranchId : undefined,
       costCenterId: isPJ ? formData.costCenterId : undefined,
@@ -291,461 +184,252 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       projectId: isPJ ? formData.projectId : undefined,
       classification: isPJ ? formData.classification : undefined
     }, newContactObj, newCategoryObj);
-    
     onClose();
   };
 
-  const getDynamicLabels = () => {
-    switch (formData.type) {
-        case TransactionType.INCOME:
-            return {
-                accountLabel: 'Receber em (Conta)',
-                contactLabel: 'Origem (Quem pagou?)'
-            };
-        case TransactionType.EXPENSE:
-            return {
-                accountLabel: 'Pagar com (Conta)',
-                contactLabel: 'Destino (Favorecido)'
-            };
-        default:
-            return {
-                accountLabel: 'Conta de Saída',
-                contactLabel: 'Beneficiário'
-            };
-    }
+  if (!isOpen) return null;
+
+  const typeColors = {
+      [TransactionType.EXPENSE]: 'rose',
+      [TransactionType.INCOME]: 'emerald',
+      [TransactionType.TRANSFER]: 'blue'
   };
-
-  const labels = getDynamicLabels();
-
-  // Filter contacts
-  const filteredContacts = contacts.filter(c => 
-      c.name.toLowerCase().includes(contactSearch.toLowerCase())
-  );
-
-  // Filter categories by Type and Search
-  const filteredCategories = categories.filter(c => 
-      c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())
-  );
-
-  // Filter destination accounts for Cash Replenishment (Only Wallets)
-  const availableDestAccounts = formData.classification === TransactionClassification.CASH_REPLENISHMENT 
-      ? accounts.filter(a => a.id !== formData.accountId && a.type === AccountType.WALLET)
-      : accounts.filter(a => a.id !== formData.accountId);
+  const activeColor = typeColors[formData.type];
 
   return (
-    <>
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto animate-scale-up">
-        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h2 className="text-lg font-bold text-gray-800">
-            {initialData && initialData.id ? 'Editar Transação' : 'Nova Transação'}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X className="w-6 h-6" />
-          </button>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-up border border-white/20">
+        
+        {/* Header - Seletor de Tipo */}
+        <div className={`p-8 bg-${activeColor}-50 transition-colors duration-500`}>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                    {initialData?.id ? 'Editar Lançamento' : 'Novo Lançamento'}
+                </h2>
+                <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-all text-slate-400 hover:text-slate-600">
+                    <X className="w-6 h-6" />
+                </button>
+            </div>
+
+            <div className="flex bg-white/60 backdrop-blur-sm p-1.5 rounded-2xl border border-white shadow-inner">
+                {[
+                    { id: TransactionType.EXPENSE, label: 'Despesa', icon: Banknote, color: 'text-rose-600' },
+                    { id: TransactionType.INCOME, label: 'Receita', icon: TrendingUp, color: 'text-emerald-600' },
+                    { id: TransactionType.TRANSFER, label: 'Transferência', icon: ArrowRightLeft, color: 'text-blue-600' }
+                ].map(type => (
+                    <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, type: type.id })}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+                            formData.type === type.id 
+                            ? `bg-white shadow-lg ${type.color} scale-[1.02]` 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        <type.icon className="w-4 h-4" /> {type.label}
+                    </button>
+                ))}
+            </div>
         </div>
 
         {loadingQR ? (
-            <div className="p-8 text-center flex flex-col items-center gap-2">
-                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-500 text-sm">Consultando dados da nota fiscal...</p>
+            <div className="p-20 text-center flex flex-col items-center gap-4">
+                <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+                <p className="text-slate-500 font-medium">Extraindo dados da nota fiscal...</p>
             </div>
         ) : (
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8">
           
-          {/* QR CODE BUTTON - Only for PF and New Transaction */}
-          {!initialData && !isPJ && (
-              <div className="mb-2">
-                  <button 
-                      type="button"
-                      onClick={() => setShowScanner(true)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-900 text-white rounded-xl font-semibold shadow-md hover:bg-black transition-all"
-                  >
-                      <QrCode className="w-5 h-5" /> Ler QR Code da Nota (NFC-e)
-                  </button>
-                  <p className="text-[10px] text-center text-gray-400 mt-1">Preenchimento automático via SEFAZ</p>
-              </div>
-          )}
-
-          {/* PJ Classification Selector */}
-          {isPJ && (
-              <div className="mb-2">
-                  <label className="block text-xs font-bold text-indigo-700 mb-1">Tipo de Operação (PJ)</label>
-                  <select
-                      value={formData.classification}
-                      onChange={(e) => setFormData({ ...formData, classification: e.target.value as TransactionClassification })}
-                      className="block w-full rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-indigo-900 font-medium"
-                  >
-                      <option value={TransactionClassification.STANDARD}>Padrão (Receita/Despesa)</option>
-                      <option value={TransactionClassification.ADVANCE}>Adiantamento</option>
-                      <option value={TransactionClassification.CASH_REPLENISHMENT}>Suprimento de Caixa</option>
-                      <option value={TransactionClassification.INTER_BRANCH}>Transf. Entre Filiais</option>
-                  </select>
-              </div>
-          )}
-
-          {/* Type Selection (Disabled for specialized PJ operations) */}
-          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-            <button
-              type="button"
-              disabled={formData.classification !== TransactionClassification.STANDARD}
-              onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE })}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${formData.type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Despesa
-            </button>
-            <button
-              type="button"
-              disabled={formData.classification !== TransactionClassification.STANDARD}
-              onClick={() => setFormData({ ...formData, type: TransactionType.INCOME })}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${formData.type === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Receita
-            </button>
-            <button
-              type="button"
-              disabled={formData.classification !== TransactionClassification.STANDARD}
-              onClick={() => setFormData({ ...formData, type: TransactionType.TRANSFER })}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${formData.type === TransactionType.TRANSFER ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Transf.
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Descrição</label>
-            <input
-              type="text"
-              required
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Ex: Almoço, Salário, Conta de Luz"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Valor (R$)</label>
-              <div className="relative">
-                <DollarSign className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Data</label>
-              <div className="relative">
-                <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="date"
-                  required
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Account Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{labels.accountLabel}</label>
-                <div className="relative">
-                  <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                  <select
-                    value={formData.accountId}
-                    onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-                    className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                  >
-                    {!hasAccounts && <option value="">Sem contas cadastradas</option>}
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>{acc.name}</option>
+          {/* Main Financial Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Quanto?</label>
+                <div className="relative group">
+                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-${activeColor}-500 transition-colors`}>R$</div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      autoFocus
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                      className={`block w-full pl-14 pr-4 py-5 bg-slate-50 border-2 border-transparent focus:border-${activeColor}-500 focus:bg-white rounded-3xl text-3xl font-black text-slate-800 outline-none transition-all placeholder-slate-300`}
+                      placeholder="0,00"
+                    />
+                </div>
+                <div className="flex gap-2 pt-1">
+                    {[10, 50, 100].map(v => (
+                        <button key={v} type="button" onClick={() => setFormData({...formData, amount: String(v)})} className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-500 transition-colors">+ R$ {v}</button>
                     ))}
-                  </select>
                 </div>
               </div>
 
-              {formData.type === TransactionType.TRANSFER && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">O que é?</label>
+                <div className="relative group h-full flex flex-col">
+                    <input
+                      type="text"
+                      required
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="block w-full flex-1 px-5 py-5 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-3xl text-lg font-bold text-slate-800 outline-none transition-all placeholder-slate-300"
+                      placeholder="Ex: Almoço Executivo"
+                    />
+                    {!initialData && formData.type === TransactionType.EXPENSE && (
+                        <button type="button" onClick={() => setShowScanner(true)} className="absolute right-3 top-3 p-2 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm border border-slate-100 transition-all">
+                            <QrCode className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+              </div>
+          </div>
+
+          {/* Context Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+              <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Para (Destino)</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Vencimento</label>
                     <div className="relative">
-                      <ArrowRightLeft className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                      <select
-                        value={formData.destinationAccountId}
-                        onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })}
-                        className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                      >
-                        {availableDestAccounts.length === 0 && <option value="">Nenhuma conta disponível</option>}
-                        {availableDestAccounts.map(acc => (
-                          <option key={acc.id} value={acc.id}>{acc.name}</option>
-                        ))}
-                      </select>
+                        <Calendar className="w-4 h-4 text-slate-400 absolute left-4 top-3" />
+                        <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="block w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white" />
                     </div>
                   </div>
-              )}
-          </div>
-
-          {/* Contact & Category Autocomplete */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative" ref={contactDropdownRef}>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">{labels.contactLabel}</label>
-                  <div className="relative">
-                      <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                      <input
-                          type="text"
-                          value={contactSearch}
-                          onChange={(e) => {
-                              setContactSearch(e.target.value);
-                              setFormData(prev => ({ ...prev, contactId: '' })); // Reset ID on type
-                              setShowContactDropdown(true);
-                          }}
-                          onFocus={() => setShowContactDropdown(true)}
-                          className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                          placeholder="Buscar ou criar..."
-                      />
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Conta / Origem</label>
+                    <div className="relative">
+                        <CreditCard className="w-4 h-4 text-slate-400 absolute left-4 top-3" />
+                        <select value={formData.accountId} onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} className="block w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white appearance-none">
+                            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                        </select>
+                    </div>
                   </div>
-                  {showContactDropdown && (contactSearch || filteredContacts.length > 0) && (
-                      <div className="absolute z-10 w-full bg-white border border-gray-100 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-                          {filteredContacts.map(c => (
-                              <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => {
-                                      setContactSearch(c.name);
-                                      setFormData(prev => ({ ...prev, contactId: c.id }));
-                                      setShowContactDropdown(false);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700"
-                              >
-                                  {c.name}
-                              </button>
-                          ))}
-                          {contactSearch && !filteredContacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
-                              <div className="px-4 py-2 text-xs text-gray-500 italic border-t border-gray-50">
-                                  Será criado como novo: "{contactSearch}"
-                              </div>
-                          )}
-                      </div>
-                  )}
               </div>
 
-              <div className="relative" ref={categoryDropdownRef}>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Categoria</label>
-                  <div className="relative">
-                      <Tag className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                      <input
-                          type="text"
-                          value={categorySearch}
-                          onChange={(e) => {
-                              setCategorySearch(e.target.value);
-                              setShowCategoryDropdown(true);
-                          }}
-                          onFocus={() => setShowCategoryDropdown(true)}
-                          className="pl-9 block w-full rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                          placeholder="Buscar ou criar..."
-                      />
-                  </div>
-                  {showCategoryDropdown && (categorySearch || filteredCategories.length > 0) && (
-                      <div className="absolute z-10 w-full bg-white border border-gray-100 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-                          {filteredCategories.map(c => (
-                              <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => {
-                                      setCategorySearch(c.name);
-                                      setFormData(prev => ({ ...prev, category: c.name }));
-                                      setShowCategoryDropdown(false);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700"
-                              >
-                                  {c.name}
-                              </button>
-                          ))}
-                          {categorySearch && !filteredCategories.find(c => c.name.toLowerCase() === categorySearch.toLowerCase()) && (
-                              <div className="px-4 py-2 text-xs text-gray-500 italic border-t border-gray-50">
-                                  Nova Categoria: "{categorySearch}"
-                              </div>
-                          )}
-                      </div>
-                  )}
-              </div>
-          </div>
-
-          {/* Recurrence Options */}
-          <div className="pt-2 border-t border-gray-100">
-              <label className="flex items-center gap-2 cursor-pointer mb-2">
-                  <input
-                      type="checkbox"
-                      checked={formData.isRecurring}
-                      onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                      <Repeat className="w-4 h-4 text-gray-400" /> Repetir lançamento
-                  </span>
-              </label>
-
-              {formData.isRecurring && (
-                  <div className="grid grid-cols-2 gap-4 pl-6 animate-fade-in">
+              <div className="space-y-4">
+                  {formData.type === TransactionType.TRANSFER ? (
                       <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Frequência</label>
-                          <select
-                              value={formData.recurrenceFrequency}
-                              onChange={(e) => setFormData({ ...formData, recurrenceFrequency: e.target.value as RecurrenceFrequency })}
-                              className="block w-full rounded-lg border-gray-200 border px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                          >
-                              <option value={RecurrenceFrequency.WEEKLY}>Semanal</option>
-                              <option value={RecurrenceFrequency.MONTHLY}>Mensal</option>
-                              <option value={RecurrenceFrequency.YEARLY}>Anual</option>
-                          </select>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Destino</label>
+                        <div className="relative">
+                            <ArrowRightLeft className="w-4 h-4 text-slate-400 absolute left-4 top-3" />
+                            <select value={formData.destinationAccountId} onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })} className="block w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white appearance-none">
+                                {accounts.filter(a => a.id !== formData.accountId).map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                            </select>
+                        </div>
                       </div>
-                      <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Até quando? (Opcional)</label>
-                          <input
-                              type="date"
-                              value={formData.recurrenceEndDate}
-                              onChange={(e) => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
-                              className="block w-full rounded-lg border-gray-200 border px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                          />
-                      </div>
-                  </div>
-              )}
-          </div>
-
-          {/* PJ Specific Fields */}
-          {isPJ && (
-              <div className="pt-2 border-t border-gray-100 space-y-3">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                      <Briefcase className="w-3 h-3" /> Detalhes Corporativos
-                  </p>
-                  
-                  {/* Branch Selection */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Filial {formData.type === TransactionType.TRANSFER && formData.classification === TransactionClassification.INTER_BRANCH ? '(Origem)' : ''}
-                          </label>
+                  ) : (
+                      <div className="relative" ref={categoryDropdownRef}>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Categoria</label>
                           <div className="relative">
-                              <MapPin className="w-3 h-3 text-gray-400 absolute left-2.5 top-2.5" />
-                              <select
-                                  value={formData.branchId}
-                                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                                  className="block w-full pl-8 rounded-lg border-gray-200 border px-3 py-1.5 text-sm outline-none"
-                              >
-                                  <option value="">Selecione...</option>
-                                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                              </select>
+                              <Tag className="w-4 h-4 text-slate-400 absolute left-4 top-3" />
+                              <input type="text" value={categorySearch} onFocus={() => setShowCategoryDropdown(true)} onChange={(e) => {setCategorySearch(e.target.value); setShowCategoryDropdown(true);}} className="block w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white" placeholder="Obrigatório..." />
                           </div>
-                      </div>
-                      
-                      {formData.type === TransactionType.TRANSFER && formData.classification === TransactionClassification.INTER_BRANCH && (
-                          <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Filial (Destino)</label>
-                              <div className="relative">
-                                  <MapPin className="w-3 h-3 text-gray-400 absolute left-2.5 top-2.5" />
-                                  <select
-                                      value={formData.destinationBranchId}
-                                      onChange={(e) => setFormData({ ...formData, destinationBranchId: e.target.value })}
-                                      className="block w-full pl-8 rounded-lg border-gray-200 border px-3 py-1.5 text-sm outline-none"
-                                  >
-                                      <option value="">Selecione...</option>
-                                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                  </select>
+                          {showCategoryDropdown && (
+                              <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-40 overflow-y-auto p-1">
+                                  {categories.filter(c => c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())).map(c => (
+                                      <button key={c.id} type="button" onClick={() => {setCategorySearch(c.name); setShowCategoryDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-indigo-50 rounded-xl text-sm font-medium text-slate-600 transition-colors">{c.name}</button>
+                                  ))}
                               </div>
+                          )}
+                      </div>
+                  )}
+                  <div className="relative" ref={contactDropdownRef}>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Pessoa / Contato</label>
+                      <div className="relative">
+                          <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                          <input type="text" value={contactSearch} onFocus={() => setShowContactDropdown(true)} onChange={(e) => {setContactSearch(e.target.value); setShowContactDropdown(true);}} className="block w-full pl-9 rounded-lg border-gray-200 border px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 bg-white" placeholder="Opcional..." />
+                      </div>
+                      {showContactDropdown && (
+                          <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-40 overflow-y-auto p-1">
+                              {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
+                                  <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-indigo-50 rounded-xl text-sm font-medium text-slate-600 transition-colors">{c.name}</button>
+                              ))}
                           </div>
                       )}
                   </div>
+              </div>
+          </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Centro de Custo</label>
-                          <div className="relative">
-                              <Calculator className="w-3 h-3 text-gray-400 absolute left-2.5 top-2.5" />
-                              <select
-                                  value={formData.costCenterId}
-                                  onChange={(e) => setFormData({ ...formData, costCenterId: e.target.value })}
-                                  className="block w-full pl-8 rounded-lg border-gray-200 border px-3 py-1.5 text-sm outline-none"
-                              >
-                                  <option value="">Selecione...</option>
+          {/* Collapsible Advanced Section */}
+          <div className="border-t border-slate-100 pt-4">
+              <button 
+                type="button" 
+                onClick={() => setShowAdvanced(!showAdvanced)} 
+                className="w-full flex items-center justify-between py-2 text-slate-400 hover:text-indigo-600 transition-colors"
+              >
+                  <span className="text-[10px] font-black uppercase tracking-widest">Mais Opções {isPJ && '(Corporativo)'}</span>
+                  {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showAdvanced && (
+                  <div className="mt-4 space-y-6 animate-fade-in">
+                      <div className="flex flex-wrap gap-6">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className={`w-10 h-6 rounded-full transition-all relative ${formData.isRecurring ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isRecurring ? 'left-5' : 'left-1'}`}></div>
+                            </div>
+                            <input type="checkbox" className="sr-only" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
+                            <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-600">Repetir Mensalmente</span>
+                        </label>
+                        
+                        {isPJ && (
+                            <div className="flex-1 min-w-[200px]">
+                                <select value={formData.classification} onChange={e => setFormData({...formData, classification: e.target.value as any})} className="w-full bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-500 py-2 px-3">
+                                    <option value={TransactionClassification.STANDARD}>Fluxo Padrão</option>
+                                    <option value={TransactionClassification.CASH_REPLENISHMENT}>Suprimento</option>
+                                    <option value={TransactionClassification.INTER_BRANCH}>Transf. Filial</option>
+                                </select>
+                            </div>
+                        )}
+                      </div>
+
+                      {isPJ && (
+                          <div className="grid grid-cols-3 gap-3">
+                              <select value={formData.branchId} onChange={e => setFormData({...formData, branchId: e.target.value})} className="bg-slate-50 border-none rounded-xl text-[10px] font-bold text-slate-500 p-2">
+                                  <option value="">Filial</option>
+                                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                              </select>
+                              <select value={formData.costCenterId} onChange={e => setFormData({...formData, costCenterId: e.target.value})} className="bg-slate-50 border-none rounded-xl text-[10px] font-bold text-slate-500 p-2">
+                                  <option value="">C. Custo</option>
                                   {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
                               </select>
-                          </div>
-                      </div>
-                      <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Departamento</label>
-                          <div className="relative">
-                              <Users className="w-3 h-3 text-gray-400 absolute left-2.5 top-2.5" />
-                              <select
-                                  value={formData.departmentId}
-                                  onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                                  className="block w-full pl-8 rounded-lg border-gray-200 border px-3 py-1.5 text-sm outline-none"
-                              >
-                                  <option value="">Selecione...</option>
-                                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                              </select>
-                          </div>
-                      </div>
-                      <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Projeto</label>
-                          <div className="relative">
-                              <FolderKanban className="w-3 h-3 text-gray-400 absolute left-2.5 top-2.5" />
-                              <select
-                                  value={formData.projectId}
-                                  onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
-                                  className="block w-full pl-8 rounded-lg border-gray-200 border px-3 py-1.5 text-sm outline-none"
-                              >
-                                  <option value="">Selecione...</option>
+                              <select value={formData.projectId} onChange={e => setFormData({...formData, projectId: e.target.value})} className="bg-slate-50 border-none rounded-xl text-[10px] font-bold text-slate-500 p-2">
+                                  <option value="">Projeto</option>
                                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                           </div>
-                      </div>
+                      )}
                   </div>
-              </div>
-          )}
+              )}
+          </div>
 
-          {/* Status & Submit */}
-          <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                      type="checkbox"
-                      checked={formData.status === TransactionStatus.PAID}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.checked ? TransactionStatus.PAID : TransactionStatus.PENDING })}
-                      className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
-                  />
-                  <span className={`text-sm font-bold ${formData.status === TransactionStatus.PAID ? 'text-emerald-600' : 'text-gray-500'}`}>
-                      {formData.status === TransactionStatus.PAID ? 'Pago / Recebido' : 'Pendente / Agendado'}
-                  </span>
-              </label>
+          {/* Footer - Status & Save */}
+          <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+              <button 
+                type="button" 
+                onClick={() => setFormData({...formData, status: formData.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})}
+                className={`flex items-center gap-3 px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
+                    formData.status === TransactionStatus.PAID 
+                    ? 'bg-emerald-50 text-emerald-700' 
+                    : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                  {formData.status === TransactionStatus.PAID ? <Check className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+                  {formData.status === TransactionStatus.PAID ? 'Confirmado' : 'Pendente'}
+              </button>
 
               <button
                   type="submit"
-                  className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+                  className={`bg-${activeColor}-600 text-white px-10 py-4 rounded-[1.5rem] font-black text-lg hover:bg-${activeColor}-700 transition-all shadow-xl shadow-${activeColor}-200 active:scale-95`}
               >
                   Salvar
               </button>
           </div>
-
         </form>
         )}
       </div>
-      
-      {showScanner && (
-          <QRCodeScanner 
-              onScanSuccess={handleQRSuccess} 
-              onClose={() => setShowScanner(false)} 
-          />
-      )}
+      {showScanner && <QRCodeScanner onScanSuccess={handleQRSuccess} onClose={() => setShowScanner(false)} />}
     </div>
-    </>
   );
 };
 
