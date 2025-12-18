@@ -49,7 +49,7 @@ export default function(logAudit) {
                 WHERE ${buildFilter('o')} AND o.deleted_at IS NULL
             `, [activeFamilyId]);
 
-            const serviceOrders = await pool.query(`
+            const serviceOrdersRes = await pool.query(`
                 SELECT so.*, c.name as contact_name, u.name as created_by_name
                 FROM service_orders so 
                 LEFT JOIN contacts c ON so.contact_id = c.id 
@@ -103,7 +103,7 @@ export default function(logAudit) {
                 })),
                 serviceClients: [], 
                 serviceAppointments: [],
-                serviceOrders: serviceOrders.rows.map(r => ({
+                serviceOrders: serviceOrdersRes.rows.map(r => ({
                     ...r,
                     totalAmount: parseFloat(r.total_amount || 0),
                     contactName: r.contact_name,
@@ -111,7 +111,7 @@ export default function(logAudit) {
                     startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
                     endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
                 })),
-                commercialOrders: commercialOrders.rows.map(r => ({
+                commercialOrders: commOrders.rows.map(r => ({
                     id: r.id,
                     type: r.type,
                     description: r.description,
