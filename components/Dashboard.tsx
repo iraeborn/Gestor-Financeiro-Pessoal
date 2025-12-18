@@ -24,6 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [diagnostic, setDiagnostic] = useState<string>('');
   const [loadingDiag, setLoadingDiag] = useState(false);
 
@@ -46,6 +47,25 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pendingExpenses = state.transactions.filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
+  const handleEditClick = (t: Transaction) => {
+      setEditingTransaction(t);
+      setTransModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+      setTransModalOpen(false);
+      setEditingTransaction(null);
+  };
+
+  const handleSave = (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
+      if (editingTransaction) {
+          onEditTransaction({ ...t, id: editingTransaction.id }, newContact, newCategory);
+      } else {
+          onAddTransaction(t, newContact, newCategory);
+      }
+      handleCloseModal();
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -54,14 +74,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           <p className="text-gray-500">Inteligência aplicada à sua saúde financeira.</p>
         </div>
         <button 
-          onClick={() => setTransModalOpen(true)}
+          onClick={() => { setEditingTransaction(null); setTransModalOpen(true); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
         >
           <Plus className="w-5 h-5" /> Novo Lançamento
         </button>
       </div>
 
-      {/* IA ADVISOR WIDGET - THE ELITE CFO LOOK */}
+      {/* IA ADVISOR WIDGET */}
       <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
               <BrainCircuit className="w-48 h-48" />
@@ -82,7 +102,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               {loadingDiag ? (
                 <div className="flex items-center gap-3 py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-                  <span className="text-sm text-indigo-100 font-medium italic">Analisando fluxo de caixa e projetando saúde financeira...</span>
+                  <span className="text-sm text-indigo-100 font-medium italic">Analisando fluxo de caixa...</span>
                 </div>
               ) : diagnostic ? (
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -90,19 +110,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <ReactMarkdown>{diagnostic}</ReactMarkdown>
                     </div>
                     <div className="flex flex-col justify-center items-center lg:items-end border-t lg:border-t-0 lg:border-l border-white/10 pt-4 lg:pt-0 lg:pl-6">
-                        <p className="text-[10px] text-indigo-300 uppercase font-bold mb-2">Quer um plano detalhado?</p>
+                        <p className="text-[10px] text-indigo-300 uppercase font-bold mb-2">Plano detalhado?</p>
                         <button 
                             onClick={() => onChangeView('FIN_ADVISOR')}
                             className="w-full lg:w-auto bg-white text-indigo-900 px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
                         >
-                            Consultoria Direta <ArrowRight className="w-3 h-3" />
+                            Consultoria <ArrowRight className="w-3 h-3" />
                         </button>
                     </div>
                 </div>
               ) : (
                 <div className="py-6 text-indigo-200/60 flex items-center gap-3">
                     <div className="p-3 bg-white/5 rounded-2xl border border-white/10"><TrendingUp className="w-6 h-6"/></div>
-                    <p className="text-sm">Lance suas primeiras movimentações para que o Gestor IA possa auditar sua conta e sugerir melhorias de lucro.</p>
+                    <p className="text-sm">Lance movimentações para diagnóstico IA.</p>
                 </div>
               )}
           </div>
@@ -124,7 +144,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-rose-500"/> Distribuição de Despesas
+              <TrendingDown className="w-5 h-5 text-rose-500"/> Categorias
           </h3>
           <ExpensesByCategory transactions={state.transactions} />
         </div>
@@ -142,22 +162,20 @@ const Dashboard: React.FC<DashboardProps> = ({
             accounts={state.accounts} 
             contacts={state.contacts} 
             onDelete={onDeleteTransaction}
-            onEdit={(t) => onEditTransaction(t)}
+            onEdit={handleEditClick}
             onToggleStatus={onUpdateStatus}
         />
       </div>
 
       <TransactionModal 
         isOpen={isTransModalOpen} 
-        onClose={() => setTransModalOpen(false)} 
-        onSave={(t, c, cat) => {
-            onAddTransaction(t, c, cat);
-            setTransModalOpen(false);
-        }}
+        onClose={handleCloseModal} 
+        onSave={handleSave}
         accounts={state.accounts}
         contacts={state.contacts}
         categories={state.categories}
         userEntity={userEntity}
+        initialData={editingTransaction}
       />
     </div>
   );

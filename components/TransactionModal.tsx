@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, ChevronDown } from 'lucide-react';
+import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Eye, Download, Trash2 } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, TransactionClassification, Branch, CostCenter, Department, Project } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
@@ -25,6 +25,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
 }) => {
   const { showAlert } = useAlert();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -42,6 +44,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     departmentId: '',
     projectId: '',
     classification: TransactionClassification.STANDARD,
+    receiptUrl: ''
   });
 
   const [contactSearch, setContactSearch] = useState('');
@@ -74,6 +77,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         departmentId: initialData.departmentId || '',
         projectId: initialData.projectId || '',
         classification: initialData.classification || TransactionClassification.STANDARD,
+        receiptUrl: initialData.receiptUrl || ''
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
@@ -89,6 +93,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
         contactId: '',
         isRecurring: false,
+        receiptUrl: ''
       }));
       setContactSearch('');
       setCategorySearch('');
@@ -125,6 +130,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               showAlert(`Nota processada: R$ ${data.amount}`, "success");
           } else showAlert(data.error || "Erro ao ler nota.", "error");
       } catch (e) { showAlert("Erro de conexão.", "error"); } finally { setLoadingQR(false); }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const fakeUrl = URL.createObjectURL(file);
+        setFormData(prev => ({
+            ...prev,
+            receiptUrl: fakeUrl,
+            status: TransactionStatus.PAID // REGRA: Ao anexar, marca como pago
+        }));
+        showAlert("Comprovante anexado! Status alterado para Pago.", "success");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -223,11 +241,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 {[10, 50, 100].map(v => (
                     <button key={v} type="button" onClick={() => setFormData({...formData, amount: String((Number(formData.amount)||0) + v)})} className="px-4 py-1.5 bg-slate-50 hover:bg-indigo-50 rounded-full text-[11px] font-black text-slate-500 hover:text-indigo-600 border border-slate-100 transition-all">+ {v}</button>
                 ))}
-                <button type="button" onClick={() => setFormData({...formData, amount: ''})} className="px-4 py-1.5 bg-slate-50 hover:bg-rose-50 rounded-full text-[11px] font-black text-slate-400 hover:text-rose-600 border border-slate-100 transition-all">Limpar</button>
               </div>
           </div>
 
-          {/* Tipo de Lançamento (Tabs) */}
+          {/* Tipo de Lançamento */}
           <div className="flex bg-slate-100/50 p-1 rounded-2xl border border-slate-100">
                 {[
                     { id: TransactionType.EXPENSE, label: 'Despesa', icon: Banknote },
@@ -249,7 +266,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                 ))}
           </div>
 
-          {/* Grid de Informações Essenciais */}
+          {/* Grid de Informações */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Descrição</label>
@@ -264,7 +281,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Data / Vencimento</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
                   <div className="relative">
                       <Calendar className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                       <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent" />
@@ -272,7 +289,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Conta Financeira</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Conta</label>
                   <div className="relative">
                     <CreditCard className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                     <select value={formData.accountId} onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer">
@@ -308,52 +325,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       {showCategoryDropdown && (
                           <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
                               {categories.filter(c => c.type === formData.type && c.name.toLowerCase().includes(categorySearch.toLowerCase())).map(c => (
-                                  <button key={c.id} type="button" onClick={() => {setCategorySearch(c.name); setShowCategoryDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors flex items-center justify-between">
+                                  <button key={c.id} type="button" onClick={() => {setCategorySearch(c.name); setShowCategoryDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors">
                                       {c.name}
                                   </button>
                               ))}
-                              {categorySearch && !categories.some(c => c.name.toLowerCase() === categorySearch.toLowerCase()) && (
-                                  <button type="button" onClick={() => setShowCategoryDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
-                                      <Plus className="w-3 h-3" /> Criar nova: "{categorySearch}"
-                                  </button>
-                              )}
                           </div>
                       )}
                   </div>
               )}
+          </div>
 
-              <div className="space-y-1 relative" ref={contactDropdownRef}>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Contato / Fornecedor</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
-                    <input 
-                        type="text" 
-                        value={contactSearch} 
-                        onFocus={() => setShowContactDropdown(true)} 
-                        onChange={(e) => {setContactSearch(e.target.value); setShowContactDropdown(true);}} 
-                        className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent" 
-                        placeholder="Opcional..." 
-                    />
-                  </div>
-                  {showContactDropdown && (
-                      <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-2xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
-                          {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
-                              <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors">
-                                  {c.name}
-                              </button>
-                          ))}
-                          {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
-                              <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
-                                  <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
-                              </button>
-                          )}
-                      </div>
-                  )}
-              </div>
-
-              {/* Status Selector Integrado */}
+          {/* Situação e Comprovante */}
+          <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação do Lançamento</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação</label>
                   <div className="flex gap-1.5 mt-1">
                       {statusOptions.map(opt => (
                           <button
@@ -369,76 +354,49 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       ))}
                   </div>
               </div>
-          </div>
 
-          {/* Recorrência e Campos PJ no mesmo fluxo */}
-          <div className="pt-6 border-t border-slate-50 space-y-6">
-              <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                      <div className={`w-10 h-6 rounded-full transition-all relative ${formData.isRecurring ? 'bg-indigo-600' : 'bg-slate-200'}`}>
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.isRecurring ? 'left-5' : 'left-1'}`}></div>
-                      </div>
-                      <input type="checkbox" className="sr-only" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
-                      <span className="text-xs font-black text-slate-500 group-hover:text-indigo-600 flex items-center gap-1.5">
-                          <TrendingUp className="w-4 h-4" /> Repetir Lançamento
-                      </span>
-                  </label>
-
-                  {formData.isRecurring && (
-                      <select 
-                        value={formData.recurrenceFrequency} 
-                        onChange={e => setFormData({...formData, recurrenceFrequency: e.target.value as any})}
-                        className="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl outline-none border-none cursor-pointer"
-                      >
-                          <option value={RecurrenceFrequency.WEEKLY}>Semanal</option>
-                          <option value={RecurrenceFrequency.MONTHLY}>Mensal</option>
-                          <option value={RecurrenceFrequency.YEARLY}>Anual</option>
-                      </select>
-                  )}
-              </div>
-
-              {userEntity === EntityType.BUSINESS && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase">Filial</label>
-                          <select value={formData.branchId} onChange={e => setFormData({...formData, branchId: e.target.value})} className="w-full bg-transparent border-b border-slate-200 py-1 text-xs font-bold text-slate-700 outline-none">
-                              <option value="">Nenhuma</option>
-                              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase">C. Custo</label>
-                          <select value={formData.costCenterId} onChange={e => setFormData({...formData, costCenterId: e.target.value})} className="w-full bg-transparent border-b border-slate-200 py-1 text-xs font-bold text-slate-700 outline-none">
-                              <option value="">Nenhum</option>
-                              {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase">Depto</label>
-                          <select value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})} className="w-full bg-transparent border-b border-slate-200 py-1 text-xs font-bold text-slate-700 outline-none">
-                              <option value="">Nenhum</option>
-                              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase">Projeto</label>
-                          <select value={formData.projectId} onChange={e => setFormData({...formData, projectId: e.target.value})} className="w-full bg-transparent border-b border-slate-200 py-1 text-xs font-bold text-slate-700 outline-none">
-                              <option value="">Nenhum</option>
-                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                      </div>
+              {/* Seção de Comprovante Compacta */}
+              <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Comprovante</label>
+                  <div className="mt-1 flex items-center gap-2">
+                      <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="image/*,application/pdf" />
+                      
+                      {formData.receiptUrl ? (
+                          <div className="flex-1 flex items-center justify-between bg-emerald-50 border border-emerald-100 p-2 rounded-xl">
+                              <div className="flex items-center gap-2">
+                                  <FileCheck className="w-4 h-4 text-emerald-600" />
+                                  <span className="text-[10px] font-bold text-emerald-700">Anexado</span>
+                              </div>
+                              <div className="flex gap-1">
+                                  <a href={formData.receiptUrl} target="_blank" rel="noreferrer" className="p-1.5 hover:bg-white rounded-lg text-emerald-600 transition-colors" title="Visualizar">
+                                      <Eye className="w-4 h-4" />
+                                  </a>
+                                  <button type="button" onClick={() => setFormData({...formData, receiptUrl: ''})} className="p-1.5 hover:bg-white rounded-lg text-rose-500 transition-colors" title="Remover">
+                                      <Trash2 className="w-4 h-4" />
+                                  </button>
+                              </div>
+                          </div>
+                      ) : (
+                          <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 border border-slate-100 border-dashed rounded-xl text-[10px] font-black text-slate-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+                          >
+                            <FilePlus className="w-4 h-4" /> Anexar Arquivo
+                          </button>
+                      )}
                   </div>
-              )}
+              </div>
           </div>
 
-          {/* Footer - Ação Final */}
+          {/* Rodapé */}
           <div className="pt-6 flex items-center justify-end gap-4 border-t border-slate-50">
               <button type="button" onClick={onClose} className="px-6 py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
               <button
                   type="submit"
                   className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl shadow-slate-200 active:scale-95"
               >
-                  {initialData?.id ? 'Atualizar' : 'Salvar Lançamento'}
+                  {initialData?.id ? 'Atualizar' : 'Salvar Registro'}
               </button>
           </div>
         </form>
