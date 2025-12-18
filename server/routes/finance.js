@@ -19,45 +19,56 @@ export default function(logAudit) {
             };
 
             const accs = await pool.query(`SELECT * FROM accounts WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
-            const trans = await pool.query(`SELECT t.*, u.name as created_by_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE ${buildFilter('t')} AND t.deleted_at IS NULL ORDER BY t.date DESC LIMIT 500`, [activeFamilyId]);
+            
+            // Transações com nome do criador
+            const trans = await pool.query(`
+                SELECT t.*, u.name as created_by_name 
+                FROM transactions t 
+                JOIN users u ON t.user_id = u.id 
+                WHERE ${buildFilter('t')} AND t.deleted_at IS NULL 
+                ORDER BY t.date DESC LIMIT 500
+            `, [activeFamilyId]);
+
             const goals = await pool.query(`SELECT * FROM goals WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             const contacts = await pool.query(`SELECT * FROM contacts WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
             let categories = await pool.query(`SELECT * FROM categories WHERE ${buildFilter()} AND deleted_at IS NULL`, [activeFamilyId]);
-            const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = (SELECT id FROM users WHERE id = $1 LIMIT 1)`, [activeFamilyId]);
+            
+            // Perfil da empresa vinculada ao family_id (ID do proprietário)
+            const companyRes = await pool.query(`SELECT * FROM company_profiles WHERE user_id = $1`, [activeFamilyId]);
             
             const branches = await pool.query(`SELECT * FROM branches WHERE family_id = $1`, [activeFamilyId]);
             const costCenters = await pool.query(`SELECT * FROM cost_centers WHERE family_id = $1`, [activeFamilyId]);
             const departments = await pool.query(`SELECT * FROM departments WHERE family_id = $1`, [activeFamilyId]);
             const projects = await pool.query(`SELECT * FROM projects WHERE family_id = $1`, [activeFamilyId]);
 
-            // Catálogo
             const srvItems = await pool.query(`SELECT * FROM module_services WHERE family_id = $1 AND deleted_at IS NULL`, [activeFamilyId]);
 
-            // Vendas e Compras (Commercial Orders)
+            // Vendas com nome do criador
             const commOrders = await pool.query(`
-                SELECT o.*, c.name as contact_name 
+                SELECT o.*, c.name as contact_name, u.name as created_by_name
                 FROM commercial_orders o 
                 LEFT JOIN contacts c ON o.contact_id = c.id 
+                JOIN users u ON o.user_id = u.id
                 WHERE o.family_id = $1 AND o.deleted_at IS NULL
             `, [activeFamilyId]);
 
-            // Ordens de Serviço
+            // OS com nome do criador
             const serviceOrders = await pool.query(`
-                SELECT so.*, c.name as contact_name 
+                SELECT so.*, c.name as contact_name, u.name as created_by_name
                 FROM service_orders so 
                 LEFT JOIN contacts c ON so.contact_id = c.id 
+                JOIN users u ON so.user_id = u.id
                 WHERE so.family_id = $1 AND so.deleted_at IS NULL
             `, [activeFamilyId]);
 
-            // Contratos
             const contractsRes = await pool.query(`
-                SELECT ct.*, c.name as contact_name 
+                SELECT ct.*, c.name as contact_name, u.name as created_by_name
                 FROM contracts ct 
                 LEFT JOIN contacts c ON ct.contact_id = c.id 
+                JOIN users u ON ct.user_id = u.id
                 WHERE ct.family_id = $1 AND ct.deleted_at IS NULL
             `, [activeFamilyId]);
 
-            // Notas Fiscais
             const invoicesRes = await pool.query(`
                 SELECT inv.*, c.name as contact_name 
                 FROM invoices inv 
@@ -67,7 +78,12 @@ export default function(logAudit) {
 
             res.json({
                 accounts: accs.rows.map(r => ({ ...r, balance: parseFloat(r.balance) })),
-                transactions: trans.rows.map(r => ({ ...r, amount: parseFloat(r.amount), date: new Date(r.date).toISOString().split('T')[0] })),
+                transactions: trans.rows.map(r => ({ 
+                    ...r, 
+                    amount: parseFloat(r.amount), 
+                    date: new Date(r.date).toISOString().split('T')[0],
+                    createdByName: r.created_by_name 
+                })),
                 goals: goals.rows.map(r => ({ ...r, targetAmount: parseFloat(r.target_amount), currentAmount: parseFloat(r.current_amount) })),
                 contacts: contacts.rows,
                 categories: categories.rows,
@@ -95,6 +111,7 @@ export default function(logAudit) {
                     ...r,
                     totalAmount: parseFloat(r.total_amount || 0),
                     contactName: r.contact_name,
+                    createdByName: r.created_by_name,
                     startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
                     endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
                 })),
@@ -104,11 +121,12 @@ export default function(logAudit) {
                     description: r.description,
                     contactId: r.contact_id,
                     contactName: r.contact_name,
+                    createdByName: r.created_by_name,
                     amount: parseFloat(r.amount || 0),
                     grossAmount: parseFloat(r.gross_amount || 0),
                     discountAmount: parseFloat(r.discount_amount || 0),
                     taxAmount: parseFloat(r.tax_amount || 0),
-                    items: r.items || [], // Items JSONB
+                    items: r.items || [],
                     date: new Date(r.date).toISOString().split('T')[0],
                     status: r.status,
                     transactionId: r.transaction_id
@@ -117,6 +135,7 @@ export default function(logAudit) {
                     ...r,
                     value: parseFloat(r.value || 0),
                     contactName: r.contact_name,
+                    createdByName: r.created_by_name,
                     startDate: new Date(r.start_date).toISOString().split('T')[0],
                     endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
                 })),
@@ -143,6 +162,15 @@ export default function(logAudit) {
             
             await client.query('BEGIN');
             const id = t.id || crypto.randomUUID();
+
+            // Proteção contra atualização de transação de outra família
+            if (t.id) {
+                const check = await client.query('SELECT family_id FROM transactions WHERE id=$1', [t.id]);
+                if (check.rows.length > 0 && check.rows[0].family_id !== familyId) {
+                    throw new Error("Transação não pertence a este ambiente.");
+                }
+            }
+
             await client.query(
                 `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)

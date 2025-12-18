@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OrderItem } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Package, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface ServicesViewProps {
@@ -298,7 +298,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex flex-col overflow-hidden">
                                 <span className="font-bold text-gray-800 truncate">{item.description || item.title || `Item #${item.id.substring(0,4)}`}</span>
-                                <span className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3"/> {item.contactName || 'Sem contato'}</span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Sem contato'}</span>
+                                    {item.createdByName && (
+                                        <span className="text-[9px] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded-full flex items-center gap-1" title={`Criado por ${item.createdByName}`}>
+                                            <UserCircle className="w-2.5 h-2.5" /> {item.createdByName.split(' ')[0]}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${getStatusColor(item.status)}`}>
                                 {getStatusLabel(item.status)}

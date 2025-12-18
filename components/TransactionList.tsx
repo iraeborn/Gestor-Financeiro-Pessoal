@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, User } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, User, UserCircle } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -90,23 +90,29 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                     )}
                     <div className="flex flex-col">
                       <span className="font-semibold">{t.description}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-gray-400">{t.category}</span>
+                        {t.createdByName && (
+                            <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full flex items-center gap-1" title={`Criado por ${t.createdByName}`}>
+                                <UserCircle className="w-2.5 h-2.5" /> {t.createdByName.split(' ')[0]}
+                            </span>
+                        )}
+                      </div>
                       {t.isRecurring && (
-                        <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full mt-1" title={getRecurrenceLabel(t) || ''}>
+                        <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full mt-1">
                           <Repeat className="w-3 h-3" />
                           {t.recurrenceFrequency === 'WEEKLY' ? 'Semanal' : t.recurrenceFrequency === 'YEARLY' ? 'Anual' : 'Mensal'}
                         </span>
                       )}
-                      <span className="text-[10px] text-gray-400 mt-0.5">{t.category}</span>
                     </div>
                   </div>
                 </td>
                 
-                {/* Coluna Contato - Separada */}
                 <td className="px-6 py-4 text-gray-600">
                     {contactName ? (
                         <div className="flex items-center gap-1.5">
                             <User className="w-3 h-3 text-gray-400" />
-                            <span>{contactName}</span>
+                            <span className="truncate max-w-[120px]">{contactName}</span>
                         </div>
                     ) : (
                         <span className="text-gray-300 text-xs italic">-</span>
@@ -136,7 +142,6 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, account
                   <button 
                     onClick={() => onToggleStatus(t)}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-100 transition-colors"
-                    title="Alternar Status"
                   >
                     {getStatusIcon(t.status)}
                     <span className="hidden sm:inline">
