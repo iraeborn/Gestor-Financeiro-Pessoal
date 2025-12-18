@@ -163,7 +163,7 @@ export interface Transaction {
   interestRate?: number;
   contactId?: string;
   goalId?: string;
-  receiptUrl?: string;
+  receiptUrls?: string[];
   // PJ fields
   branchId?: string;
   destinationBranchId?: string;

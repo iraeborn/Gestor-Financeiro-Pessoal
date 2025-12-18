@@ -21,7 +21,7 @@ interface TransactionsViewProps {
   onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
   onAdd: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
-  onUploadReceipt?: (t: Transaction, file: File) => void;
+  onUpdateAttachments?: (t: Transaction, urls: string[]) => void;
 }
 
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
@@ -36,7 +36,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   onEdit, 
   onToggleStatus,
   onAdd,
-  onUploadReceipt
+  onUpdateAttachments
 }) => {
   const { showConfirm } = useConfirm();
   const [searchTerm, setSearchTerm] = useState('');
@@ -170,8 +170,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-      // Nota: `onDelete` (que é handleDeleteTransaction do App.tsx) já implementa o useConfirm.
-      // Portanto, aqui só chamamos a função.
       onDelete(id);
   };
 
@@ -295,7 +293,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         onDelete={handleDelete}
         onEdit={handleOpenEdit}
         onToggleStatus={handleStatusToggle}
-        onUploadReceipt={onUploadReceipt}
+        onUpdateAttachments={onUpdateAttachments}
       />
 
       <TransactionModal 

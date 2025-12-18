@@ -1,7 +1,8 @@
 
-import React, { useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye, Paperclip } from 'lucide-react';
+import AttachmentModal from './AttachmentModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -10,7 +11,7 @@ interface TransactionListProps {
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
   onToggleStatus: (t: Transaction) => void;
-  onUploadReceipt?: (t: Transaction, file: File) => void;
+  onUpdateAttachments?: (t: Transaction, urls: string[]) => void;
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({ 
@@ -20,10 +21,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onDelete, 
   onEdit, 
   onToggleStatus,
-  onUploadReceipt
+  onUpdateAttachments
 }) => {
   
-  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const [activeAttachmentT, setActiveAttachmentT] = useState<Transaction | null>(null);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -53,11 +54,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
     }
   };
 
-  const handleFileChange = (t: Transaction, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && onUploadReceipt) {
-        onUploadReceipt(t, file);
-    }
+  const handleAddFiles = (t: Transaction, files: FileList) => {
+      if (!onUpdateAttachments) return;
+      
+      const newUrls = Array.from(files).map(file => URL.createObjectURL(file));
+      const updatedUrls = [...(t.receiptUrls || []), ...newUrls];
+      
+      onUpdateAttachments(t, updatedUrls);
+  };
+
+  const handleRemoveFile = (t: Transaction, index: number) => {
+      if (!onUpdateAttachments) return;
+      const updatedUrls = (t.receiptUrls || []).filter((_, i) => i !== index);
+      onUpdateAttachments(t, updatedUrls);
   };
 
   if (transactions.length === 0) {
@@ -86,6 +95,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <tbody className="divide-y divide-gray-50">
             {transactions.map((t) => {
                 const contactName = getContactName(t.contactId);
+                const hasAttachments = (t.receiptUrls?.length || 0) > 0;
                 return (
               <tr key={t.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
@@ -103,7 +113,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-gray-400">{t.category}</span>
                         {t.createdByName && (
-                            <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full flex items-center gap-1" title={`Criado por ${t.createdByName}`}>
+                            <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full flex items-center gap-1" title={`Criado por ${t.createdByName}`}>
                                 <UserCircle className="w-2.5 h-2.5" /> {t.createdByName.split(' ')[0]}
                             </span>
                         )}
@@ -160,30 +170,26 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Botão de Comprovante */}
-                    <div className="relative">
-                        <input 
-                            type="file" 
-                            className="hidden" 
-                            /* Fix: Ensure callback ref returns void by wrapping assignment in braces */
-                            ref={el => { fileInputRefs.current[t.id] = el; }}
-                            onChange={(e) => handleFileChange(t, e)}
-                            accept="image/*,application/pdf"
-                        />
-                        {t.receiptUrl ? (
-                            <a href={t.receiptUrl} target="_blank" rel="noreferrer" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Ver Comprovante">
+                    
+                    {/* Botão de Anexos Refatorado */}
+                    <button 
+                        onClick={() => setActiveAttachmentT(t)} 
+                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                            hasAttachments 
+                            ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' 
+                            : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                        title={hasAttachments ? "Visualizar Anexos" : "Anexar Comprovante"}
+                    >
+                        {hasAttachments ? (
+                            <>
                                 <FileCheck className="w-4 h-4" />
-                            </a>
+                                <span className="text-[10px] font-black">{t.receiptUrls?.length}</span>
+                            </>
                         ) : (
-                            <button 
-                                onClick={() => fileInputRefs.current[t.id]?.click()} 
-                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                title="Anexar Comprovante"
-                            >
-                                <FilePlus className="w-4 h-4" />
-                            </button>
+                            <FilePlus className="w-4 h-4" />
                         )}
-                    </div>
+                    </button>
 
                     <button 
                         onClick={() => onEdit(t)} 
@@ -194,6 +200,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     </button>
                     
                     <button 
+                        /* Fixed: Use t.id instead of id */
                         onClick={() => onDelete(t.id)} 
                         className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         title="Excluir"
@@ -207,6 +214,18 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Modal de Anexos */}
+      {activeAttachmentT && (
+          <AttachmentModal 
+            isOpen={!!activeAttachmentT}
+            onClose={() => setActiveAttachmentT(null)}
+            urls={activeAttachmentT.receiptUrls || []}
+            onAdd={(files) => handleAddFiles(activeAttachmentT, files)}
+            onRemove={(idx) => handleRemoveFile(activeAttachmentT, idx)}
+            title={activeAttachmentT.description}
+          />
+      )}
     </div>
   );
 };

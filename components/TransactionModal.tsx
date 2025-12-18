@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Eye, Download, Trash2 } from 'lucide-react';
+import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Eye, Download, Trash2, Paperclip } from 'lucide-react';
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, TransactionClassification, Branch, CostCenter, Department, Project } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
+import AttachmentModal from './AttachmentModal';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -25,7 +26,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
 }) => {
   const { showAlert } = useAlert();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     description: '',
@@ -44,7 +44,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     departmentId: '',
     projectId: '',
     classification: TransactionClassification.STANDARD,
-    receiptUrl: ''
+    receiptUrls: [] as string[]
   });
 
   const [contactSearch, setContactSearch] = useState('');
@@ -52,6 +52,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
   const [loadingQR, setLoadingQR] = useState(false);
 
   const contactDropdownRef = useRef<HTMLDivElement>(null);
@@ -77,7 +78,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         departmentId: initialData.departmentId || '',
         projectId: initialData.projectId || '',
         classification: initialData.classification || TransactionClassification.STANDARD,
-        receiptUrl: initialData.receiptUrl || ''
+        receiptUrls: initialData.receiptUrls || []
       });
       setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
@@ -93,7 +94,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
         contactId: '',
         isRecurring: false,
-        receiptUrl: ''
+        receiptUrls: []
       }));
       setContactSearch('');
       setCategorySearch('');
@@ -132,17 +133,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       } catch (e) { showAlert("Erro de conexão.", "error"); } finally { setLoadingQR(false); }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-        const fakeUrl = URL.createObjectURL(file);
-        setFormData(prev => ({
-            ...prev,
-            receiptUrl: fakeUrl,
-            status: TransactionStatus.PAID // REGRA: Ao anexar, marca como pago
-        }));
-        showAlert("Comprovante anexado! Status alterado para Pago.", "success");
-    }
+  const handleAddFiles = (files: FileList) => {
+      const newUrls = Array.from(files).map(file => URL.createObjectURL(file));
+      setFormData(prev => ({
+          ...prev,
+          receiptUrls: [...prev.receiptUrls, ...newUrls],
+          status: TransactionStatus.PAID // REGRA: Ao anexar, marca como pago
+      }));
+      showAlert(`${files.length} arquivo(s) anexado(s) e status alterado para Pago.`, "success");
+  };
+
+  const handleRemoveFile = (index: number) => {
+      setFormData(prev => ({
+          ...prev,
+          receiptUrls: prev.receiptUrls.filter((_, i) => i !== index)
+      }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -335,7 +340,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
           </div>
 
-          {/* Situação e Comprovante */}
+          {/* Situação e Comprovante Refatorados */}
           <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação</label>
@@ -355,36 +360,25 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
               </div>
 
-              {/* Seção de Comprovante Compacta */}
+              {/* Seção de Comprovante Refatorada */}
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Comprovante</label>
-                  <div className="mt-1 flex items-center gap-2">
-                      <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="image/*,application/pdf" />
-                      
-                      {formData.receiptUrl ? (
-                          <div className="flex-1 flex items-center justify-between bg-emerald-50 border border-emerald-100 p-2 rounded-xl">
-                              <div className="flex items-center gap-2">
-                                  <FileCheck className="w-4 h-4 text-emerald-600" />
-                                  <span className="text-[10px] font-bold text-emerald-700">Anexado</span>
-                              </div>
-                              <div className="flex gap-1">
-                                  <a href={formData.receiptUrl} target="_blank" rel="noreferrer" className="p-1.5 hover:bg-white rounded-lg text-emerald-600 transition-colors" title="Visualizar">
-                                      <Eye className="w-4 h-4" />
-                                  </a>
-                                  <button type="button" onClick={() => setFormData({...formData, receiptUrl: ''})} className="p-1.5 hover:bg-white rounded-lg text-rose-500 transition-colors" title="Remover">
-                                      <Trash2 className="w-4 h-4" />
-                                  </button>
-                              </div>
-                          </div>
-                      ) : (
-                          <button 
-                            type="button" 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 border border-slate-100 border-dashed rounded-xl text-[10px] font-black text-slate-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all"
-                          >
-                            <FilePlus className="w-4 h-4" /> Anexar Arquivo
-                          </button>
-                      )}
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Documentos Digitais</label>
+                  <div className="mt-1">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowAttachments(true)}
+                        className={`w-full flex items-center justify-between gap-2 py-2.5 px-4 rounded-xl text-[10px] font-black transition-all border ${
+                            formData.receiptUrls.length > 0 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'bg-slate-50 border-slate-100 border-dashed text-slate-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                            {formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />}
+                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivo(s)` : 'Anexar Comprovantes'}</span>
+                        </div>
+                        <Plus className="w-3 h-3" />
+                      </button>
                   </div>
               </div>
           </div>
@@ -402,7 +396,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         </form>
         )}
       </div>
+
       {showScanner && <QRCodeScanner onScanSuccess={handleQRSuccess} onClose={() => setShowScanner(false)} />}
+      
+      <AttachmentModal 
+        isOpen={showAttachments}
+        onClose={() => setShowAttachments(false)}
+        urls={formData.receiptUrls}
+        onAdd={handleAddFiles}
+        onRemove={handleRemoveFile}
+        title={formData.description || 'Anexos'}
+      />
     </div>
   );
 };

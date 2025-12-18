@@ -139,25 +139,29 @@ const App: React.FC = () => {
     } catch (e) { showAlert("Erro ao excluir.", "error"); }
   };
 
-  // Lógica de Comprovante: Ao anexar, marcar automaticamente como PAGO
-  const handleUploadReceipt = async (t: Transaction, file: File) => {
+  // Lógica de Comprovantes Refatorada: Suporta múltiplos URLs e marca como PAGO
+  const handleUpdateAttachments = async (t: Transaction, urls: string[]) => {
       try {
           setLoading(true);
-          // Em um ambiente real, faríamos o upload para o S3/GCS
-          // Aqui simulamos uma URL de retorno
-          const fakeUrl = URL.createObjectURL(file); 
+          const wasPaid = t.status === TransactionStatus.PAID;
+          const isNowPaid = urls.length > (t.receiptUrls?.length || 0); // Se aumentou o número de anexos, garantimos o PAGO
           
           const updatedT = { 
               ...t, 
-              receiptUrl: fakeUrl, 
-              status: TransactionStatus.PAID // MARCA COMO PAGO AUTOMATICAMENTE
+              receiptUrls: urls, 
+              status: isNowPaid ? TransactionStatus.PAID : t.status 
           };
           
           await api.saveTransaction(updatedT);
           await loadData(true);
-          showAlert("Comprovante anexado e transação quitada!", "success");
+          
+          if (!wasPaid && isNowPaid) {
+              showAlert("Comprovante anexado e transação quitada!", "success");
+          } else {
+              showAlert("Anexos atualizados.", "success");
+          }
       } catch (e) {
-          showAlert("Erro ao processar comprovante.", "error");
+          showAlert("Erro ao atualizar anexos.", "error");
       } finally {
           setLoading(false);
       }
@@ -246,7 +250,7 @@ const App: React.FC = () => {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
       case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} onUploadReceipt={handleUploadReceipt} />;
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} onUpdateAttachments={handleUpdateAttachments} />;
       case 'FIN_CALENDAR':
         return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleAddTransaction} onEdit={handleEditTransaction} />;
       case 'FIN_ACCOUNTS':

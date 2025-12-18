@@ -18,10 +18,11 @@ interface DashboardProps {
   onEditTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onUpdateStatus: (t: Transaction) => void;
   onChangeView: (view: ViewMode) => void;
+  onUpdateAttachments?: (t: Transaction, urls: string[]) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
+  state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView, onUpdateAttachments
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -48,7 +49,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
   const handleEditClick = (t: Transaction) => {
-      setEditingTransaction(t);
+      setEditingTransaction({ ...t }); // Deep copy to ensure state refresh
       setTransModalOpen(true);
   };
 
@@ -164,6 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             onDelete={onDeleteTransaction}
             onEdit={handleEditClick}
             onToggleStatus={onUpdateStatus}
+            onUpdateAttachments={onUpdateAttachments}
         />
       </div>
 
