@@ -112,9 +112,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const disc = Number(formData.discountAmount) || 0;
-            const taxes = (itemsSum - disc) * (taxPercent / 100);
-            const net = itemsSum - disc - (currentView === 'SRV_SALES' ? taxes : 0);
-            return { gross: itemsSum, disc, taxes, net, resolvedList };
+            const gross = itemsSum;
+            const net = itemsSum - disc;
+            const taxes = net * (taxPercent / 100);
+            return { gross, disc, taxes, net, resolvedList };
         }
         
         const useAutomatic = isCatalog ? formData.isComposite : items.length > 0;
@@ -665,6 +666,34 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </div>
                                 </div>
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
+                                    {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') && (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Aplicado (R$)</label>
+                                                <div className="relative">
+                                                    <Percent className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        className="w-full pl-9 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold bg-white" 
+                                                        value={formData.discountAmount || ''} 
+                                                        onChange={e => setFormData({...formData, discountAmount: e.target.value})} 
+                                                        placeholder="0,00"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="p-4 bg-white rounded-2xl border border-gray-100 text-xs space-y-2 shadow-sm">
+                                                <div className="flex justify-between items-center text-gray-500 font-medium">
+                                                    <span>Subtotal</span>
+                                                    <span>{formatCurrency(pricing.gross)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-rose-500 font-black">
+                                                    <span className="flex items-center gap-1"><Tag className="w-3 h-3"/> Desconto</span>
+                                                    <span>- {formatCurrency(pricing.disc)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     {!isOS && !isCatalog && (
                                         <div>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
