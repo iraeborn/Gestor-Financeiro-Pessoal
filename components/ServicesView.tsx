@@ -62,6 +62,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const isCatalog = currentView === 'SRV_CATALOG';
     const isOS = currentView === 'SRV_OS';
+    const isSales = currentView === 'SRV_SALES';
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -142,7 +143,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const getTitle = () => {
         switch(currentView) {
             case 'SRV_OS': return { title: 'Ordens de Serviço', icon: Wrench, label: 'OS' };
-            case 'SRV_SALES': return { title: 'Vendas e Orçamentos', icon: ShoppingBag, label: 'Venda' };
+            case 'SRV_SALES': return { title: 'Vendas e Orçamentos', icon: ShoppingBag, label: 'Orçamento' };
             case 'SRV_PURCHASES': return { title: 'Compras', icon: ShoppingBag, label: 'Compra' };
             case 'SRV_CONTRACTS': return { title: 'Contratos', icon: FileSignature, label: 'Contrato' };
             case 'SRV_NF': return { title: 'Notas Fiscais', icon: FileText, label: 'Nota' };
@@ -416,7 +417,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map(item => (
+                {filtered.map(item => {
+                    const isDraft = item.status === 'DRAFT';
+                    const recordLabel = currentView === 'SRV_SALES' ? (isDraft ? 'ORÇAMENTO' : 'VENDA') : 'REGISTRO';
+                    
+                    return (
                     <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                          <div className="flex justify-between items-start mb-4">
                             <div className="flex flex-col overflow-hidden">
@@ -424,7 +429,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
                                     {item.isComposite && <span title="Item Composto / Kit"><Layers className="w-3 h-3 text-indigo-500" /></span>}
                                 </div>
-                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || (isCatalog ? 'Item de Catálogo' : 'Registro')}</span>
+                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || (isCatalog ? 'Item de Catálogo' : recordLabel)}</span>
                             </div>
                             <div className="flex flex-col items-end gap-1">
                                 {isCatalog ? (
@@ -438,7 +443,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </>
                                 ) : (
                                     <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                        {item.status || 'STATUS'}
+                                        {isDraft && currentView === 'SRV_SALES' ? 'ORÇAMENTO' : item.status}
                                     </span>
                                 )}
                             </div>
@@ -454,10 +459,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                              </div>
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
         );
     };
+
+    const isRecordDraft = formData.status === 'DRAFT';
+    const modalLabel = currentView === 'SRV_SALES' ? (isRecordDraft ? 'Orçamento' : 'Venda') : header.label;
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -509,7 +517,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl p-8 max-h-[95vh] overflow-y-auto animate-scale-up">
                         <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
-                            <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2"><Calculator className="w-6 h-6 text-indigo-600"/> {formData.id ? 'Editar ' : 'Novo '} {header.label}</h2>
+                            <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2"><Calculator className="w-6 h-6 text-indigo-600"/> {formData.id ? 'Editar ' : 'Novo '} {modalLabel}</h2>
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
                         </div>
                         <form onSubmit={handleSave} className="space-y-8">
@@ -721,7 +729,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     )}
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : 'Valor Líquido'}</span>
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : (currentView === 'SRV_SALES' && isRecordDraft ? 'Valor Orçado' : 'Valor Líquido')}</span>
                                             {(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}
                                         </div>
                                         <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing.net)}</p>
@@ -732,7 +740,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         </button>
                                         <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button>
                                     </div>
-                                    {!isCatalog && (
+                                    {isOS && (
                                         <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
                                             <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">
                                                 <Timer className="w-3 h-3" /> Cronograma (Auto)
