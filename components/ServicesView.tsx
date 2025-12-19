@@ -5,6 +5,16 @@ import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, Che
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 
+const SERVICE_UNITS = [
+    { id: 'UN', label: 'Unidade (UN)' },
+    { id: 'HR', label: 'Hora (HR)' },
+    { id: 'MIN', label: 'Minuto (MIN)' },
+    { id: 'DIA', label: 'Dia (DIA)' },
+    { id: 'MT', label: 'Metro (MT)' },
+    { id: 'KG', label: 'Quilo (KG)' },
+    { id: 'SERV', label: 'Serviço (SERV)' },
+];
+
 interface ServicesViewProps {
     currentView: ViewMode;
     serviceOrders: ServiceOrder[];
@@ -149,7 +159,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             }
         } else if (currentView === 'SRV_CATALOG') {
             if (item) setFormData({ ...item });
-            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0 });
+            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0, unit: 'UN' });
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
                 setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
@@ -208,7 +218,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         let finalContactId = formData.contactId;
         let newContactObj: Contact | undefined;
 
-        if (contactSearch) {
+        if (contactSearch && currentView !== 'SRV_OS') {
             const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
             if (existing) {
                 finalContactId = existing.id;
@@ -408,42 +418,46 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 
                                 <div className="lg:col-span-3 space-y-6">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
+                                        <div className="md:col-span-2">
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Título do Registro</label>
                                             <input type="text" placeholder="Ex: Manutenção Elétrica Prédio..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
                                         </div>
-                                        <div className="relative" ref={contactDropdownRef}>
-                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
-                                            <div className="relative">
-                                                <User className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-                                                <input 
-                                                    type="text" 
-                                                    value={contactSearch} 
-                                                    onFocus={() => setShowContactDropdown(true)} 
-                                                    onChange={(e) => {setContactSearch(e.target.value); setShowContactDropdown(true);}} 
-                                                    className="w-full pl-9 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold bg-white" 
-                                                    placeholder="Buscar ou criar..." 
-                                                />
-                                            </div>
-                                            {showContactDropdown && (
-                                                <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
-                                                    {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
-                                                        <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors flex items-center justify-between">
-                                                            {c.name}
-                                                        </button>
-                                                    ))}
-                                                    {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
-                                                        <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
-                                                            <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
-                                                        </button>
-                                                    )}
+                                        
+                                        {/* Pessoa/Empresa removido para OS conforme solicitado, mas mantido para Vendas/Catalog */}
+                                        {currentView !== 'SRV_OS' && (
+                                            <div className="relative" ref={contactDropdownRef}>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
+                                                <div className="relative">
+                                                    <User className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+                                                    <input 
+                                                        type="text" 
+                                                        value={contactSearch} 
+                                                        onFocus={() => setShowContactDropdown(true)} 
+                                                        onChange={(e) => {setContactSearch(e.target.value); setShowContactDropdown(true);}} 
+                                                        className="w-full pl-9 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold bg-white" 
+                                                        placeholder="Buscar ou criar..." 
+                                                    />
                                                 </div>
-                                            )}
-                                        </div>
+                                                {showContactDropdown && (
+                                                    <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                                                        {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
+                                                            <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors flex items-center justify-between">
+                                                                {c.name}
+                                                            </button>
+                                                        ))}
+                                                        {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
+                                                            <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
+                                                                <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {currentView === 'SRV_OS' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Tipo de OS</label>
                                                 <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.type || 'MANUTENCAO'} onChange={e => setFormData({...formData, type: e.target.value})}>
@@ -473,10 +487,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                     <option value="URGENTE">Urgente</option>
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Abertura (Data/Hora)</label>
-                                                <input type="datetime-local" className="w-full border border-gray-200 rounded-xl p-2 text-[11px] font-bold" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
-                                            </div>
                                         </div>
                                     )}
 
@@ -487,8 +497,22 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 <input type="number" placeholder="Ex: 60" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultDuration || ''} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Unidade</label>
-                                                <input type="text" placeholder="Ex: HORA, UN, DIA" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Unidade Padrão</label>
+                                                <select 
+                                                    className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold bg-white" 
+                                                    value={formData.unit || 'UN'} 
+                                                    onChange={e => setFormData({...formData, unit: e.target.value})}
+                                                >
+                                                    {SERVICE_UNITS.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Venda (R$)</label>
+                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo (R$)</label>
+                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
                                             </div>
                                          </div>
                                     )}
@@ -559,20 +583,23 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
 
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Operacional</label>
-                                        <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}>
-                                            <option value="ABERTA">Aberta</option>
-                                            <option value="APROVADA">Aprovada</option>
-                                            <option value="AGENDADA">Agendada</option>
-                                            <option value="EM_EXECUCAO">Em Execução</option>
-                                            <option value="PAUSADA">Pausada</option>
-                                            <option value="AGUARDANDO_CLIENTE">Aguardando Cliente</option>
-                                            <option value="AGUARDANDO_MATERIAL">Aguardando Material</option>
-                                            <option value="FINALIZADA">Finalizada</option>
-                                            <option value="CANCELADA">Cancelada</option>
-                                        </select>
-                                    </div>
+                                    {/* Situação Operacional removido do formulário para OS conforme solicitado */}
+                                    {currentView !== 'SRV_OS' && (
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
+                                            <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                                <option value="ABERTA">Aberta</option>
+                                                <option value="APROVADA">Aprovada</option>
+                                                <option value="AGENDADA">Agendada</option>
+                                                <option value="EM_EXECUCAO">Em Execução</option>
+                                                <option value="PAUSADA">Pausada</option>
+                                                <option value="AGUARDANDO_CLIENTE">Aguardando Cliente</option>
+                                                <option value="AGUARDANDO_MATERIAL">Aguardando Material</option>
+                                                <option value="FINALIZADA">Finalizada</option>
+                                                <option value="CANCELADA">Cancelada</option>
+                                            </select>
+                                        </div>
+                                    )}
 
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
@@ -591,9 +618,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
                                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
                                         <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">
-                                            <Timer className="w-3 h-3" /> Cronograma OS
+                                            <Timer className="w-3 h-3" /> Cronograma (Auto)
                                         </div>
                                         <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-indigo-400 uppercase">Abertura</label>
+                                                <input type="datetime-local" className="w-full bg-transparent text-[11px] font-bold text-indigo-900 outline-none" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
+                                            </div>
                                             <div>
                                                 <label className="block text-[9px] font-bold text-indigo-400 uppercase">Previsão Início</label>
                                                 <input type="date" className="w-full bg-transparent text-xs font-bold text-indigo-900 outline-none" value={formData.startDate || ''} onChange={e => setFormData({...formData, startDate: e.target.value})}/>

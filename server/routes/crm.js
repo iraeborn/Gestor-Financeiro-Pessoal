@@ -7,13 +7,11 @@ const router = express.Router();
 
 export default function(logAudit) {
     
-    // Helper local para obter o family_id
     const getFamilyId = async (userId) => {
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         return res.rows[0]?.family_id || userId;
     };
 
-    // Rota para Clientes do Módulo de Serviços
     router.post('/modules/clients', authenticateToken, async (req, res) => {
         const { id, contactId, contactName, contactEmail, contactPhone, notes, birthDate, insurance, allergies, medications, moduleTag } = req.body;
         try {
@@ -35,26 +33,26 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // Rota para Catálogo de Itens (Produtos/Serviços)
     router.post('/modules/services', authenticateToken, async (req, res) => {
-        const { id, name, code, defaultPrice, moduleTag, type, costPrice, unit, description, imageUrl, brand } = req.body;
+        const { id, name, code, defaultPrice, defaultDuration, moduleTag, type, costPrice, unit, description, imageUrl, brand } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const existingRes = await pool.query('SELECT id FROM module_services WHERE id = $1', [id]);
             const isUpdate = existingRes.rows.length > 0;
 
             await pool.query(
-                `INSERT INTO module_services (id, name, code, default_price, module_tag, user_id, family_id, type, cost_price, unit, description, image_url, brand) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-                 ON CONFLICT (id) DO UPDATE SET name=$2, code=$3, default_price=$4, module_tag=$5, type=$8, cost_price=$9, unit=$10, description=$11, image_url=$12, brand=$13, deleted_at=NULL`, 
-                [id, name, sanitizeValue(code), defaultPrice || 0, moduleTag || 'GENERAL', req.user.id, familyId, type || 'SERVICE', costPrice || 0, sanitizeValue(unit), sanitizeValue(description), sanitizeValue(imageUrl), sanitizeValue(brand)]
+                `INSERT INTO module_services (id, name, code, default_price, default_duration, module_tag, user_id, family_id, type, cost_price, unit, description, image_url, brand) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+                 ON CONFLICT (id) DO UPDATE SET 
+                    name=$2, code=$3, default_price=$4, default_duration=$5, module_tag=$6, 
+                    type=$9, cost_price=$10, unit=$11, description=$12, image_url=$13, brand=$14, deleted_at=NULL`, 
+                [id, name, sanitizeValue(code), defaultPrice || 0, defaultDuration || 0, moduleTag || 'GENERAL', req.user.id, familyId, type || 'SERVICE', costPrice || 0, sanitizeValue(unit), sanitizeValue(description), sanitizeValue(imageUrl), sanitizeValue(brand)]
             );
             await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'service_item', id, name);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // Rota para Agendamentos
     router.post('/modules/appointments', authenticateToken, async (req, res) => {
         const { id, clientId, serviceId, date, status, notes, moduleTag } = req.body;
         try {
