@@ -82,10 +82,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     const qty = Number(item.quantity) || 1;
                     return {
                         ...item,
-                        description: latest.name,
-                        unitPrice: latest.defaultPrice,
-                        totalPrice: latest.defaultPrice * qty,
-                        costPrice: latest.costPrice || 0,
+                        description: item.description || latest.name,
+                        unitPrice: item.unitPrice || latest.defaultPrice,
+                        totalPrice: (item.unitPrice || latest.defaultPrice) * qty,
+                        costPrice: item.costPrice || latest.costPrice || 0,
                         estimatedDuration: (latest.defaultDuration || 0) * qty,
                         isFromCatalog: true
                     };
@@ -134,7 +134,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         };
     }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, serviceItems]);
 
-    // Função de formatação robusta para evitar erros de tipagem number | undefined
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
@@ -187,7 +186,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
         if (isOS) {
             if (item) {
-                setFormData({ ...item });
+                setFormData({ 
+                    ...item,
+                    items: Array.isArray(item.items) ? item.items : [] 
+                });
             } else {
                 setFormData({ 
                     status: 'ABERTA', 
@@ -274,7 +276,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         let finalContactId = formData.contactId;
         let newContactObj: Contact | undefined;
 
-        if (contactSearch && !isOS && !isCatalog) {
+        if (contactSearch && !isCatalog) {
             const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
             if (existing) {
                 finalContactId = existing.id;
@@ -538,7 +540,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Título do Registro</label>
                                             <input type="text" placeholder={isCatalog ? "Ex: Motor Trifásico 5HP..." : "Ex: Manutenção Elétrica Prédio..."} className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
                                         </div>
-                                        {!isOS && !isCatalog && (
+                                        {!isCatalog && (
                                             <div className="relative" ref={contactDropdownRef}>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
                                                 <div className="relative">
@@ -711,7 +713,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             </div>
                                         </div>
                                     )}
-                                    {!isOS && !isCatalog && (
+                                    {!isCatalog && (
                                         <div>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
                                             <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}>
