@@ -35,9 +35,9 @@ interface ServicesViewProps {
     onDeleteContract: (id: string) => void;
     onSaveInvoice: (i: Invoice, newContact?: Contact) => void;
     onDeleteInvoice: (id: string) => void;
+    onAddTransaction: (t: any) => void;
     onSaveCatalogItem?: (i: ServiceItem) => void;
     onDeleteCatalogItem?: (id: string) => void;
-    onAddTransaction: (t: any) => void;
 }
 
 const ServicesView: React.FC<ServicesViewProps> = ({ 
@@ -117,6 +117,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             netValue = itemsSum - disc;
         } else if (isCatalog) {
             netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
+        } else if (isOS) {
+            // Fix: Fallback para totalAmount se a grade estiver vazia
+            netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
         } else {
             netValue = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
         }
@@ -132,7 +135,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             duration: isCatalog && !formData.isComposite ? (Number(formData.defaultDuration) || 0) : durationSum,
             resolvedList 
         };
-    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, serviceItems]);
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.totalAmount, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, isOS, serviceItems]);
 
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
@@ -188,6 +191,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             if (item) {
                 setFormData({ 
                     ...item,
+                    totalAmount: item.totalAmount || 0,
                     items: Array.isArray(item.items) ? item.items : [] 
                 });
             } else {

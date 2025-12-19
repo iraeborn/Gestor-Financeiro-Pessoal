@@ -15,10 +15,9 @@ export default function(logAudit) {
 
     // --- SERVICE ORDERS (OS) ---
     router.post('/services/os', authenticateToken, async (req, res) => {
-        const { id, title, description, contactId, status, totalAmount, startDate, endDate } = req.body;
+        const { id, title, description, contactId, status, totalAmount, startDate, endDate, items, type, origin, priority, openedAt } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
-            await pool.query(`CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, created_at TIMESTAMP, deleted_at TIMESTAMP)`);
             
             // Verifica se o registro existe e se pertence à família
             const existing = (await pool.query('SELECT * FROM service_orders WHERE id=$1', [id])).rows[0];
@@ -29,10 +28,22 @@ export default function(logAudit) {
             const changes = calculateChanges(existing, req.body, { title: 'title', status: 'status', totalAmount: 'total_amount' });
 
             await pool.query(
-                `INSERT INTO service_orders (id, title, description, contact_id, status, total_amount, start_date, end_date, user_id, family_id, created_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) 
-                 ON CONFLICT (id) DO UPDATE SET title=$2, description=$3, contact_id=$4, status=$5, total_amount=$6, start_date=$7, end_date=$8, deleted_at=NULL`,
-                [id, title, description, sanitizeValue(contactId), status, totalAmount || 0, sanitizeValue(startDate), sanitizeValue(endDate), req.user.id, familyId]
+                `INSERT INTO service_orders (
+                    id, title, description, contact_id, status, total_amount, 
+                    start_date, end_date, items, type, origin, priority, opened_at,
+                    user_id, family_id, created_at
+                ) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()) 
+                 ON CONFLICT (id) DO UPDATE SET 
+                    title=$2, description=$3, contact_id=$4, status=$5, total_amount=$6, 
+                    start_date=$7, end_date=$8, items=$9, type=$10, origin=$11, 
+                    priority=$12, opened_at=$13, deleted_at=NULL`,
+                [
+                    id, title, description, sanitizeValue(contactId), status, totalAmount || 0, 
+                    sanitizeValue(startDate), sanitizeValue(endDate), JSON.stringify(items || []),
+                    type, origin, priority, sanitizeValue(openedAt),
+                    req.user.id, familyId
+                ]
             );
             
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'service_order', id, title, existing, changes);
