@@ -73,7 +73,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // --- LOGICA DE RESOLUÇÃO DINÂMICA DE PREÇOS ---
     const resolveItems = (items: any[]) => {
         return items.map(item => {
             if (item.serviceItemId) {
@@ -95,7 +94,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         });
     };
 
-    const getResolvedPrice = (item: any) => {
+    const getResolvedPrice = (item: any): number => {
         if (!item.isComposite || !item.items || item.items.length === 0) return Number(item.defaultPrice || 0);
         const resolved = resolveItems(item.items);
         return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
@@ -103,32 +102,42 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const pricing = useMemo(() => {
         const items = (formData.items || []) as any[];
-        // Resolve preços atuais para o formulário
         const resolvedList = resolveItems(items);
 
         const itemsSum = resolvedList.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
         const costSum = resolvedList.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
         const durationSum = resolvedList.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
 
+        const disc = Number(formData.discountAmount) || 0;
+        const gross = itemsSum;
+        
+        let netValue = 0;
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
-            const disc = Number(formData.discountAmount) || 0;
-            const gross = itemsSum;
-            const net = itemsSum - disc;
-            const taxes = net * (taxPercent / 100);
-            return { gross, disc, taxes, net, resolvedList };
+            netValue = itemsSum - disc;
+        } else if (isCatalog) {
+            netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
+        } else {
+            netValue = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
         }
-        
-        const useAutomatic = isCatalog ? formData.isComposite : items.length > 0;
-        
+
+        const taxes = netValue * (taxPercent / 100);
+
         return { 
-            net: useAutomatic ? itemsSum : (Number(formData.defaultPrice) || 0),
-            cost: useAutomatic ? costSum : (Number(formData.costPrice) || 0),
-            duration: useAutomatic ? durationSum : (Number(formData.defaultDuration) || 0),
-            resolvedList
+            gross, 
+            disc, 
+            taxes, 
+            net: netValue, 
+            cost: isCatalog && !formData.isComposite ? (Number(formData.costPrice) || 0) : costSum,
+            duration: isCatalog && !formData.isComposite ? (Number(formData.defaultDuration) || 0) : durationSum,
+            resolvedList 
         };
     }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, serviceItems]);
 
-    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    // Função de formatação robusta para evitar erros de tipagem number | undefined
+    const formatCurrency = (val: number | undefined | null) => {
+        const amount = typeof val === 'number' ? val : 0;
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+    };
 
     const getTitle = () => {
         switch(currentView) {
@@ -279,15 +288,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const common = { id, contactId: finalContactId, contactName: contactSearch };
 
         if (isOS) {
-            onSaveOS({ ...formData, ...common, totalAmount: pricing?.net || 0 }, newContactObj);
+            onSaveOS({ ...formData, ...common, totalAmount: pricing.net }, newContactObj);
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const type = currentView === 'SRV_SALES' ? 'SALE' : 'PURCHASE';
             onSaveOrder({ 
                 ...formData, ...common, type, 
-                amount: pricing?.net || 0, 
-                grossAmount: pricing?.gross || 0,
-                discountAmount: pricing?.disc || 0,
-                taxAmount: pricing?.taxes || 0,
+                amount: pricing.net, 
+                grossAmount: pricing.gross,
+                discountAmount: pricing.disc,
+                taxAmount: pricing.taxes,
                 items: formData.items || [],
                 date: formData.date || new Date().toISOString().split('T')[0], 
                 status: formData.status || 'DRAFT' 
@@ -582,7 +591,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Duração Padrão</label>
-                                                <input type="number" placeholder="Ex: 60" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} value={pricing.duration || ''} readOnly={formData.isComposite} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
+                                                <input type="number" placeholder="Ex: 60" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} value={pricing.duration} readOnly={formData.isComposite} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Unidade Padrão</label>
@@ -592,12 +601,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Sugerido (R$)</label>
-                                                <input type="number" step="0.01" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50 text-indigo-600' : 'bg-white'}`} value={pricing.net || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} readOnly={formData.isComposite} />
+                                                <input type="number" step="0.01" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50 text-indigo-600' : 'bg-white'}`} value={pricing.net} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} readOnly={formData.isComposite} />
                                                 {formData.isComposite && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Somatório dinâmico dos itens da grade</p>}
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo Sugerido (R$)</label>
-                                                <input type="number" step="0.01" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} value={pricing.cost || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} readOnly={formData.isComposite}/>
+                                                <input type="number" step="0.01" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} value={pricing.cost} onChange={e => setFormData({...formData, costPrice: e.target.value})} readOnly={formData.isComposite}/>
                                             </div>
                                          </div>
                                     )}
@@ -684,7 +693,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             </div>
                                             <div className="p-4 bg-white rounded-2xl border border-gray-100 text-xs space-y-2 shadow-sm">
                                                 <div className="flex justify-between items-center text-gray-500 font-medium">
-                                                    <span>Subtotal</span>
+                                                    <span>Subtotal Bruto</span>
                                                     <span>{formatCurrency(pricing.gross)}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-rose-500 font-black">
@@ -712,10 +721,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     )}
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : 'Valor Faturável'}</span>
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : 'Valor Líquido'}</span>
                                             {(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}
                                         </div>
-                                        <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing?.net || 0)}</p>
+                                        <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing.net)}</p>
                                     </div>
                                     <div className="space-y-3">
                                         <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2">
