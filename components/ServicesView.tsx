@@ -81,12 +81,21 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 const latest = serviceItems.find(si => si.id === item.serviceItemId);
                 if (latest) {
                     const qty = Number(item.quantity) || 1;
+                    
+                    // REVISÃO DE LÓGICA DE VALOR:
+                    // Se estivermos no Catálogo, usamos SEMPRE o valor mais recente do catálogo original.
+                    // Se estivermos em OS/Venda, priorizamos o valor gravado (snapshot histórico), 
+                    // a menos que seja um novo item sem valor ainda.
+                    const unitPriceToUse = isCatalog ? latest.defaultPrice : (item.unitPrice || latest.defaultPrice);
+                    const costPriceToUse = isCatalog ? (latest.costPrice || 0) : (item.costPrice || latest.costPrice || 0);
+
                     return {
                         ...item,
+                        code: item.code || latest.code,
                         description: item.description || latest.name,
-                        unitPrice: item.unitPrice || latest.defaultPrice,
-                        totalPrice: (item.unitPrice || latest.defaultPrice) * qty,
-                        costPrice: item.costPrice || latest.costPrice || 0,
+                        unitPrice: unitPriceToUse,
+                        totalPrice: unitPriceToUse * qty,
+                        costPrice: costPriceToUse,
                         estimatedDuration: (latest.defaultDuration || 0) * qty,
                         isFromCatalog: true
                     };
@@ -97,8 +106,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     const getResolvedPrice = (item: any): number => {
-        if (!item.isComposite || !item.items || item.items.length === 0) return Number(item.defaultPrice || 0);
-        const resolved = resolveItems(item.items);
+        // Se for simples, retorna o preço padrão
+        if (!item.isComposite) return Number(item.defaultPrice || 0);
+        
+        // Se for composto, resolve os itens da composição usando a lógica dinâmica (latest values)
+        const resolved = resolveItems(item.items || []);
+        if (resolved.length === 0) return Number(item.defaultPrice || 0);
+        
         return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
     };
 
@@ -119,7 +133,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (isCatalog) {
             netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
         } else if (isOS) {
-            // Fix: Fallback para totalAmount se a grade estiver vazia
             netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
         } else {
             netValue = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
@@ -245,14 +258,16 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleAddOSItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
+        const resolvedPrice = catalogItem ? getResolvedPrice(catalogItem) : 0;
+        
         const newItem: OSItem = {
             id: crypto.randomUUID(),
             serviceItemId: catalogItem?.id,
             code: catalogItem?.code || '',
             description: catalogItem?.name || '',
             quantity: 1,
-            unitPrice: catalogItem?.defaultPrice || 0,
-            totalPrice: catalogItem?.defaultPrice || 0,
+            unitPrice: resolvedPrice,
+            totalPrice: resolvedPrice,
             estimatedDuration: catalogItem?.defaultDuration || 0,
             isBillable: true
         };

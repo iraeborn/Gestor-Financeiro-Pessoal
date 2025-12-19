@@ -190,10 +190,10 @@ export default function(logAudit) {
                     totalAmount: parseFloat(r.total_amount || 0),
                     contactName: r.contact_name,
                     createdByName: r.created_by_name,
-                    openedAt: r.opened_at, // Mapeamento explícito
+                    openedAt: r.opened_at ? new Date(r.opened_at).toISOString() : null, // ISO formatting
                     startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
                     endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null,
-                    items: parseItems(r.items) // Parsing garantido
+                    items: parseItems(r.items)
                 })),
                 commercialOrders: commOrders.rows.map(r => ({
                     id: r.id,
