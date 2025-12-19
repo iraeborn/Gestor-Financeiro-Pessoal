@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 
@@ -73,17 +73,48 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    // --- LOGICA DE RESOLUÇÃO DINÂMICA DE PREÇOS ---
+    const resolveItems = (items: any[]) => {
+        return items.map(item => {
+            if (item.serviceItemId) {
+                const latest = serviceItems.find(si => si.id === item.serviceItemId);
+                if (latest) {
+                    const qty = Number(item.quantity) || 1;
+                    return {
+                        ...item,
+                        description: latest.name,
+                        unitPrice: latest.defaultPrice,
+                        totalPrice: latest.defaultPrice * qty,
+                        costPrice: latest.costPrice || 0,
+                        estimatedDuration: (latest.defaultDuration || 0) * qty,
+                        isFromCatalog: true
+                    };
+                }
+            }
+            return { ...item, isFromCatalog: false };
+        });
+    };
+
+    const getResolvedPrice = (item: any) => {
+        if (!item.isComposite || !item.items || item.items.length === 0) return Number(item.defaultPrice || 0);
+        const resolved = resolveItems(item.items);
+        return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
+    };
+
     const pricing = useMemo(() => {
         const items = (formData.items || []) as any[];
-        const itemsSum = items.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
-        const costSum = items.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
-        const durationSum = items.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
+        // Resolve preços atuais para o formulário
+        const resolvedList = resolveItems(items);
+
+        const itemsSum = resolvedList.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
+        const costSum = resolvedList.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
+        const durationSum = resolvedList.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
 
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const disc = Number(formData.discountAmount) || 0;
             const taxes = (itemsSum - disc) * (taxPercent / 100);
             const net = itemsSum - disc - (currentView === 'SRV_SALES' ? taxes : 0);
-            return { gross: itemsSum, disc, taxes, net };
+            return { gross: itemsSum, disc, taxes, net, resolvedList };
         }
         
         const useAutomatic = isCatalog ? formData.isComposite : items.length > 0;
@@ -91,9 +122,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return { 
             net: useAutomatic ? itemsSum : (Number(formData.defaultPrice) || 0),
             cost: useAutomatic ? costSum : (Number(formData.costPrice) || 0),
-            duration: useAutomatic ? durationSum : (Number(formData.defaultDuration) || 0)
+            duration: useAutomatic ? durationSum : (Number(formData.defaultDuration) || 0),
+            resolvedList
         };
-    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog]);
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, serviceItems]);
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -382,12 +414,27 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
                                     {item.isComposite && <span title="Item Composto / Kit"><Layers className="w-3 h-3 text-indigo-500" /></span>}
                                 </div>
-                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Item de Catálogo'}</span>
+                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || (isCatalog ? 'Item de Catálogo' : 'Registro')}</span>
                             </div>
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.status || 'CATALOG'}</span>
+                            <div className="flex flex-col items-end gap-1">
+                                {isCatalog ? (
+                                    <>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${item.type === 'SERVICE' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                                            {item.type === 'SERVICE' ? 'SERVIÇO' : 'PRODUTO'}
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${item.isComposite ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                                            {item.isComposite ? 'COMPOSTO' : 'SIMPLES'}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {item.status || 'STATUS'}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="flex justify-between items-center text-sm font-black text-gray-900 mt-2">
-                             <span>{formatCurrency(item.amount || item.defaultPrice || item.value || 0)}</span>
+                             <span>{formatCurrency(isCatalog ? getResolvedPrice(item) : (item.amount || item.defaultPrice || item.value || 0))}</span>
                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {currentView === 'SRV_SALES' && item.status === 'DRAFT' && (
                                     <button onClick={() => { setSelectedOrderForApproval(item); setIsApprovalOpen(true); }} className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg" title="Aprovar Orçamento"><CheckCircle className="w-4 h-4"/></button>
@@ -545,7 +592,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Sugerido (R$)</label>
                                                 <input type="number" step="0.01" className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50 text-indigo-600' : 'bg-white'}`} value={pricing.net || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} readOnly={formData.isComposite} />
-                                                {formData.isComposite && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Somatório dos itens da grade</p>}
+                                                {formData.isComposite && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Somatório dinâmico dos itens da grade</p>}
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo Sugerido (R$)</label>
@@ -586,16 +633,19 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-200">
-                                                    {(formData.items || []).map((item: any) => (
+                                                    {pricing.resolvedList.map((item: any) => (
                                                         <tr key={item.id} className="bg-white hover:bg-indigo-50/10 transition-colors">
                                                             <td className="px-4 py-3">
                                                                 <div className="flex flex-col gap-1">
-                                                                    <input type="text" value={item.code} onChange={e => handleUpdateOSItem(item.id, 'code', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-indigo-400 placeholder-indigo-200" placeholder="Código"/>
-                                                                    <input type="text" value={item.description} onChange={e => handleUpdateOSItem(item.id, 'description', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-800" placeholder="Descrição do item..."/>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <input type="text" value={item.code} readOnly={item.isFromCatalog} onChange={e => handleUpdateOSItem(item.id, 'code', e.target.value)} className={`w-full bg-transparent border-none focus:ring-0 text-[10px] font-black placeholder-indigo-200 ${item.isFromCatalog ? 'text-indigo-600' : 'text-indigo-400'}`} placeholder="Código"/>
+                                                                        {item.isFromCatalog && <span title="Vínculo automático com o catálogo" className="text-indigo-500"><RefreshCw className="w-2.5 h-2.5 animate-spin-slow" /></span>}
+                                                                    </div>
+                                                                    <input type="text" value={item.description} readOnly={item.isFromCatalog} onChange={e => handleUpdateOSItem(item.id, 'description', e.target.value)} className={`w-full bg-transparent border-none focus:ring-0 text-xs font-bold ${item.isFromCatalog ? 'text-gray-900' : 'text-gray-500'}`} placeholder="Descrição do item..."/>
                                                                 </div>
                                                             </td>
                                                             <td className="px-2 py-3"><input type="number" value={item.quantity} onChange={e => handleUpdateOSItem(item.id, 'quantity', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-center" min="1"/></td>
-                                                            <td className="px-2 py-3"><input type="number" step="0.01" value={item.unitPrice} onChange={e => handleUpdateOSItem(item.id, 'unitPrice', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-black text-center"/></td>
+                                                            <td className="px-2 py-3"><input type="number" step="0.01" value={item.unitPrice} readOnly={item.isFromCatalog} onChange={e => handleUpdateOSItem(item.id, 'unitPrice', Number(e.target.value))} className={`w-full bg-transparent border-none focus:ring-0 text-xs font-black text-center ${item.isFromCatalog ? 'text-indigo-700' : ''}`}/></td>
                                                             {isOS && (
                                                                 <>
                                                                     <td className="px-2 py-3 text-center"><input type="text" value={item.technician} onChange={e => handleUpdateOSItem(item.id, 'technician', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" placeholder="Responsável..."/></td>
@@ -604,11 +654,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                                     <td className="px-2 py-3 text-center"><input type="checkbox" checked={item.isBillable} onChange={e => handleUpdateOSItem(item.id, 'isBillable', e.target.checked)} className="w-4 h-4 rounded text-indigo-600"/></td>
                                                                 </>
                                                             )}
-                                                            <td className="px-2 py-3 text-xs font-black text-gray-900 text-right">{formatCurrency(item.totalPrice)}</td>
+                                                            <td className={`px-2 py-3 text-xs font-black text-right ${item.isFromCatalog ? 'text-indigo-800' : 'text-gray-900'}`}>{formatCurrency(item.totalPrice)}</td>
                                                             <td className="px-4 py-3 text-right"><button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
                                                         </tr>
                                                     ))}
-                                                    {(formData.items || []).length === 0 && (<tr><td colSpan={isOS ? 10 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Clique em catálogo ou manual para adicionar itens.</td></tr>)}
+                                                    {pricing.resolvedList.length === 0 && (<tr><td colSpan={isOS ? 10 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Clique em catálogo ou manual para adicionar itens.</td></tr>)}
                                                 </tbody>
                                             </table>
                                         </div>
