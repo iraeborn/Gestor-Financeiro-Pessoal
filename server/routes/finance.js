@@ -143,6 +143,13 @@ export default function(logAudit) {
                 WHERE ${buildFilter('inv')} AND inv.deleted_at IS NULL
             `, [activeFamilyId]);
 
+            // Helper to safely parse JSON items
+            const parseItems = (items) => {
+                if (!items) return [];
+                if (Array.isArray(items)) return items;
+                try { return JSON.parse(items); } catch (e) { return []; }
+            };
+
             res.json({
                 accounts: accs.rows.map(r => ({ ...r, balance: parseFloat(r.balance) })),
                 transactions: trans.rows.map(r => ({ 
@@ -174,7 +181,7 @@ export default function(logAudit) {
                     imageUrl: r.image_url,
                     brand: r.brand,
                     defaultDuration: r.default_duration || 0,
-                    items: r.items || []
+                    items: parseItems(r.items)
                 })),
                 serviceClients: [], 
                 serviceAppointments: [],
@@ -183,8 +190,10 @@ export default function(logAudit) {
                     totalAmount: parseFloat(r.total_amount || 0),
                     contactName: r.contact_name,
                     createdByName: r.created_by_name,
+                    openedAt: r.opened_at, // Mapeamento explícito
                     startDate: r.start_date ? new Date(r.start_date).toISOString().split('T')[0] : null,
-                    endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null
+                    endDate: r.end_date ? new Date(r.end_date).toISOString().split('T')[0] : null,
+                    items: parseItems(r.items) // Parsing garantido
                 })),
                 commercialOrders: commOrders.rows.map(r => ({
                     id: r.id,
@@ -197,7 +206,7 @@ export default function(logAudit) {
                     grossAmount: parseFloat(r.gross_amount || 0),
                     discountAmount: parseFloat(r.discount_amount || 0),
                     taxAmount: parseFloat(r.tax_amount || 0),
-                    items: r.items || [],
+                    items: parseItems(r.items),
                     date: new Date(r.date).toISOString().split('T')[0],
                     status: r.status,
                     transactionId: r.transaction_id

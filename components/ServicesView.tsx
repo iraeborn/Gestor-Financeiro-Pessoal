@@ -75,6 +75,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     }, []);
 
     const resolveItems = (items: any[]) => {
+        if (!Array.isArray(items)) return [];
         return items.map(item => {
             if (item.serviceItemId) {
                 const latest = serviceItems.find(si => si.id === item.serviceItemId);
@@ -180,9 +181,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     const handleOpenModal = (item?: any) => {
-        if (item && item.contactId) {
-            const c = contacts.find(c => c.id === item.contactId);
-            setContactSearch(c ? c.name : '');
+        if (item) {
+            if (item.contactId) {
+                const c = contacts.find(c => c.id === item.contactId);
+                setContactSearch(c ? c.name : '');
+            } else if (item.contactName) {
+                setContactSearch(item.contactName);
+            } else {
+                setContactSearch('');
+            }
         } else {
             setContactSearch('');
         }
