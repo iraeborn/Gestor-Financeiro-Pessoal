@@ -74,7 +74,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const resolveItems = (items: any[]) => {
+    // Determina se o registro atual deve sincronizar preços com o catálogo
+    const shouldSyncWithCatalog = (status: string) => {
+        return isCatalog || status === 'ABERTA' || status === 'DRAFT';
+    };
+
+    const resolveItems = (items: any[], recordStatus?: string) => {
         if (!Array.isArray(items)) return [];
         return items.map(item => {
             if (item.serviceItemId) {
@@ -83,11 +88,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     const qty = Number(item.quantity) || 1;
                     
                     // REVISÃO DE LÓGICA DE VALOR:
-                    // Se estivermos no Catálogo, usamos SEMPRE o valor mais recente do catálogo original.
-                    // Se estivermos em OS/Venda, priorizamos o valor gravado (snapshot histórico), 
-                    // a menos que seja um novo item sem valor ainda.
-                    const unitPriceToUse = isCatalog ? latest.defaultPrice : (item.unitPrice || latest.defaultPrice);
-                    const costPriceToUse = isCatalog ? (latest.costPrice || 0) : (item.costPrice || latest.costPrice || 0);
+                    // Se o registro for Catálogo ou estiver ABERTO/DRAFT, usamos SEMPRE o valor mais recente do catálogo.
+                    // Caso contrário, usamos o snapshot (item.unitPrice) para preservar o histórico.
+                    const isRecordActive = shouldSyncWithCatalog(recordStatus || formData.status);
+                    const unitPriceToUse = isRecordActive ? latest.defaultPrice : (item.unitPrice ?? latest.defaultPrice);
+                    const costPriceToUse = isRecordActive ? (latest.costPrice || 0) : (item.costPrice ?? latest.costPrice ?? 0);
 
                     return {
                         ...item,
@@ -106,19 +111,26 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     const getResolvedPrice = (item: any): number => {
-        // Se for simples, retorna o preço padrão
-        if (!item.isComposite) return Number(item.defaultPrice || 0);
-        
-        // Se for composto, resolve os itens da composição usando a lógica dinâmica (latest values)
-        const resolved = resolveItems(item.items || []);
-        if (resolved.length === 0) return Number(item.defaultPrice || 0);
-        
-        return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
+        // Se for um item de catálogo sendo listado, sempre resolve dinamicamente
+        if (isCatalog) {
+            if (!item.isComposite) return Number(item.defaultPrice || 0);
+            const resolved = resolveItems(item.items || [], 'CATALOG');
+            return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
+        }
+
+        // Para OS/Vendas na grade (fora do modal)
+        const isRecordActive = shouldSyncWithCatalog(item.status);
+        if (isRecordActive && item.items && item.items.length > 0) {
+            const resolved = resolveItems(item.items, item.status);
+            return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
+        }
+
+        return Number(item.totalAmount || item.amount || item.defaultPrice || item.value || 0);
     };
 
     const pricing = useMemo(() => {
         const items = (formData.items || []) as any[];
-        const resolvedList = resolveItems(items);
+        const resolvedList = resolveItems(items, formData.status);
 
         const itemsSum = resolvedList.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
         const costSum = resolvedList.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
@@ -133,6 +145,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (isCatalog) {
             netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
         } else if (isOS) {
+            // Se tiver itens na grade, manda a soma dinâmica. Se não, usa o total Amount salvo.
             netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
         } else {
             netValue = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
@@ -149,7 +162,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             duration: isCatalog && !formData.isComposite ? (Number(formData.defaultDuration) || 0) : durationSum,
             resolvedList 
         };
-    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.totalAmount, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog, isOS, serviceItems]);
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.totalAmount, formData.costPrice, formData.defaultDuration, formData.isComposite, formData.status, taxPercent, currentView, isCatalog, isOS, serviceItems]);
 
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
@@ -258,6 +271,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleAddOSItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
+        // Ao adicionar um item, sempre buscamos o preço resolvido (atual) do catálogo
         const resolvedPrice = catalogItem ? getResolvedPrice(catalogItem) : 0;
         
         const newItem: OSItem = {
@@ -430,7 +444,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </div>
                                 </div>
                                 <div className="flex justify-between items-center pt-4 border-t border-gray-50">
-                                    <div className="text-sm font-black text-gray-900">{formatCurrency(os.totalAmount)}</div>
+                                    <div className="text-sm font-black text-gray-900">{formatCurrency(getResolvedPrice(os))}</div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => handleOpenModal(os)} className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg" title="Editar OS"><Wrench className="w-4 h-4"/></button>
                                         <button onClick={() => handleDelete(os.id)} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg" title="Excluir"><Trash2 className="w-4 h-4"/></button>
@@ -477,7 +491,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm font-black text-gray-900 mt-2">
-                             <span>{formatCurrency(isCatalog ? getResolvedPrice(item) : (item.amount || item.defaultPrice || item.value || 0))}</span>
+                             <span>{formatCurrency(getResolvedPrice(item))}</span>
                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {currentView === 'SRV_SALES' && item.status === 'DRAFT' && (
                                     <button onClick={() => { setSelectedOrderForApproval(item); setIsApprovalOpen(true); }} className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg" title="Aprovar Orçamento"><CheckCircle className="w-4 h-4"/></button>
