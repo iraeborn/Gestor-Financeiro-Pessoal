@@ -5,7 +5,7 @@ import {
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  TransactionStatus, TransactionType
+  TransactionStatus, TransactionType, OSItem
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
@@ -55,24 +55,12 @@ const App: React.FC = () => {
 
   useEffect(() => { checkAuth(); }, []);
 
-  // --- WebSocket Real-time Sync ---
   useEffect(() => {
     if (currentUser?.familyId) {
       const socket = io(window.location.origin);
-      
-      socket.on('connect', () => {
-        socket.emit('join_family', currentUser.familyId);
-      });
-
-      socket.on('DATA_UPDATED', (payload) => {
-        if (payload.actorId !== currentUser.id) {
-          loadData(true);
-        }
-      });
-
-      return () => {
-        socket.disconnect();
-      };
+      socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
+      socket.on('DATA_UPDATED', (payload) => { if (payload.actorId !== currentUser.id) { loadData(true); } });
+      return () => { socket.disconnect(); };
     }
   }, [currentUser?.familyId, currentUser?.id]);
 
@@ -144,36 +132,19 @@ const App: React.FC = () => {
           setLoading(true);
           const wasPaid = t.status === TransactionStatus.PAID;
           const isNowPaid = urls.length > (t.receiptUrls?.length || 0);
-          
-          const updatedT = { 
-              ...t, 
-              receiptUrls: urls, 
-              status: isNowPaid ? TransactionStatus.PAID : t.status 
-          };
-          
+          const updatedT = { ...t, receiptUrls: urls, status: isNowPaid ? TransactionStatus.PAID : t.status };
           await api.saveTransaction(updatedT);
           await loadData(true);
-          
-          if (!wasPaid && isNowPaid) {
-              showAlert("Comprovante anexado e transação quitada!", "success");
-          } else {
-              showAlert("Anexos atualizados.", "success");
-          }
-      } catch (e) {
-          showAlert("Erro ao atualizar anexos.", "error");
-      } finally {
-          setLoading(false);
-      }
+          if (!wasPaid && isNowPaid) { showAlert("Comprovante anexado e transação quitada!", "success"); } else { showAlert("Anexos atualizados.", "success"); }
+      } catch (e) { showAlert("Erro ao atualizar anexos.", "error"); } finally { setLoading(false); }
   };
 
-  // Lógica de aprovação de orçamento atualizada com fluxos de prompt
   const handleApproveOrder = async (order: CommercialOrder, approvalData: any) => {
       try {
           setLoading(true);
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
 
-          // 1. Gerar Lançamento Financeiro com Referência na Descrição
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = {
@@ -191,12 +162,11 @@ const App: React.FC = () => {
               await api.saveTransaction(trans);
           }
 
-          // 2. Gerar Nota Fiscal se solicitado
           if (approvalData.generateInvoice) {
               const inv: Invoice = {
                   id: crypto.randomUUID(),
                   amount: order.amount,
-                  issueDate: new Date().toISOString().split('T')[0],
+                  issue_date: new Date().toISOString().split('T')[0],
                   status: 'ISSUED',
                   type: approvalData.invoiceType,
                   contactId: order.contactId,
@@ -206,35 +176,44 @@ const App: React.FC = () => {
               await api.saveInvoice(inv);
           }
 
-          // 3. Atualizar status do Pedido
-          const updatedOrder = { 
-              ...order, 
-              status: 'CONFIRMED' as any,
-              transactionId: transactionId || order.transactionId 
-          };
+          const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
 
-          // 4. Carregar dados atualizados antes do prompt para garantir consistência visual no fundo
           await loadData(true);
           setLoading(false);
 
-          // 5. Perguntar sobre a OS (Prompt Condicional)
           const confirmOS = await showConfirm({
-              title: "Operação Concluída",
-              message: "Venda aprovada com sucesso! Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
+              title: "Venda Aprovada!",
+              message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
               confirmText: "Sim, criar OS",
               cancelText: "Não, apenas aprovar"
           });
 
           if (confirmOS) {
+              // Mapear itens da venda para a OS
+              const osItems: OSItem[] = (order.items || []).map(item => ({
+                  id: crypto.randomUUID(),
+                  serviceItemId: item.serviceItemId,
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  totalPrice: item.totalPrice,
+                  isBillable: true
+              }));
+
               const newOS: ServiceOrder = {
                   id: crypto.randomUUID(),
                   title: order.description,
-                  description: `OS gerada automaticamente a partir do orçamento #${orderRef}.`,
+                  description: `OS gerada automaticamente a partir da venda #${orderRef}.`,
                   contactId: order.contactId,
-                  totalAmount: order.amount,
+                  contactName: order.contactName,
+                  type: 'MAINTENANCE',
+                  origin: 'SALE',
+                  priority: 'MEDIUM',
                   status: 'OPEN',
-                  startDate: new Date().toISOString().split('T')[0]
+                  openedAt: new Date().toISOString(),
+                  items: osItems,
+                  totalAmount: order.amount
               };
               await api.saveServiceOrder(newOS);
               await loadData(true);
@@ -242,7 +221,6 @@ const App: React.FC = () => {
           } else {
               showAlert("Venda aprovada!", "success");
           }
-
       } catch (e) {
           console.error(e);
           showAlert("Erro no processo de aprovação.", "error");
@@ -251,12 +229,7 @@ const App: React.FC = () => {
   };
 
   const wrapSave = async (fn: any, item: any, msg: string, newContact?: Contact) => {
-      try { 
-          if (newContact) await api.saveContact(newContact);
-          await fn(item); 
-          await loadData(); 
-          showAlert(msg, "success"); 
-      } catch(e) { showAlert("Erro ao salvar.", "error"); }
+      try { if (newContact) await api.saveContact(newContact); await fn(item); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao salvar.", "error"); }
   };
   
   const wrapDel = async (fn: any, id: string, msg: string) => {
@@ -272,7 +245,6 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
-
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;

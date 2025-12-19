@@ -76,11 +76,16 @@ export const initDb = async () => {
             description TEXT, 
             contact_id TEXT, 
             status TEXT, 
-            total_amount DECIMAL(15,2), 
+            total_amount DECIMAL(15,2) DEFAULT 0, 
             start_date DATE, 
             end_date DATE, 
             user_id TEXT, 
             family_id TEXT, 
+            type TEXT,
+            origin TEXT,
+            priority TEXT,
+            opened_at TIMESTAMP DEFAULT NOW(),
+            items JSONB DEFAULT '[]',
             created_at TIMESTAMP DEFAULT NOW(), 
             deleted_at TIMESTAMP
         )`,
@@ -121,13 +126,24 @@ export const initDb = async () => {
             await pool.query(q);
         }
 
-        // --- AUTO-REPARO DE DADOS (MIGRAÇÃO DE CONTEXTO) ---
+        // Migração para adicionar colunas se a tabela já existia sem elas
+        const alterTableOS = [
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS origin TEXT`,
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP DEFAULT NOW()`,
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`
+        ];
+
+        for (const q of alterTableOS) {
+            try { await pool.query(q); } catch (e) {}
+        }
+
         const tablesToFix = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'service_orders', 'commercial_orders', 'contracts', 'invoices'];
         for (const table of tablesToFix) {
             await pool.query(`UPDATE ${table} SET family_id = user_id WHERE family_id IS NULL AND user_id IS NOT NULL`);
         }
 
-        // Tenta adicionar a coluna receipt_urls se não existir
         try {
             await pool.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS receipt_urls JSONB DEFAULT '[]'`);
         } catch (e) {}

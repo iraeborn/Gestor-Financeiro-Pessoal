@@ -268,6 +268,29 @@ export interface ServiceAppointment {
 }
 
 // Service & Sales Module
+export type OSStatus = 
+    | 'OPEN' | 'APPROVED' | 'SCHEDULED' | 'IN_PROGRESS' 
+    | 'PAUSED' | 'WAITING_CLIENT' | 'WAITING_MATERIAL' 
+    | 'DONE' | 'CANCELED';
+
+export type OSType = 'PREVENTATIVE' | 'CORRECTIVE' | 'INSTALLATION' | 'MAINTENANCE' | 'CONSULTANCY' | 'EMERGENCY';
+export type OSOrigin = 'MANUAL' | 'QUOTE' | 'SALE' | 'CONTRACT';
+export type OSPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface OSItem {
+    id: string;
+    serviceItemId?: string;
+    code?: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    technician?: string;
+    estimatedTime?: string;
+    realTime?: string;
+    isBillable: boolean;
+}
+
 export interface ServiceOrder {
   id: string;
   number?: number;
@@ -275,10 +298,18 @@ export interface ServiceOrder {
   description?: string;
   contactId?: string;
   contactName?: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
-  totalAmount: number;
+  
+  type: OSType;
+  origin: OSOrigin;
+  priority: OSPriority;
+  status: OSStatus;
+  
+  openedAt: string; // ISO DateTime
   startDate?: string;
   endDate?: string;
+  
+  items: OSItem[];
+  totalAmount: number;
 }
 
 export interface OrderItem {
@@ -288,7 +319,7 @@ export interface OrderItem {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-    costPrice?: number; // Para cálculo de margem individual se necessário
+    costPrice?: number;
 }
 
 export interface CommercialOrder {
@@ -297,15 +328,11 @@ export interface CommercialOrder {
   description: string;
   contactId?: string;
   contactName?: string;
-  amount: number; // Final Net Amount
-  
-  // New Fields for Professional Sales
+  amount: number;
   grossAmount?: number;
   discountAmount?: number;
   taxAmount?: number;
-  
-  items?: OrderItem[]; // Lista de produtos/serviços
-
+  items?: OrderItem[];
   date: string;
   status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED';
   transactionId?: string;
@@ -329,14 +356,14 @@ export interface Invoice {
   series?: string;
   type: 'ISS' | 'ICMS';
   amount: number;
-  issueDate: string;
+  issue_date: string; // compatibility with db
   status: 'ISSUED' | 'CANCELED';
   contactId?: string;
   contactName?: string;
   fileUrl?: string;
 }
 
-// System
+// System interfaces remain same...
 export interface Member {
   id: string;
   name: string;
@@ -378,20 +405,14 @@ export interface AppState {
   goals: FinancialGoal[];
   contacts: Contact[];
   categories: Category[];
-  
-  // PJ
   companyProfile?: CompanyProfile | null;
   branches: Branch[];
   costCenters: CostCenter[];
   departments: Department[];
   projects: Project[];
-
-  // Modules
   serviceClients: ServiceClient[];
   serviceItems: ServiceItem[];
   serviceAppointments: ServiceAppointment[];
-  
-  // Services
   serviceOrders: ServiceOrder[];
   commercialOrders: CommercialOrder[];
   contracts: Contract[];
@@ -403,7 +424,7 @@ export const ROLE_DEFINITIONS = [
         id: 'ADMIN',
         label: 'Administrador',
         description: 'Acesso total a todas as funcionalidades e configurações.',
-        defaultPermissions: [] // Admin implicitly has all
+        defaultPermissions: []
     },
     {
         id: 'MEMBER',
