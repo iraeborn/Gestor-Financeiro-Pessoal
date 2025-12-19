@@ -62,17 +62,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const isCatalog = currentView === 'SRV_CATALOG';
     const isOS = currentView === 'SRV_OS';
 
-    const getTaxSuggestion = (regime?: TaxRegime) => {
-        if (!regime) return 0;
-        switch (regime) {
-            case TaxRegime.MEI: return 0;
-            case TaxRegime.SIMPLES: return 6;
-            case TaxRegime.PRESUMIDO: return 15;
-            case TaxRegime.REAL: return 18;
-            default: return 0;
-        }
-    };
-
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
@@ -167,11 +156,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
                 setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
-                const base = (item.grossAmount || item.amount) - (item.discountAmount || 0);
-                if (base > 0) setTaxPercent(Math.round(((item.taxAmount || 0) / base) * 100));
             } else {
                 setFormData({ status: 'DRAFT', date: new Date().toISOString().split('T')[0], grossAmount: 0, discountAmount: 0, taxAmount: 0, items: [] });
-                setTaxPercent(getTaxSuggestion(companyProfile?.taxRegime));
             }
         } else {
             setFormData(item || {});
@@ -255,14 +241,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_NF') {
             onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
         } else if (isCatalog && onSaveCatalogItem) {
-            // No catálogo, defaultPrice é o somatório do pricing se houver grade, senão o valor manual
             onSaveCatalogItem({ 
                 ...formData, 
                 id, 
                 defaultPrice: pricing.net, 
                 costPrice: Number(formData.costPrice) || 0, 
                 type: formData.type || 'SERVICE', 
-                defaultDuration: Number(formData.defaultDuration) || 0 
+                defaultDuration: Number(formData.defaultDuration) || 0,
+                items: formData.items || [] 
             });
         }
         setIsModalOpen(false);
@@ -435,7 +421,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             <input type="text" placeholder={isCatalog ? "Ex: Motor Trifásico 5HP..." : "Ex: Manutenção Elétrica Prédio..."} className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
                                         </div>
                                         
-                                        {/* Pessoa/Empresa removido para Catálogo e OS conforme solicitado */}
                                         {!isOS && !isCatalog && (
                                             <div className="relative" ref={contactDropdownRef}>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
@@ -596,7 +581,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
 
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
-                                    {/* Situação Operacional removido para OS e Catálogo */}
                                     {!isOS && !isCatalog && (
                                         <div>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
@@ -629,7 +613,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button>
                                     </div>
 
-                                    {/* Cronograma Removido para Catálogo conforme solicitado */}
                                     {!isCatalog && (
                                         <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
                                             <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">

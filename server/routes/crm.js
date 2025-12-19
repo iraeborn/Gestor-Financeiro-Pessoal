@@ -34,19 +34,25 @@ export default function(logAudit) {
     });
 
     router.post('/modules/services', authenticateToken, async (req, res) => {
-        const { id, name, code, defaultPrice, defaultDuration, moduleTag, type, costPrice, unit, description, imageUrl, brand } = req.body;
+        const { id, name, code, defaultPrice, defaultDuration, moduleTag, type, costPrice, unit, description, imageUrl, brand, items } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const existingRes = await pool.query('SELECT id FROM module_services WHERE id = $1', [id]);
             const isUpdate = existingRes.rows.length > 0;
 
             await pool.query(
-                `INSERT INTO module_services (id, name, code, default_price, default_duration, module_tag, user_id, family_id, type, cost_price, unit, description, image_url, brand) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+                `INSERT INTO module_services (id, name, code, default_price, default_duration, module_tag, user_id, family_id, type, cost_price, unit, description, image_url, brand, items) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) 
                  ON CONFLICT (id) DO UPDATE SET 
                     name=$2, code=$3, default_price=$4, default_duration=$5, module_tag=$6, 
-                    type=$9, cost_price=$10, unit=$11, description=$12, image_url=$13, brand=$14, deleted_at=NULL`, 
-                [id, name, sanitizeValue(code), defaultPrice || 0, defaultDuration || 0, moduleTag || 'GENERAL', req.user.id, familyId, type || 'SERVICE', costPrice || 0, sanitizeValue(unit), sanitizeValue(description), sanitizeValue(imageUrl), sanitizeValue(brand)]
+                    type=$9, cost_price=$10, unit=$11, description=$12, image_url=$13, brand=$14, 
+                    items=$15, deleted_at=NULL`, 
+                [
+                    id, name, sanitizeValue(code), defaultPrice || 0, defaultDuration || 0, 
+                    moduleTag || 'GENERAL', req.user.id, familyId, type || 'SERVICE', 
+                    costPrice || 0, sanitizeValue(unit), sanitizeValue(description), 
+                    sanitizeValue(imageUrl), sanitizeValue(brand), JSON.stringify(items || [])
+                ]
             );
             await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'service_item', id, name);
             res.json({ success: true });

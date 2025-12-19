@@ -49,6 +49,7 @@ export const initDb = async () => {
             description TEXT,
             image_url TEXT,
             brand TEXT,
+            items JSONB DEFAULT '[]',
             created_at TIMESTAMP DEFAULT NOW(), 
             deleted_at TIMESTAMP
         )`,
@@ -134,7 +135,9 @@ export const initDb = async () => {
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP DEFAULT NOW()`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS default_duration INTEGER DEFAULT 0`
+            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS default_duration INTEGER DEFAULT 0`,
+            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`
         ];
 
         for (const q of alterQueries) {
