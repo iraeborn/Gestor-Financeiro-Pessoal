@@ -86,30 +86,35 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const getResolvedPrice = (item: any): number => {
         if (!item) return 0;
         
-        // Se for um item simples (não composto), retorna o preço base cadastrado
-        if (!item.isComposite) {
-            return Number(item.defaultPrice ?? item.unitPrice ?? 0);
-        }
-        
-        // Se for composto, precisamos somar seus sub-itens (composição)
-        const subItems = item.items || [];
-        if (subItems.length === 0) return Number(item.defaultPrice ?? item.unitPrice ?? 0);
-
-        return subItems.reduce((sum: number, sub: any) => {
-            let subUnitPrice = Number(sub.unitPrice || 0);
+        // 1. CASO ITEM DO CATÁLOGO (Sem status)
+        if (!item.status) {
+            if (!item.isComposite) return Number(item.defaultPrice ?? 0);
             
-            // Se o sub-item estiver vinculado ao catálogo, buscamos o valor mais recente (recursivamente)
-            if (sub.serviceItemId) {
-                const latestSub = serviceItems.find(si => si.id === sub.serviceItemId);
-                if (latestSub) {
+            const subItems = item.items || [];
+            return subItems.reduce((sum: number, sub: any) => {
+                let subUnitPrice = Number(sub.unitPrice || 0);
+                if (sub.serviceItemId) {
+                    const latestSub = serviceItems.find(si => si.id === sub.serviceItemId);
                     subUnitPrice = getResolvedPrice(latestSub);
                 }
-            }
+                const qty = Number(sub.quantity) || 1;
+                return sum + (sub.isBillable !== false ? (subUnitPrice * qty) : 0);
+            }, 0);
+        }
+
+        // 2. CASO REGISTRO (OS / Venda / Orçamento)
+        const isRecordActive = shouldSyncWithCatalog(item.status);
+        if (isRecordActive) {
+            const resolved = resolveItems(item.items || [], item.status);
+            const itemsSum = resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
             
-            const qty = Number(sub.quantity) || 1;
-            const isBillable = sub.isBillable !== false;
-            return sum + (isBillable ? (subUnitPrice * qty) : 0);
-        }, 0);
+            // Subtrai o desconto se for uma venda/orçamento
+            const discount = Number(item.discountAmount || 0);
+            return itemsSum - discount;
+        }
+
+        // Fallback para snapshots fixos (registros aprovados/fechados)
+        return Number(item.totalAmount || item.amount || item.value || 0);
     };
 
     /**
