@@ -145,6 +145,7 @@ const App: React.FC = () => {
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
 
+          // 1. Financeiro (Vira uma Receita Pendente vinculada à Venda)
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = {
@@ -176,12 +177,14 @@ const App: React.FC = () => {
               await api.saveInvoice(inv);
           }
 
+          // 2. Transforma Orçamento em Venda (CONFIRMED)
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
 
           await loadData(true);
           setLoading(false);
 
+          // 3. Prompt de Ordem de Serviço
           const confirmOS = await showConfirm({
               title: "Venda Aprovada!",
               message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
@@ -190,16 +193,30 @@ const App: React.FC = () => {
           });
 
           if (confirmOS) {
-              // Mapear itens da venda para a OS
-              const osItems: OSItem[] = (order.items || []).map(item => ({
-                  id: crypto.randomUUID(),
-                  serviceItemId: item.serviceItemId,
-                  description: item.description,
-                  quantity: item.quantity,
-                  unitPrice: item.unitPrice,
-                  totalPrice: item.totalPrice,
-                  isBillable: true
-              }));
+              let totalEstimatedMinutes = 0;
+              
+              // Mapear itens da venda para a OS e calcular duração se houver no catálogo
+              const osItems: OSItem[] = (order.items || []).map(item => {
+                  const catalogItem = data.serviceItems.find(si => si.id === item.serviceItemId);
+                  const duration = (catalogItem?.defaultDuration || 0) * item.quantity;
+                  totalEstimatedMinutes += duration;
+
+                  return {
+                    id: crypto.randomUUID(),
+                    serviceItemId: item.serviceItemId,
+                    code: catalogItem?.code || '',
+                    description: item.description,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    totalPrice: item.totalPrice,
+                    estimatedDuration: duration,
+                    isBillable: true
+                  };
+              });
+
+              // Definir cronograma automático
+              const startDate = new Date();
+              const endDate = new Date(startDate.getTime() + totalEstimatedMinutes * 60000);
 
               const newOS: ServiceOrder = {
                   id: crypto.randomUUID(),
@@ -207,17 +224,20 @@ const App: React.FC = () => {
                   description: `OS gerada automaticamente a partir da venda #${orderRef}.`,
                   contactId: order.contactId,
                   contactName: order.contactName,
-                  type: 'MAINTENANCE',
-                  origin: 'SALE',
-                  priority: 'MEDIUM',
-                  status: 'OPEN',
+                  type: 'MANUTENCAO',
+                  origin: 'VENDA',
+                  priority: 'MEDIA',
+                  status: 'ABERTA',
                   openedAt: new Date().toISOString(),
+                  startDate: startDate.toISOString().split('T')[0],
+                  endDate: endDate.toISOString().split('T')[0],
                   items: osItems,
                   totalAmount: order.amount
               };
+              
               await api.saveServiceOrder(newOS);
               await loadData(true);
-              showAlert("Venda aprovada e OS criada!", "success");
+              showAlert("Venda aprovada e OS criada com sucesso!", "success");
           } else {
               showAlert("Venda aprovada!", "success");
           }

@@ -81,14 +81,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
         if (currentView === 'SRV_OS') {
             const items = (formData.items || []) as OSItem[];
-            const net = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
+            const net = items.reduce((sum, item) => sum + (item.isBillable ? (Number(item.totalPrice) || 0) : 0), 0);
             return { net };
         }
         return null;
     }, [formData.items, formData.discountAmount, taxPercent, currentView]);
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-    const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('pt-BR') : '-';
 
     const getTitle = () => {
         switch(currentView) {
@@ -104,7 +103,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const header = getTitle();
 
-    // Fix: Added missing handleDelete function to handle generic deletion based on current view.
     const handleDelete = async (id: string) => {
         const confirm = await showConfirm({
             title: "Excluir Registro",
@@ -113,21 +111,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         });
         if (!confirm) return;
 
-        if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') onDeleteOrder(id);
+        if (currentView === 'SRV_OS') onDeleteOS(id);
+        else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') onDeleteOrder(id);
         else if (currentView === 'SRV_CONTRACTS') onDeleteContract(id);
         else if (currentView === 'SRV_NF') onDeleteInvoice(id);
         else if (currentView === 'SRV_CATALOG' && onDeleteCatalogItem) onDeleteCatalogItem(id);
     };
 
-    // Fix: Added missing handleRemoveItem function to remove an item from the current order/OS.
-    const handleRemoveItem = (itemId: string) => {
-        setFormData((prev: any) => ({
-            ...prev,
-            items: (prev.items || []).filter((i: any) => i.id !== itemId)
-        }));
-    };
-
-    // Fix: Added missing handleConfirmApproval function to process the order approval.
     const handleConfirmApproval = (data: any) => {
         if (selectedOrderForApproval && onApproveOrder) {
             onApproveOrder(selectedOrderForApproval, data);
@@ -149,17 +139,17 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 setFormData({ ...item });
             } else {
                 setFormData({ 
-                    status: 'OPEN', 
-                    type: 'MAINTENANCE', 
+                    status: 'ABERTA', 
+                    type: 'MANUTENCAO', 
                     origin: 'MANUAL', 
-                    priority: 'MEDIUM', 
+                    priority: 'MEDIA', 
                     openedAt: new Date().toISOString(),
                     items: [] 
                 });
             }
         } else if (currentView === 'SRV_CATALOG') {
             if (item) setFormData({ ...item });
-            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '' });
+            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0 });
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
                 setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
@@ -185,6 +175,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             quantity: 1,
             unitPrice: catalogItem?.defaultPrice || 0,
             totalPrice: catalogItem?.defaultPrice || 0,
+            estimatedDuration: catalogItem?.defaultDuration || 0,
             isBillable: true
         };
         setFormData((prev: any) => ({ ...prev, items: [...(prev.items || []), newItem] }));
@@ -202,6 +193,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             return item;
         });
         setFormData((prev: any) => ({ ...prev, items: updatedItems }));
+    };
+
+    const handleRemoveItem = (itemId: string) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            items: (prev.items || []).filter((i: any) => i.id !== itemId)
+        }));
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -243,33 +241,33 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_NF') {
             onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
         } else if (currentView === 'SRV_CATALOG' && onSaveCatalogItem) {
-            onSaveCatalogItem({ ...formData, id, defaultPrice: Number(formData.defaultPrice) || 0, costPrice: Number(formData.costPrice) || 0, type: formData.type || 'SERVICE' });
+            onSaveCatalogItem({ ...formData, id, defaultPrice: Number(formData.defaultPrice) || 0, costPrice: Number(formData.costPrice) || 0, type: formData.type || 'SERVICE', defaultDuration: Number(formData.defaultDuration) || 0 });
         }
         setIsModalOpen(false);
         setFormData({});
     };
 
-    const getOSStatusColor = (status: string) => {
+    const getOSStatusColor = (status: OSStatus) => {
         switch(status) {
-            case 'OPEN': return 'bg-amber-100 text-amber-700';
-            case 'APPROVED': return 'bg-blue-100 text-blue-700';
-            case 'SCHEDULED': return 'bg-purple-100 text-purple-700';
-            case 'IN_PROGRESS': return 'bg-indigo-100 text-indigo-700';
-            case 'PAUSED': return 'bg-orange-100 text-orange-700';
-            case 'WAITING_CLIENT': return 'bg-rose-100 text-rose-700';
-            case 'WAITING_MATERIAL': return 'bg-slate-200 text-slate-700';
-            case 'DONE': return 'bg-emerald-100 text-emerald-700';
-            case 'CANCELED': return 'bg-gray-100 text-gray-500';
+            case 'ABERTA': return 'bg-amber-100 text-amber-700';
+            case 'APROVADA': return 'bg-blue-100 text-blue-700';
+            case 'AGENDADA': return 'bg-purple-100 text-purple-700';
+            case 'EM_EXECUCAO': return 'bg-indigo-100 text-indigo-700';
+            case 'PAUSADA': return 'bg-orange-100 text-orange-700';
+            case 'AGUARDANDO_CLIENTE': return 'bg-rose-100 text-rose-700';
+            case 'AGUARDANDO_MATERIAL': return 'bg-slate-200 text-slate-700';
+            case 'FINALIZADA': return 'bg-emerald-100 text-emerald-700';
+            case 'CANCELADA': return 'bg-gray-100 text-gray-500';
             default: return 'bg-gray-100 text-gray-700';
         }
     };
 
-    const getOSPriorityColor = (p: string) => {
+    const getOSPriorityColor = (p: OSPriority) => {
         switch(p) {
-            case 'LOW': return 'text-emerald-500';
-            case 'MEDIUM': return 'text-blue-500';
-            case 'HIGH': return 'text-orange-500';
-            case 'URGENT': return 'text-rose-600 font-black';
+            case 'BAIXA': return 'text-emerald-500';
+            case 'MEDIA': return 'text-blue-500';
+            case 'ALTA': return 'text-orange-500';
+            case 'URGENTE': return 'text-rose-600 font-black';
             default: return 'text-gray-400';
         }
     };
@@ -326,8 +324,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 <div className="flex justify-between items-center pt-4 border-t border-gray-50">
                                     <div className="text-sm font-black text-gray-900">{formatCurrency(os.totalAmount)}</div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleOpenModal(os)} className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg"><Wrench className="w-4 h-4"/></button>
-                                        <button onClick={() => onDeleteOS(os.id)} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                        <button onClick={() => handleOpenModal(os)} className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg" title="Editar OS"><Wrench className="w-4 h-4"/></button>
+                                        <button onClick={() => handleDelete(os.id)} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg" title="Excluir"><Trash2 className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                             </div>
@@ -337,7 +335,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             );
         }
 
-        // Outras visualizações (Vendas, Catálogo...)
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filtered.map(item => (
@@ -347,25 +344,28 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
                                 <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Sem contato'}</span>
                             </div>
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${osStatusColor(item.status)}`}>{item.status}</span>
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.status}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm font-black text-gray-900 mt-2">
                              <span>{formatCurrency(item.amount || item.defaultPrice || item.value || 0)}</span>
                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-400 hover:text-indigo-600"><Wrench className="w-4 h-4"/></button>
-                                <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+                                {currentView === 'SRV_SALES' && item.status === 'DRAFT' && (
+                                    <button 
+                                        onClick={() => { setSelectedOrderForApproval(item); setIsApprovalOpen(true); }}
+                                        className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg"
+                                        title="Aprovar Orçamento"
+                                    >
+                                        <CheckCircle className="w-4 h-4"/>
+                                    </button>
+                                )}
+                                <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-400 hover:text-indigo-600" title="Editar"><Wrench className="w-4 h-4"/></button>
+                                <button onClick={() => handleDelete(item.id)} className="p-1.5 text-gray-400 hover:text-rose-500" title="Excluir"><Trash2 className="w-4 h-4"/></button>
                              </div>
                         </div>
                     </div>
                 ))}
             </div>
         );
-    };
-
-    const osStatusColor = (s: string) => {
-        if (s === 'DRAFT' || s === 'OPEN') return 'bg-amber-100 text-amber-700';
-        if (s === 'CONFIRMED' || s === 'DONE') return 'bg-emerald-100 text-emerald-700';
-        return 'bg-gray-100 text-gray-500';
     };
 
     return (
@@ -406,12 +406,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                         <form onSubmit={handleSave} className="space-y-8">
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 
-                                {/* Coluna 1: Informações Gerais */}
                                 <div className="lg:col-span-3 space-y-6">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Título do Registro</label>
-                                            <input type="text" placeholder="Ex: Reforma Cozinha..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
+                                            <input type="text" placeholder="Ex: Manutenção Elétrica Prédio..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
                                         </div>
                                         <div className="relative" ref={contactDropdownRef}>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
@@ -447,70 +446,83 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Tipo de OS</label>
-                                                <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.type || 'MAINTENANCE'} onChange={e => setFormData({...formData, type: e.target.value})}>
-                                                    <option value="PREVENTATIVE">Preventiva</option>
-                                                    <option value="CORRECTIVE">Corretiva</option>
-                                                    <option value="INSTALLATION">Instalação</option>
-                                                    <option value="MAINTENANCE">Manutenção</option>
-                                                    <option value="CONSULTANCY">Consultoria</option>
-                                                    <option value="EMERGENCY">Emergencial</option>
+                                                <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.type || 'MANUTENCAO'} onChange={e => setFormData({...formData, type: e.target.value})}>
+                                                    <option value="PREVENTIVA">Preventiva</option>
+                                                    <option value="CORRETIVA">Corretiva</option>
+                                                    <option value="INSTALACAO">Instalação</option>
+                                                    <option value="MANUTENCAO">Manutenção</option>
+                                                    <option value="CONSULTORIA">Consultoria</option>
+                                                    <option value="EMERGENCIAL">Emergencial</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Origem</label>
                                                 <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.origin || 'MANUAL'} onChange={e => setFormData({...formData, origin: e.target.value})}>
                                                     <option value="MANUAL">Manual</option>
-                                                    <option value="QUOTE">Orçamento</option>
-                                                    <option value="SALE">Venda</option>
-                                                    <option value="CONTRACT">Contrato</option>
+                                                    <option value="ORCAMENTO">Orçamento</option>
+                                                    <option value="VENDA">Venda</option>
+                                                    <option value="CONTRATO">Contrato</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Prioridade</label>
-                                                <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.priority || 'MEDIUM'} onChange={e => setFormData({...formData, priority: e.target.value})}>
-                                                    <option value="LOW">Baixa</option>
-                                                    <option value="MEDIUM">Média</option>
-                                                    <option value="HIGH">Alta</option>
-                                                    <option value="URGENT">Urgente</option>
+                                                <select className="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-white font-bold" value={formData.priority || 'MEDIA'} onChange={e => setFormData({...formData, priority: e.target.value})}>
+                                                    <option value="BAIXA">Baixa</option>
+                                                    <option value="MEDIA">Média</option>
+                                                    <option value="ALTA">Alta</option>
+                                                    <option value="URGENTE">Urgente</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Data/Hora Abertura</label>
-                                                <input type="datetime-local" className="w-full border border-gray-200 rounded-xl p-2 text-[10px] font-bold" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Abertura (Data/Hora)</label>
+                                                <input type="datetime-local" className="w-full border border-gray-200 rounded-xl p-2 text-[11px] font-bold" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Lista de Itens (Expansível e Detalhada para OS) */}
+                                    {currentView === 'SRV_CATALOG' && (
+                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Duração Padrão (Minutos)</label>
+                                                <input type="number" placeholder="Ex: 60" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultDuration || ''} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Unidade</label>
+                                                <input type="text" placeholder="Ex: HORA, UN, DIA" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                                            </div>
+                                         </div>
+                                    )}
+
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center">
                                             <h3 className="font-black text-gray-700 flex items-center gap-2 uppercase tracking-widest text-xs">
-                                                <Package className="w-4 h-4 text-indigo-500"/> Detalhamento de Serviços/Produtos
+                                                <Package className="w-4 h-4 text-indigo-500"/> Detalhamento Técnico
                                             </h3>
                                             <div className="flex gap-2">
                                                 <select className="border border-gray-200 rounded-lg p-1.5 text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-indigo-500" onChange={e => { if(e.target.value) handleAddOSItem(e.target.value); e.target.value = ''; }}>
                                                     <option value="">+ Catálogo</option>
                                                     {serviceItems.map(i => <option key={i.id} value={i.id}>{i.name} ({formatCurrency(i.defaultPrice)})</option>)}
                                                 </select>
-                                                <button type="button" onClick={() => handleAddOSItem()} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-black transition-colors">+ Adicionar Manual</button>
+                                                <button type="button" onClick={() => handleAddOSItem()} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-black transition-colors">+ Manual</button>
                                             </div>
                                         </div>
 
-                                        <div className="bg-slate-50 rounded-2xl border border-gray-200 overflow-hidden shadow-inner">
-                                            <table className="w-full text-left border-collapse">
+                                        <div className="bg-slate-50 rounded-2xl border border-gray-200 overflow-hidden shadow-inner overflow-x-auto">
+                                            <table className="w-full text-left border-collapse min-w-[800px]">
                                                 <thead className="bg-slate-100 text-[9px] uppercase font-black text-slate-500 border-b border-gray-200">
                                                     <tr>
-                                                        <th className="px-4 py-3">Cód/Descrição</th>
+                                                        <th className="px-4 py-3">Serviço/Peça</th>
                                                         <th className="px-4 py-3 w-16 text-center">Qtd</th>
                                                         <th className="px-4 py-3 w-28 text-center">Vlr Unit</th>
-                                                        <th className="px-4 py-3 w-28 text-center">Vlr Total</th>
                                                         {currentView === 'SRV_OS' && (
                                                             <>
-                                                                <th className="px-4 py-3 w-28 text-center">Técnico</th>
-                                                                <th className="px-4 py-3 w-24 text-center">Tempo Est/Real</th>
+                                                                <th className="px-4 py-3 w-32 text-center">Técnico</th>
+                                                                <th className="px-4 py-3 w-20 text-center">Estimado (min)</th>
+                                                                <th className="px-4 py-3 w-20 text-center">Real (min)</th>
                                                                 <th className="px-4 py-3 w-12 text-center">Fat?</th>
                                                             </>
                                                         )}
+                                                        <th className="px-4 py-3 w-28 text-right">Subtotal</th>
                                                         <th className="px-4 py-3 w-10"></th>
                                                     </tr>
                                                 </thead>
@@ -520,72 +532,66 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                             <td className="px-4 py-3">
                                                                 <div className="flex flex-col gap-1">
                                                                     <input type="text" value={item.code} onChange={e => handleUpdateOSItem(item.id, 'code', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-indigo-400 placeholder-indigo-200" placeholder="Código"/>
-                                                                    <input type="text" value={item.description} onChange={e => handleUpdateOSItem(item.id, 'description', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-800" placeholder="Serviço/Peça..."/>
+                                                                    <input type="text" value={item.description} onChange={e => handleUpdateOSItem(item.id, 'description', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-800" placeholder="Descrição do item..."/>
                                                                 </div>
                                                             </td>
                                                             <td className="px-2 py-3"><input type="number" value={item.quantity} onChange={e => handleUpdateOSItem(item.id, 'quantity', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-center" min="1"/></td>
                                                             <td className="px-2 py-3"><input type="number" step="0.01" value={item.unitPrice} onChange={e => handleUpdateOSItem(item.id, 'unitPrice', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-black text-center"/></td>
-                                                            <td className="px-2 py-3 text-xs font-black text-gray-900 text-center">{formatCurrency(item.totalPrice)}</td>
+                                                            
                                                             {currentView === 'SRV_OS' && (
                                                                 <>
-                                                                    <td className="px-2 py-3 text-center"><input type="text" value={item.technician} onChange={e => handleUpdateOSItem(item.id, 'technician', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" placeholder="Nome..."/></td>
-                                                                    <td className="px-2 py-3">
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <input type="text" value={item.estimatedTime} onChange={e => handleUpdateOSItem(item.id, 'estimatedTime', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" placeholder="Est (ex: 2h)"/>
-                                                                            <input type="text" value={item.realTime} onChange={e => handleUpdateOSItem(item.id, 'realTime', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-indigo-600 text-center border-t border-gray-100" placeholder="Real"/>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-2 py-3 text-center">
-                                                                        <input type="checkbox" checked={item.isBillable} onChange={e => handleUpdateOSItem(item.id, 'isBillable', e.target.checked)} className="w-4 h-4 rounded text-indigo-600"/>
-                                                                    </td>
+                                                                    <td className="px-2 py-3 text-center"><input type="text" value={item.technician} onChange={e => handleUpdateOSItem(item.id, 'technician', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" placeholder="Responsável..."/></td>
+                                                                    <td className="px-2 py-3 text-center"><input type="number" value={item.estimatedDuration} onChange={e => handleUpdateOSItem(item.id, 'estimatedDuration', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" /></td>
+                                                                    <td className="px-2 py-3 text-center"><input type="number" value={item.realDuration} onChange={e => handleUpdateOSItem(item.id, 'realDuration', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-indigo-600 text-center" /></td>
+                                                                    <td className="px-2 py-3 text-center"><input type="checkbox" checked={item.isBillable} onChange={e => handleUpdateOSItem(item.id, 'isBillable', e.target.checked)} className="w-4 h-4 rounded text-indigo-600"/></td>
                                                                 </>
                                                             )}
+
+                                                            <td className="px-2 py-3 text-xs font-black text-gray-900 text-right">{formatCurrency(item.totalPrice)}</td>
                                                             <td className="px-4 py-3 text-right"><button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
                                                         </tr>
                                                     ))}
-                                                    {(formData.items || []).length === 0 && (<tr><td colSpan={currentView === 'SRV_OS' ? 8 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Nenhum item adicionado.</td></tr>)}
+                                                    {(formData.items || []).length === 0 && (<tr><td colSpan={currentView === 'SRV_OS' ? 10 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Clique em catálogo ou manual para adicionar itens.</td></tr>)}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Coluna 2: Status & Totais */}
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
-                                        <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'OPEN')}`} value={formData.status || 'OPEN'} onChange={e => setFormData({...formData, status: e.target.value})}>
-                                            <option value="OPEN">Aberta</option>
-                                            <option value="APPROVED">Aprovada</option>
-                                            <option value="SCHEDULED">Agendada</option>
-                                            <option value="IN_PROGRESS">Em Execução</option>
-                                            <option value="PAUSED">Pausada</option>
-                                            <option value="WAITING_CLIENT">Aguardando Cliente</option>
-                                            <option value="WAITING_MATERIAL">Aguardando Material</option>
-                                            <option value="DONE">Finalizada</option>
-                                            <option value="CANCELED">Cancelada</option>
+                                        <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Operacional</label>
+                                        <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                            <option value="ABERTA">Aberta</option>
+                                            <option value="APROVADA">Aprovada</option>
+                                            <option value="AGENDADA">Agendada</option>
+                                            <option value="EM_EXECUCAO">Em Execução</option>
+                                            <option value="PAUSADA">Pausada</option>
+                                            <option value="AGUARDANDO_CLIENTE">Aguardando Cliente</option>
+                                            <option value="AGUARDANDO_MATERIAL">Aguardando Material</option>
+                                            <option value="FINALIZADA">Finalizada</option>
+                                            <option value="CANCELADA">Cancelada</option>
                                         </select>
                                     </div>
 
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase">Total Geral</span>
-                                            {/* Fix: Wrapped Lucide Info icon in a span to apply 'title' tooltip, as the icon itself does not support it. */}
-                                            {currentView === 'SRV_OS' && <span title="Soma de todos os itens marcados como faturáveis."><Info className="w-3 h-3 text-gray-300" /></span>}
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">Valor Faturável</span>
+                                            {currentView === 'SRV_OS' && <span title="Apenas itens marcados como faturáveis somam no total desta OS."><Info className="w-3 h-3 text-gray-300" /></span>}
                                         </div>
                                         <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing?.net || 0)}</p>
                                     </div>
 
                                     <div className="space-y-3">
                                         <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2">
-                                            <CheckCircle className="w-5 h-5" /> Salvar Registro
+                                            <CheckCircle className="w-5 h-5" /> Salvar Alterações
                                         </button>
                                         <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button>
                                     </div>
 
                                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
                                         <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">
-                                            <Timer className="w-3 h-3" /> Cronograma
+                                            <Timer className="w-3 h-3" /> Cronograma OS
                                         </div>
                                         <div className="space-y-3">
                                             <div>

@@ -224,7 +224,8 @@ const LogsView: React.FC = () => {
                                             <td className="px-6 py-4">
                                                 {log.changes ? (
                                                     <div className="space-y-1">
-                                                        {Object.entries(log.changes).map(([key, val]) => (
+                                                        {/* Fix: Assert type for val to resolve unknown property access error */}
+                                                        {Object.entries(log.changes as Record<string, any>).map(([key, val]) => (
                                                             <div key={key} className="flex items-center gap-2 text-xs">
                                                                 <span className="font-semibold text-gray-500 w-20 truncate">{formatFieldName(key)}:</span>
                                                                 <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">{String(val.old)}</span>

@@ -350,7 +350,8 @@ export default function(logAudit) {
         const userId = req.user.id;
         try {
             const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [userId])).rows[0]?.family_id || userId;
-            const members = await pool.query(`SELECT u.id, u.name, u.email, m.role, u.entity_type, m.permissions FROM users u JOIN memberships m ON u.id = m.user_id WHERE m.family_id = $1`, [familyId]);
+            // Map entity_type to entityType for frontend Member interface
+            const members = await pool.query(`SELECT u.id, u.name, u.email, m.role, u.entity_type as "entityType", m.permissions FROM users u JOIN memberships m ON u.id = m.user_id WHERE m.family_id = $1`, [familyId]);
             
             // Fix: Parse permissions for the list view as well
             const parsedMembers = members.rows.map(m => {
@@ -470,7 +471,16 @@ export default function(logAudit) {
         try {
             const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
             const logs = await pool.query(`SELECT al.*, u.name as user_name, CASE WHEN al.entity='transaction' THEN (SELECT deleted_at IS NOT NULL FROM transactions WHERE id=al.entity_id) WHEN al.entity='account' THEN (SELECT deleted_at IS NOT NULL FROM accounts WHERE id=al.entity_id) ELSE false END as is_deleted FROM audit_logs al JOIN users u ON al.user_id = u.id WHERE u.family_id = $1 ORDER BY al.timestamp DESC LIMIT 100`, [familyId]);
-            res.json(logs.rows.map(r => ({ ...r, isDeleted: r.is_deleted, previousState: r.previous_state, changes: r.changes })));
+            // Map snake_case fields to camelCase for the UI
+            res.json(logs.rows.map(r => ({ 
+                ...r, 
+                isDeleted: r.is_deleted, 
+                previousState: r.previous_state, 
+                changes: r.changes,
+                userName: r.user_name,
+                entityId: r.entity_id,
+                userId: r.user_id
+            })));
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 

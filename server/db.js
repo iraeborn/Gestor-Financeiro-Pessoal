@@ -45,6 +45,7 @@ export const initDb = async () => {
             type TEXT DEFAULT 'SERVICE',
             cost_price DECIMAL(15,2),
             unit TEXT,
+            default_duration INTEGER DEFAULT 0,
             description TEXT,
             image_url TEXT,
             brand TEXT,
@@ -126,29 +127,21 @@ export const initDb = async () => {
             await pool.query(q);
         }
 
-        // Migração para adicionar colunas se a tabela já existia sem elas
-        const alterTableOS = [
+        // Migração Incremental
+        const alterQueries = [
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS origin TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP DEFAULT NOW()`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`
+            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS default_duration INTEGER DEFAULT 0`
         ];
 
-        for (const q of alterTableOS) {
+        for (const q of alterQueries) {
             try { await pool.query(q); } catch (e) {}
         }
 
-        const tablesToFix = ['accounts', 'transactions', 'contacts', 'categories', 'goals', 'service_orders', 'commercial_orders', 'contracts', 'invoices'];
-        for (const table of tablesToFix) {
-            await pool.query(`UPDATE ${table} SET family_id = user_id WHERE family_id IS NULL AND user_id IS NOT NULL`);
-        }
-
-        try {
-            await pool.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS receipt_urls JSONB DEFAULT '[]'`);
-        } catch (e) {}
-
-        console.log("✅ [DATABASE] Estrutura verificada e dados sincronizados.");
+        console.log("✅ [DATABASE] Estrutura verificada e sincronizada.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }

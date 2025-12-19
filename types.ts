@@ -248,6 +248,7 @@ export interface ServiceItem {
     defaultPrice: number; // Selling Price
     costPrice?: number;   // Cost Price (For Margin)
     unit?: string;        // UN, KG, L, HOUR, SESSION
+    defaultDuration?: number; // In minutes
     description?: string;
     moduleTag: string;
     imageUrl?: string;
@@ -269,13 +270,13 @@ export interface ServiceAppointment {
 
 // Service & Sales Module
 export type OSStatus = 
-    | 'OPEN' | 'APPROVED' | 'SCHEDULED' | 'IN_PROGRESS' 
-    | 'PAUSED' | 'WAITING_CLIENT' | 'WAITING_MATERIAL' 
-    | 'DONE' | 'CANCELED';
+    | 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' 
+    | 'PAUSADA' | 'AGUARDANDO_CLIENTE' | 'AGUARDANDO_MATERIAL' 
+    | 'FINALIZADA' | 'CANCELADA';
 
-export type OSType = 'PREVENTATIVE' | 'CORRECTIVE' | 'INSTALLATION' | 'MAINTENANCE' | 'CONSULTANCY' | 'EMERGENCY';
-export type OSOrigin = 'MANUAL' | 'QUOTE' | 'SALE' | 'CONTRACT';
-export type OSPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type OSType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'MANUTENCAO' | 'CONSULTORIA' | 'EMERGENCIAL';
+export type OSOrigin = 'MANUAL' | 'ORCAMENTO' | 'VENDA' | 'CONTRATO';
+export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export interface OSItem {
     id: string;
@@ -286,8 +287,8 @@ export interface OSItem {
     unitPrice: number;
     totalPrice: number;
     technician?: string;
-    estimatedTime?: string;
-    realTime?: string;
+    estimatedDuration?: number; // minutes
+    realDuration?: number; // minutes
     isBillable: boolean;
 }
 
@@ -363,38 +364,46 @@ export interface Invoice {
   fileUrl?: string;
 }
 
-// System interfaces remain same...
+/**
+ * Collaboration Member interface.
+ */
 export interface Member {
   id: string;
   name: string;
   email: string;
   role: string;
-  permissions?: string[];
-  entityType?: EntityType;
+  entityType: EntityType;
+  permissions: string[];
 }
 
+/**
+ * Audit Log entry interface.
+ */
 export interface AuditLog {
   id: number;
   userId: string;
-  userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT';
+  userName: string;
+  action: string;
   entity: string;
   entityId: string;
   details: string;
   timestamp: string;
   previousState?: any;
-  changes?: Record<string, { old: any, new: any }>;
+  changes?: Record<string, { old: any; new: any }>;
   isDeleted?: boolean;
 }
 
+/**
+ * Notification Log entry interface.
+ */
 export interface NotificationLog {
   id: number;
   userId: string;
-  userName?: string;
+  userName: string;
   channel: 'EMAIL' | 'WHATSAPP';
   recipient: string;
   subject?: string;
-  content?: string;
+  content: string;
   status: 'SENT' | 'FAILED';
   createdAt: string;
 }
