@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 
@@ -76,6 +75,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const items = (formData.items || []) as any[];
         // Valor total dos itens da grade
         const itemsSum = items.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
+        const costSum = items.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
+        const durationSum = items.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
 
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const disc = Number(formData.discountAmount) || 0;
@@ -84,11 +85,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             return { gross: itemsSum, disc, taxes, net };
         }
         
-        // No catálogo ou OS, o "net" é o somatório direto dos itens
-        // Se no catálogo não houver itens na grade, usamos o valor manual do formulário se existir
-        const net = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
-        return { net };
-    }, [formData.items, formData.discountAmount, formData.defaultPrice, taxPercent, currentView]);
+        // No catálogo: se for composto, os valores vêm dos itens. Se simples, vêm do formulário manual.
+        const useAutomatic = isCatalog ? formData.isComposite : items.length > 0;
+        
+        return { 
+            net: useAutomatic ? itemsSum : (Number(formData.defaultPrice) || 0),
+            cost: useAutomatic ? costSum : (Number(formData.costPrice) || 0),
+            duration: useAutomatic ? durationSum : (Number(formData.defaultDuration) || 0)
+        };
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.costPrice, formData.defaultDuration, formData.isComposite, taxPercent, currentView, isCatalog]);
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -155,11 +160,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 setFormData({ 
                     ...item, 
                     items: Array.isArray(item.items) ? item.items : [],
-                    defaultDuration: item.defaultDuration || 0
+                    defaultDuration: item.defaultDuration || 0,
+                    isComposite: item.isComposite || false
                 });
             } else {
                 setFormData({ 
                     type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', 
+                    isComposite: false,
                     defaultPrice: 0, 
                     costPrice: 0, 
                     brand: '', 
@@ -193,6 +200,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             estimatedDuration: catalogItem?.defaultDuration || 0,
             isBillable: true
         };
+        // Add costPrice for catalogue calculations (internal use)
+        (newItem as any).costPrice = catalogItem?.costPrice || 0;
+
         setFormData((prev: any) => ({ ...prev, items: [...(prev.items || []), newItem] }));
     };
 
@@ -260,9 +270,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 ...formData, 
                 id, 
                 defaultPrice: pricing.net, 
-                costPrice: Number(formData.costPrice) || 0, 
+                costPrice: pricing.cost, 
                 type: formData.type || 'SERVICE', 
-                defaultDuration: Number(formData.defaultDuration) || 0,
+                defaultDuration: pricing.duration,
+                isComposite: formData.isComposite || false,
                 items: formData.items || [] 
             });
         }
@@ -364,7 +375,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                          <div className="flex justify-between items-start mb-4">
                             <div className="flex flex-col overflow-hidden">
-                                <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
+                                    {/* Fix: Wrapped Layers icon in a span to use title attribute correctly and avoid TS error */}
+                                    {item.isComposite && <span title="Item Composto / Kit"><Layers className="w-3 h-3 text-indigo-500" /></span>}
+                                </div>
                                 <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Item de Catálogo'}</span>
                             </div>
                             <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.status || 'CATALOG'}</span>
@@ -430,6 +445,25 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                                 
                                 <div className="lg:col-span-3 space-y-6">
+                                    {isCatalog && (
+                                        <div className="flex bg-indigo-50 p-1.5 rounded-2xl border border-indigo-100/50 w-fit">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setFormData({...formData, isComposite: false, items: []})}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${!formData.isComposite ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' : 'text-indigo-400'}`}
+                                            >
+                                                <Box className="w-4 h-4" /> Item Simples
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setFormData({...formData, isComposite: true})}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 ${formData.isComposite ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' : 'text-indigo-400'}`}
+                                            >
+                                                <Layers className="w-4 h-4" /> Item Composto / Kit
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className={isCatalog ? "md:col-span-2" : "md:col-span-1"}>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Título do Registro</label>
@@ -506,7 +540,14 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Duração Padrão</label>
-                                                <input type="number" placeholder="Ex: 60" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultDuration || ''} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="Ex: 60" 
+                                                    className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} 
+                                                    value={pricing.duration || ''} 
+                                                    readOnly={formData.isComposite}
+                                                    onChange={e => setFormData({...formData, defaultDuration: e.target.value})} 
+                                                />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Unidade Padrão</label>
@@ -520,25 +561,39 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Sugerido (R$)</label>
-                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold bg-gray-50" value={pricing.net || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} readOnly={formData.items?.length > 0} />
-                                                {formData.items?.length > 0 && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Calculado automaticamente pelos itens técnicos</p>}
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01" 
+                                                    className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50 text-indigo-600' : 'bg-white'}`} 
+                                                    value={pricing.net || ''} 
+                                                    onChange={e => setFormData({...formData, defaultPrice: e.target.value})} 
+                                                    readOnly={formData.isComposite} 
+                                                />
+                                                {formData.isComposite && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Somatório dos itens da grade</p>}
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo Sugerido (R$)</label>
-                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01" 
+                                                    className={`w-full border border-gray-200 rounded-xl p-3 text-sm font-bold ${formData.isComposite ? 'bg-gray-50' : 'bg-white'}`} 
+                                                    value={pricing.cost || ''} 
+                                                    onChange={e => setFormData({...formData, costPrice: e.target.value})} 
+                                                    readOnly={formData.isComposite}
+                                                />
                                             </div>
                                          </div>
                                     )}
 
-                                    <div className="space-y-4">
+                                    <div className={`space-y-4 transition-opacity ${isCatalog && !formData.isComposite ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
                                         <div className="flex justify-between items-center">
                                             <h3 className="font-black text-gray-700 flex items-center gap-2 uppercase tracking-widest text-xs">
-                                                <Package className="w-4 h-4 text-indigo-500"/> Detalhamento Técnico
+                                                <Package className="w-4 h-4 text-indigo-500"/> Detalhamento Técnico / Composição
                                             </h3>
                                             <div className="flex gap-2">
                                                 <select className="border border-gray-200 rounded-lg p-1.5 text-xs bg-white font-bold outline-none focus:ring-2 focus:ring-indigo-500" onChange={e => { if(e.target.value) handleAddOSItem(e.target.value); e.target.value = ''; }}>
                                                     <option value="">+ Catálogo</option>
-                                                    {serviceItems.map(i => <option key={i.id} value={i.id}>{i.name} ({formatCurrency(i.defaultPrice)})</option>)}
+                                                    {serviceItems.filter(i => i.id !== formData.id).map(i => <option key={i.id} value={i.id}>{i.name} ({formatCurrency(i.defaultPrice)})</option>)}
                                                 </select>
                                                 <button type="button" onClick={() => handleAddOSItem()} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-black transition-colors">+ Manual</button>
                                             </div>
@@ -615,7 +670,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Sugerido' : 'Valor Faturável'}</span>
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : 'Valor Faturável'}</span>
                                             {(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}
                                         </div>
                                         <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing?.net || 0)}</p>

@@ -165,6 +165,7 @@ export default function(logAudit) {
                     name: r.name,
                     code: r.code,
                     type: r.type,
+                    isComposite: r.is_composite || false,
                     defaultPrice: parseFloat(r.default_price || 0),
                     costPrice: parseFloat(r.cost_price || 0),
                     unit: r.unit,

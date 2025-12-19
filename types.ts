@@ -245,6 +245,7 @@ export interface ServiceItem {
     name: string; 
     code?: string; // SKU or Internal Code
     type: 'SERVICE' | 'PRODUCT'; // Default SERVICE
+    isComposite?: boolean; // NEW: If true, price is sum of items
     defaultPrice: number; // Selling Price
     costPrice?: number;   // Cost Price (For Margin)
     unit?: string;        // UN, KG, L, HOUR, SESSION
@@ -253,6 +254,7 @@ export interface ServiceItem {
     moduleTag: string;
     imageUrl?: string;
     brand?: string;
+    items?: OSItem[]; // Composição
 }
 
 export interface ServiceAppointment {
