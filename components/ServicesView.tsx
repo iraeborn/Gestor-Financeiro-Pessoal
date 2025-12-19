@@ -59,6 +59,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
+    const isCatalog = currentView === 'SRV_CATALOG';
+    const isOS = currentView === 'SRV_OS';
+
     const getTaxSuggestion = (regime?: TaxRegime) => {
         if (!regime) return 0;
         switch (regime) {
@@ -81,21 +84,22 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     }, []);
 
     const pricing = useMemo(() => {
+        const items = (formData.items || []) as any[];
+        // Valor total dos itens da grade
+        const itemsSum = items.reduce((sum, item) => sum + (item.isBillable !== false ? (Number(item.totalPrice) || 0) : 0), 0);
+
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
-            const items = (formData.items || []) as any[];
-            const gross = items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
             const disc = Number(formData.discountAmount) || 0;
-            const taxes = (gross - disc) * (taxPercent / 100);
-            const net = gross - disc - (currentView === 'SRV_SALES' ? taxes : 0);
-            return { gross, disc, taxes, net };
+            const taxes = (itemsSum - disc) * (taxPercent / 100);
+            const net = itemsSum - disc - (currentView === 'SRV_SALES' ? taxes : 0);
+            return { gross: itemsSum, disc, taxes, net };
         }
-        if (currentView === 'SRV_OS') {
-            const items = (formData.items || []) as OSItem[];
-            const net = items.reduce((sum, item) => sum + (item.isBillable ? (Number(item.totalPrice) || 0) : 0), 0);
-            return { net };
-        }
-        return null;
-    }, [formData.items, formData.discountAmount, taxPercent, currentView]);
+        
+        // No catálogo ou OS, o "net" é o somatório direto dos itens
+        // Se no catálogo não houver itens na grade, usamos o valor manual do formulário se existir
+        const net = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
+        return { net };
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, taxPercent, currentView]);
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -125,7 +129,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') onDeleteOrder(id);
         else if (currentView === 'SRV_CONTRACTS') onDeleteContract(id);
         else if (currentView === 'SRV_NF') onDeleteInvoice(id);
-        else if (currentView === 'SRV_CATALOG' && onDeleteCatalogItem) onDeleteCatalogItem(id);
+        else if (isCatalog && onDeleteCatalogItem) onDeleteCatalogItem(id);
     };
 
     const handleConfirmApproval = (data: any) => {
@@ -144,7 +148,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             setContactSearch('');
         }
 
-        if (currentView === 'SRV_OS') {
+        if (isOS) {
             if (item) {
                 setFormData({ ...item });
             } else {
@@ -157,9 +161,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     items: [] 
                 });
             }
-        } else if (currentView === 'SRV_CATALOG') {
-            if (item) setFormData({ ...item });
-            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0, unit: 'UN' });
+        } else if (isCatalog) {
+            if (item) setFormData({ ...item, items: item.items || [] });
+            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0, unit: 'UN', items: [] });
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
                 setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
@@ -218,7 +222,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         let finalContactId = formData.contactId;
         let newContactObj: Contact | undefined;
 
-        if (contactSearch && currentView !== 'SRV_OS') {
+        if (contactSearch && !isOS && !isCatalog) {
             const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
             if (existing) {
                 finalContactId = existing.id;
@@ -232,7 +236,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const id = formData.id || crypto.randomUUID();
         const common = { id, contactId: finalContactId, contactName: contactSearch };
 
-        if (currentView === 'SRV_OS') {
+        if (isOS) {
             onSaveOS({ ...formData, ...common, totalAmount: pricing?.net || 0 }, newContactObj);
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const type = currentView === 'SRV_SALES' ? 'SALE' : 'PURCHASE';
@@ -250,8 +254,16 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
             onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
-        } else if (currentView === 'SRV_CATALOG' && onSaveCatalogItem) {
-            onSaveCatalogItem({ ...formData, id, defaultPrice: Number(formData.defaultPrice) || 0, costPrice: Number(formData.costPrice) || 0, type: formData.type || 'SERVICE', defaultDuration: Number(formData.defaultDuration) || 0 });
+        } else if (isCatalog && onSaveCatalogItem) {
+            // No catálogo, defaultPrice é o somatório do pricing se houver grade, senão o valor manual
+            onSaveCatalogItem({ 
+                ...formData, 
+                id, 
+                defaultPrice: pricing.net, 
+                costPrice: Number(formData.costPrice) || 0, 
+                type: formData.type || 'SERVICE', 
+                defaultDuration: Number(formData.defaultDuration) || 0 
+            });
         }
         setIsModalOpen(false);
         setFormData({});
@@ -284,12 +296,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const renderGridContent = () => {
         let rawItems: any[] = [];
-        if (currentView === 'SRV_OS') rawItems = serviceOrders;
+        if (isOS) rawItems = serviceOrders;
         else if (currentView === 'SRV_SALES') rawItems = commercialOrders.filter(o => o.type === 'SALE');
         else if (currentView === 'SRV_PURCHASES') rawItems = commercialOrders.filter(o => o.type === 'PURCHASE');
         else if (currentView === 'SRV_CONTRACTS') rawItems = contracts;
         else if (currentView === 'SRV_NF') rawItems = invoices;
-        else if (currentView === 'SRV_CATALOG') rawItems = serviceItems.filter(i => catalogTab === 'ALL' || i.type === catalogTab);
+        else if (isCatalog) rawItems = serviceItems.filter(i => catalogTab === 'ALL' || i.type === catalogTab);
 
         const filtered = rawItems.filter(i => 
             (i.title || i.description || i.name || i.code || i.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -304,7 +316,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             </div>
         );
 
-        if (currentView === 'SRV_OS') {
+        if (isOS) {
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map(os => (
@@ -352,9 +364,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                          <div className="flex justify-between items-start mb-4">
                             <div className="flex flex-col overflow-hidden">
                                 <span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>
-                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Sem contato'}</span>
+                                <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || 'Item de Catálogo'}</span>
                             </div>
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.status}</span>
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{item.status || 'CATALOG'}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm font-black text-gray-900 mt-2">
                              <span>{formatCurrency(item.amount || item.defaultPrice || item.value || 0)}</span>
@@ -395,7 +407,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 </div>
             </div>
 
-            {currentView === 'SRV_CATALOG' && (
+            {isCatalog && (
                 <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">
                     {['ALL', 'PRODUCT', 'SERVICE'].map(t => (
                         <button key={t} onClick={() => setCatalogTab(t as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}>{t === 'ALL' ? 'Todos' : t === 'PRODUCT' ? 'Produtos' : 'Serviços'}</button>
@@ -418,13 +430,13 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 
                                 <div className="lg:col-span-3 space-y-6">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="md:col-span-2">
+                                        <div className={isCatalog ? "md:col-span-2" : "md:col-span-1"}>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Título do Registro</label>
-                                            <input type="text" placeholder="Ex: Manutenção Elétrica Prédio..." className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
+                                            <input type="text" placeholder={isCatalog ? "Ex: Motor Trifásico 5HP..." : "Ex: Manutenção Elétrica Prédio..."} className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.title || formData.description || formData.name || ''} onChange={e => setFormData({...formData, title: e.target.value, description: e.target.value, name: e.target.value})} required />
                                         </div>
                                         
-                                        {/* Pessoa/Empresa removido para OS conforme solicitado, mas mantido para Vendas/Catalog */}
-                                        {currentView !== 'SRV_OS' && (
+                                        {/* Pessoa/Empresa removido para Catálogo e OS conforme solicitado */}
+                                        {!isOS && !isCatalog && (
                                             <div className="relative" ref={contactDropdownRef}>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Pessoa / Empresa</label>
                                                 <div className="relative">
@@ -456,7 +468,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         )}
                                     </div>
 
-                                    {currentView === 'SRV_OS' && (
+                                    {isOS && (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Tipo de OS</label>
@@ -490,10 +502,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         </div>
                                     )}
 
-                                    {currentView === 'SRV_CATALOG' && (
+                                    {isCatalog && (
                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Duração Padrão (Minutos)</label>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Duração Padrão</label>
                                                 <input type="number" placeholder="Ex: 60" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultDuration || ''} onChange={e => setFormData({...formData, defaultDuration: e.target.value})} />
                                             </div>
                                             <div>
@@ -507,11 +519,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Venda (R$)</label>
-                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.defaultPrice || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} />
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Preço Sugerido (R$)</label>
+                                                <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold bg-gray-50" value={pricing.net || ''} onChange={e => setFormData({...formData, defaultPrice: e.target.value})} readOnly={formData.items?.length > 0} />
+                                                {formData.items?.length > 0 && <p className="text-[9px] text-indigo-500 font-bold mt-1 uppercase">* Calculado automaticamente pelos itens técnicos</p>}
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo (R$)</label>
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Custo Sugerido (R$)</label>
                                                 <input type="number" step="0.01" className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: e.target.value})} />
                                             </div>
                                          </div>
@@ -538,7 +551,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                         <th className="px-4 py-3">Serviço/Peça</th>
                                                         <th className="px-4 py-3 w-16 text-center">Qtd</th>
                                                         <th className="px-4 py-3 w-28 text-center">Vlr Unit</th>
-                                                        {currentView === 'SRV_OS' && (
+                                                        {isOS && (
                                                             <>
                                                                 <th className="px-4 py-3 w-32 text-center">Técnico</th>
                                                                 <th className="px-4 py-3 w-20 text-center">Estimado (min)</th>
@@ -562,7 +575,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                             <td className="px-2 py-3"><input type="number" value={item.quantity} onChange={e => handleUpdateOSItem(item.id, 'quantity', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-bold text-center" min="1"/></td>
                                                             <td className="px-2 py-3"><input type="number" step="0.01" value={item.unitPrice} onChange={e => handleUpdateOSItem(item.id, 'unitPrice', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-xs font-black text-center"/></td>
                                                             
-                                                            {currentView === 'SRV_OS' && (
+                                                            {isOS && (
                                                                 <>
                                                                     <td className="px-2 py-3 text-center"><input type="text" value={item.technician} onChange={e => handleUpdateOSItem(item.id, 'technician', e.target.value)} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" placeholder="Responsável..."/></td>
                                                                     <td className="px-2 py-3 text-center"><input type="number" value={item.estimatedDuration} onChange={e => handleUpdateOSItem(item.id, 'estimatedDuration', Number(e.target.value))} className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-bold text-center" /></td>
@@ -575,7 +588,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                             <td className="px-4 py-3 text-right"><button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
                                                         </tr>
                                                     ))}
-                                                    {(formData.items || []).length === 0 && (<tr><td colSpan={currentView === 'SRV_OS' ? 10 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Clique em catálogo ou manual para adicionar itens.</td></tr>)}
+                                                    {(formData.items || []).length === 0 && (<tr><td colSpan={isOS ? 10 : 5} className="px-4 py-12 text-center text-gray-400 text-xs italic">Clique em catálogo ou manual para adicionar itens.</td></tr>)}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -583,8 +596,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
 
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
-                                    {/* Situação Operacional removido do formulário para OS conforme solicitado */}
-                                    {currentView !== 'SRV_OS' && (
+                                    {/* Situação Operacional removido para OS e Catálogo */}
+                                    {!isOS && !isCatalog && (
                                         <div>
                                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label>
                                             <select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}>
@@ -603,8 +616,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
                                     <div className="pt-4 border-t border-gray-200">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase">Valor Faturável</span>
-                                            {currentView === 'SRV_OS' && <span title="Apenas itens marcados como faturáveis somam no total desta OS."><Info className="w-3 h-3 text-gray-300" /></span>}
+                                            <span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Sugerido' : 'Valor Faturável'}</span>
+                                            {(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}
                                         </div>
                                         <p className="text-3xl font-black text-gray-900">{formatCurrency(pricing?.net || 0)}</p>
                                     </div>
@@ -616,25 +629,28 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button>
                                     </div>
 
-                                    <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
-                                        <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">
-                                            <Timer className="w-3 h-3" /> Cronograma (Auto)
+                                    {/* Cronograma Removido para Catálogo conforme solicitado */}
+                                    {!isCatalog && (
+                                        <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-indigo-700 uppercase mb-2">
+                                                <Timer className="w-3 h-3" /> Cronograma (Auto)
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-indigo-400 uppercase">Abertura</label>
+                                                    <input type="datetime-local" className="w-full bg-transparent text-[11px] font-bold text-indigo-900 outline-none" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-bold text-indigo-400 uppercase">Previsão Início</label>
+                                                    <input type="date" className="w-full bg-transparent text-xs font-bold text-indigo-900 outline-none" value={formData.startDate || ''} onChange={e => setFormData({...formData, startDate: e.target.value})}/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-bold text-indigo-400 uppercase">Previsão Conclusão</label>
+                                                    <input type="date" className="w-full bg-transparent text-xs font-bold text-indigo-900 outline-none" value={formData.endDate || ''} onChange={e => setFormData({...formData, endDate: e.target.value})}/>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-indigo-400 uppercase">Abertura</label>
-                                                <input type="datetime-local" className="w-full bg-transparent text-[11px] font-bold text-indigo-900 outline-none" value={formData.openedAt?.substring(0,16) || ''} onChange={e => setFormData({...formData, openedAt: e.target.value})} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[9px] font-bold text-indigo-400 uppercase">Previsão Início</label>
-                                                <input type="date" className="w-full bg-transparent text-xs font-bold text-indigo-900 outline-none" value={formData.startDate || ''} onChange={e => setFormData({...formData, startDate: e.target.value})}/>
-                                            </div>
-                                            <div>
-                                                <label className="block text-[9px] font-bold text-indigo-400 uppercase">Previsão Conclusão</label>
-                                                <input type="date" className="w-full bg-transparent text-xs font-bold text-indigo-900 outline-none" value={formData.endDate || ''} onChange={e => setFormData({...formData, endDate: e.target.value})}/>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                         </form>
