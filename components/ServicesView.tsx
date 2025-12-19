@@ -79,6 +79,42 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         return isCatalog || status === 'ABERTA' || status === 'DRAFT';
     };
 
+    /**
+     * Resolve o preço de um item de forma RECURSIVA.
+     * Se for um kit, ele soma o preço de seus constituintes baseando-se no catálogo atual.
+     */
+    const getResolvedPrice = (item: any): number => {
+        if (!item) return 0;
+        
+        // Se for um item simples (não composto), retorna o preço base cadastrado
+        if (!item.isComposite) {
+            return Number(item.defaultPrice ?? item.unitPrice ?? 0);
+        }
+        
+        // Se for composto, precisamos somar seus sub-itens (composição)
+        const subItems = item.items || [];
+        if (subItems.length === 0) return Number(item.defaultPrice ?? item.unitPrice ?? 0);
+
+        return subItems.reduce((sum: number, sub: any) => {
+            let subUnitPrice = Number(sub.unitPrice || 0);
+            
+            // Se o sub-item estiver vinculado ao catálogo, buscamos o valor mais recente (recursivamente)
+            if (sub.serviceItemId) {
+                const latestSub = serviceItems.find(si => si.id === sub.serviceItemId);
+                if (latestSub) {
+                    subUnitPrice = getResolvedPrice(latestSub);
+                }
+            }
+            
+            const qty = Number(sub.quantity) || 1;
+            const isBillable = sub.isBillable !== false;
+            return sum + (isBillable ? (subUnitPrice * qty) : 0);
+        }, 0);
+    };
+
+    /**
+     * Mapeia uma lista de itens (de uma OS ou Pedido) para seus valores resolvidos.
+     */
     const resolveItems = (items: any[], recordStatus?: string) => {
         if (!Array.isArray(items)) return [];
         return items.map(item => {
@@ -86,12 +122,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 const latest = serviceItems.find(si => si.id === item.serviceItemId);
                 if (latest) {
                     const qty = Number(item.quantity) || 1;
-                    
-                    // REVISÃO DE LÓGICA DE VALOR:
-                    // Se o registro for Catálogo ou estiver ABERTO/DRAFT, usamos SEMPRE o valor mais recente do catálogo.
-                    // Caso contrário, usamos o snapshot (item.unitPrice) para preservar o histórico.
                     const isRecordActive = shouldSyncWithCatalog(recordStatus || formData.status);
-                    const unitPriceToUse = isRecordActive ? latest.defaultPrice : (item.unitPrice ?? latest.defaultPrice);
+                    
+                    // REVISÃO: Se o registro for 'Ativo', usamos getResolvedPrice(latest) que resolve recursivamente kits
+                    const unitPriceToUse = isRecordActive ? getResolvedPrice(latest) : (item.unitPrice ?? getResolvedPrice(latest));
                     const costPriceToUse = isRecordActive ? (latest.costPrice || 0) : (item.costPrice ?? latest.costPrice ?? 0);
 
                     return {
@@ -110,24 +144,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         });
     };
 
-    const getResolvedPrice = (item: any): number => {
-        // Se for um item de catálogo sendo listado, sempre resolve dinamicamente
-        if (isCatalog) {
-            if (!item.isComposite) return Number(item.defaultPrice || 0);
-            const resolved = resolveItems(item.items || [], 'CATALOG');
-            return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
-        }
-
-        // Para OS/Vendas na grade (fora do modal)
-        const isRecordActive = shouldSyncWithCatalog(item.status);
-        if (isRecordActive && item.items && item.items.length > 0) {
-            const resolved = resolveItems(item.items, item.status);
-            return resolved.reduce((sum, i) => sum + (i.isBillable !== false ? (Number(i.totalPrice) || 0) : 0), 0);
-        }
-
-        return Number(item.totalAmount || item.amount || item.defaultPrice || item.value || 0);
-    };
-
     const pricing = useMemo(() => {
         const items = (formData.items || []) as any[];
         const resolvedList = resolveItems(items, formData.status);
@@ -137,7 +153,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const durationSum = resolvedList.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
 
         const disc = Number(formData.discountAmount) || 0;
-        const gross = itemsSum;
         
         let netValue = 0;
         if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
@@ -145,7 +160,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (isCatalog) {
             netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
         } else if (isOS) {
-            // Se tiver itens na grade, manda a soma dinâmica. Se não, usa o total Amount salvo.
             netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
         } else {
             netValue = items.length > 0 ? itemsSum : (Number(formData.defaultPrice) || 0);
@@ -154,7 +168,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const taxes = netValue * (taxPercent / 100);
 
         return { 
-            gross, 
+            gross: itemsSum, 
             disc, 
             taxes, 
             net: netValue, 
@@ -271,7 +285,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleAddOSItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
-        // Ao adicionar um item, sempre buscamos o preço resolvido (atual) do catálogo
         const resolvedPrice = catalogItem ? getResolvedPrice(catalogItem) : 0;
         
         const newItem: OSItem = {
