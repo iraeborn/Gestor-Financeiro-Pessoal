@@ -13,7 +13,6 @@ const upload = multer({
 });
 
 // Configuração do Google Cloud Storage
-// Certifique-se que as credenciais do GCP estão configuradas no ambiente (ADC ou Service Account JSON)
 const storage = new Storage();
 const bucketName = process.env.GCS_BUCKET_NAME || 'finmanager-attachments';
 const bucket = storage.bucket(bucketName);
@@ -27,7 +26,6 @@ export default function(logAudit) {
                 return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
             }
 
-            // Validar se o bucket existe antes de iniciar o stream
             const [exists] = await bucket.exists();
             if (!exists) {
                 console.error(`[CRÍTICO] Bucket "${bucketName}" não encontrado no Google Cloud.`);
@@ -35,9 +33,7 @@ export default function(logAudit) {
             }
 
             const uploadPromises = req.files.map(file => {
-                // Sanitização básica do nome do arquivo
                 const cleanName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
-                // Estrutura: attachments/[id_usuario]/[uuid]-[nome]
                 const fileName = `attachments/${req.user.id}/${crypto.randomUUID()}-${cleanName}`;
                 
                 const blob = bucket.file(fileName);
@@ -57,9 +53,6 @@ export default function(logAudit) {
 
                     blobStream.on('finish', async () => {
                         try {
-                            // Tenta tornar o arquivo público. 
-                            // Nota: Se o bucket estiver em "Uniform Bucket-Level Access", isso falhará.
-                            // Recomenda-se configurar a permissão "Storage Object Viewer" para "allUsers" no nível do bucket.
                             try {
                                 await blob.makePublic();
                             } catch (e) {
@@ -178,7 +171,9 @@ export default function(logAudit) {
                     description: r.description,
                     moduleTag: r.module_tag,
                     imageUrl: r.image_url,
-                    brand: r.brand
+                    brand: r.brand,
+                    defaultDuration: r.default_duration || 0,
+                    items: r.items || []
                 })),
                 serviceClients: [], 
                 serviceAppointments: [],

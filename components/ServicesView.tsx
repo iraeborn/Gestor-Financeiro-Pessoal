@@ -151,8 +151,23 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 });
             }
         } else if (isCatalog) {
-            if (item) setFormData({ ...item, items: item.items || [] });
-            else setFormData({ type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', defaultPrice: '', costPrice: '', brand: '', defaultDuration: 0, unit: 'UN', items: [] });
+            if (item) {
+                setFormData({ 
+                    ...item, 
+                    items: Array.isArray(item.items) ? item.items : [],
+                    defaultDuration: item.defaultDuration || 0
+                });
+            } else {
+                setFormData({ 
+                    type: catalogTab === 'PRODUCT' ? 'PRODUCT' : 'SERVICE', 
+                    defaultPrice: 0, 
+                    costPrice: 0, 
+                    brand: '', 
+                    defaultDuration: 0, 
+                    unit: 'UN', 
+                    items: [] 
+                });
+            }
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             if (item) {
                 setFormData({ ...item, grossAmount: item.grossAmount || item.amount, discountAmount: item.discountAmount || 0, taxAmount: item.taxAmount || 0, items: item.items || [] });
