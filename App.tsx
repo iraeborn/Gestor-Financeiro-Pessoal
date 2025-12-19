@@ -32,6 +32,7 @@ import Sidebar from './components/Sidebar';
 import CollaborationModal from './components/CollaborationModal';
 import ServiceModule from './components/ServiceModule';
 import ServicesView from './components/ServicesView';
+import PublicOrderView from './components/PublicOrderView';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -41,6 +42,10 @@ const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [landingInitType, setLandingInitType] = useState<EntityType>(EntityType.PERSONAL);
   const [landingInitPlan, setLandingInitPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
+
+  // PUBLIC VIEW DETECTION
+  const urlParams = new URLSearchParams(window.location.search);
+  const publicToken = urlParams.get('orderToken');
 
   const [data, setData] = useState<AppState>({
     accounts: [], transactions: [], goals: [], contacts: [], categories: [],
@@ -53,7 +58,7 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
-  useEffect(() => { checkAuth(); }, []);
+  useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
   useEffect(() => {
     if (currentUser?.familyId) {
@@ -145,7 +150,6 @@ const App: React.FC = () => {
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
 
-          // 1. Financeiro (Vira uma Receita Pendente vinculada à Venda)
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = {
@@ -177,14 +181,12 @@ const App: React.FC = () => {
               await api.saveInvoice(inv);
           }
 
-          // 2. Transforma Orçamento em Venda (CONFIRMED)
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
 
           await loadData(true);
           setLoading(false);
 
-          // 3. Prompt de Ordem de Serviço
           const confirmOS = await showConfirm({
               title: "Venda Aprovada!",
               message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
@@ -195,7 +197,6 @@ const App: React.FC = () => {
           if (confirmOS) {
               let totalEstimatedMinutes = 0;
               
-              // Mapear itens da venda para a OS e calcular duração se houver no catálogo
               const osItems: OSItem[] = (order.items || []).map(item => {
                   const catalogItem = data.serviceItems.find(si => si.id === item.serviceItemId);
                   const duration = (catalogItem?.defaultDuration || 0) * item.quantity;
@@ -214,7 +215,6 @@ const App: React.FC = () => {
                   };
               });
 
-              // Definir cronograma automático
               const startDate = new Date();
               const endDate = new Date(startDate.getTime() + totalEstimatedMinutes * 60000);
 
@@ -255,6 +255,9 @@ const App: React.FC = () => {
   const wrapDel = async (fn: any, id: string, msg: string) => {
       try { await fn(id); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao excluir.", "error"); }
   };
+
+  // IF PUBLIC TOKEN PRESENT, ONLY SHOW PUBLIC VIEW
+  if (publicToken) return <PublicOrderView token={publicToken} />;
 
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400">Carregando...</div>;
   if (!currentUser) {

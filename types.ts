@@ -337,8 +337,9 @@ export interface CommercialOrder {
   taxAmount?: number;
   items?: OrderItem[];
   date: string;
-  status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED';
+  status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED' | 'ON_HOLD' | 'REJECTED';
   transactionId?: string;
+  accessToken?: string;
 }
 
 export interface Contract {

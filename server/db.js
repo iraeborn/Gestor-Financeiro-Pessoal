@@ -69,6 +69,7 @@ export const initDb = async () => {
             transaction_id TEXT, 
             user_id TEXT, 
             family_id TEXT, 
+            access_token TEXT,
             created_at TIMESTAMP DEFAULT NOW(), 
             deleted_at TIMESTAMP
         )`,
@@ -139,7 +140,8 @@ export const initDb = async () => {
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS default_duration INTEGER DEFAULT 0`,
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`
+            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`,
+            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`
         ];
 
         for (const q of alterQueries) {

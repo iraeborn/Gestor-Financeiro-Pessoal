@@ -51,7 +51,6 @@ export const login = async (email: string, password: string): Promise<AuthRespon
   return data;
 };
 
-// Updated to accept companyData
 export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, companyData?: Partial<CompanyProfile>): Promise<AuthResponse> => {
     const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
@@ -77,7 +76,7 @@ export const loginWithGoogle = async (credential: string): Promise<AuthResponse>
 };
 
 export const updateProfile = async (data: any): Promise<User> => {
-    const res = await fetch(`${API_URL}/profile`, { // Fixed endpoint
+    const res = await fetch(`${API_URL}/profile`, { 
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify(data)
@@ -88,7 +87,7 @@ export const updateProfile = async (data: any): Promise<User> => {
 };
 
 export const updateSettings = async (settings: AppSettings): Promise<User> => {
-    const res = await fetch(`${API_URL}/settings`, { // Fixed endpoint
+    const res = await fetch(`${API_URL}/settings`, { 
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ settings })
@@ -100,7 +99,7 @@ export const switchContext = async (workspaceId: string) => {
     const res = await fetch(`${API_URL}/switch-context`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ targetFamilyId: workspaceId }) // Fixed param name
+        body: JSON.stringify({ targetFamilyId: workspaceId }) 
     });
     const data = await handleResponse(res);
     if (data.token) {
@@ -193,7 +192,7 @@ export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
 };
 
 export const restoreRecord = async (entity: string, id: string) => {
-    const res = await fetch(`${API_URL}/restore`, { // Fixed endpoint
+    const res = await fetch(`${API_URL}/restore`, { 
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ entity, id })
@@ -202,10 +201,25 @@ export const restoreRecord = async (entity: string, id: string) => {
 };
 
 export const revertLogChange = async (logId: number) => {
-    const res = await fetch(`${API_URL}/revert-change`, { // Fixed endpoint
+    const res = await fetch(`${API_URL}/revert-change`, { 
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ logId })
+    });
+    return await handleResponse(res);
+};
+
+// PUBLIC API
+export const getPublicOrder = async (token: string): Promise<any> => {
+    const res = await fetch(`${API_URL}/services/public/order/${token}`);
+    return await handleResponse(res);
+};
+
+export const updatePublicOrderStatus = async (token: string, status: string, notes?: string): Promise<any> => {
+    const res = await fetch(`${API_URL}/services/public/order/${token}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, notes })
     });
     return await handleResponse(res);
 };
@@ -272,9 +286,8 @@ export const api = {
         });
         return await handleResponse(res);
     },
-    // PJ
     saveCompanyProfile: async (data: CompanyProfile) => {
-        const res = await fetch(`${API_URL}/company`, { // Fixed endpoint
+        const res = await fetch(`${API_URL}/company`, { 
             method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
         });
         return await handleResponse(res);
@@ -319,7 +332,6 @@ export const api = {
         const res = await fetch(`${API_URL}/projects/${id}`, { method: 'DELETE', headers: getHeaders() });
         return await handleResponse(res);
     },
-    // Modules (Fixing paths to match server)
     saveServiceClient: async (data: ServiceClient) => {
         const res = await fetch(`${API_URL}/modules/clients`, {
             method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
@@ -350,7 +362,6 @@ export const api = {
         const res = await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() });
         return await handleResponse(res);
     },
-    // NEW SERVICE MODULE
     saveServiceOrder: async (data: ServiceOrder) => {
         const res = await fetch(`${API_URL}/services/os`, {
             method: 'POST', headers: getHeaders(), body: JSON.stringify(data)
@@ -369,6 +380,14 @@ export const api = {
     },
     deleteCommercialOrder: async (id: string) => {
         const res = await fetch(`${API_URL}/services/orders/${id}`, { method: 'DELETE', headers: getHeaders() });
+        return await handleResponse(res);
+    },
+    shareOrder: async (id: string, channel: 'WHATSAPP' | 'EMAIL') => {
+        const res = await fetch(`${API_URL}/services/orders/${id}/share`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ channel })
+        });
         return await handleResponse(res);
     },
     saveContract: async (data: Contract) => {

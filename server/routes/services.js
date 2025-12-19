@@ -1,7 +1,9 @@
 
 import express from 'express';
 import pool from '../db.js';
+import crypto from 'crypto';
 import { authenticateToken, calculateChanges, sanitizeValue, familyCheckParam2 } from '../middleware.js';
+import { sendEmail } from '../services/email.js';
 
 const router = express.Router();
 
@@ -13,13 +15,95 @@ export default function(logAudit) {
         return res.rows[0]?.family_id || userId;
     };
 
+    // --- PUBLIC ACCESS ROUTES (No Token Required) ---
+
+    router.get('/public/order/:token', async (req, res) => {
+        try {
+            const { token } = req.params;
+            const orderRes = await pool.query(`
+                SELECT o.*, c.name as contact_name, u.name as company_name, cp.trade_name, cp.phone as company_phone, cp.email as company_email
+                FROM commercial_orders o
+                LEFT JOIN contacts c ON o.contact_id = c.id
+                JOIN users u ON o.user_id = u.id
+                LEFT JOIN company_profiles cp ON o.family_id = cp.user_id
+                WHERE o.access_token = $1 AND o.deleted_at IS NULL
+            `, [token]);
+
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado ou link expirado." });
+
+            const order = orderRes.rows[0];
+            // Resolve JSON items if string
+            if (typeof order.items === 'string') order.items = JSON.parse(order.items);
+
+            res.json(order);
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.post('/public/order/:token/status', async (req, res) => {
+        const { token } = req.params;
+        const { status, notes } = req.body; // APPROVED, REJECTED, ON_HOLD
+        try {
+            const orderRes = await pool.query('SELECT id, family_id, description FROM commercial_orders WHERE access_token = $1', [token]);
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Inválido." });
+
+            const orderId = orderRes.rows[0].id;
+            await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, orderId]);
+            
+            // Log audit sem userId real (Cliente externo)
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', orderId, `Status alterado via link público: ${status} (${notes || ''})`);
+            
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- PROTECTED ROUTES ---
+
+    // Gerar link de compartilhamento
+    router.post('/services/orders/:id/share', authenticateToken, async (req, res) => {
+        const { channel } = req.body; // 'WHATSAPP' | 'EMAIL'
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            const orderRes = await pool.query('SELECT * FROM commercial_orders WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Pedido não encontrado." });
+            
+            let token = orderRes.rows[0].access_token;
+            if (!token) {
+                token = crypto.randomBytes(16).toString('hex');
+                await pool.query('UPDATE commercial_orders SET access_token = $1 WHERE id = $2', [token, req.params.id]);
+            }
+
+            const publicUrl = `${req.get('origin')}?orderToken=${token}`;
+            const contactRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [orderRes.rows[0].contact_id]);
+            const contact = contactRes.rows[0];
+
+            if (channel === 'EMAIL' && contact?.email) {
+                const subject = `Orçamento: ${orderRes.rows[0].description}`;
+                const body = `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                        <h2 style="color: #4f46e5;">Olá, ${contact.name}!</h2>
+                        <p>Temos um novo orçamento disponível para sua análise:</p>
+                        <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                            <strong>Descrição:</strong> ${orderRes.rows[0].description}<br>
+                            <strong>Valor:</strong> R$ ${parseFloat(orderRes.rows[0].amount).toFixed(2)}
+                        </div>
+                        <p>Você pode visualizar os detalhes e aprovar online clicando no botão abaixo:</p>
+                        <a href="${publicUrl}" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver Orçamento</a>
+                        <p style="color: #666; font-size: 12px; margin-top: 30px;">Se o botão não funcionar, copie este link: ${publicUrl}</p>
+                    </div>
+                `;
+                await sendEmail(contact.email, subject, body, body);
+            }
+
+            res.json({ url: publicUrl, token });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
     // --- SERVICE ORDERS (OS) ---
     router.post('/services/os', authenticateToken, async (req, res) => {
         const { id, title, description, contactId, status, totalAmount, startDate, endDate, items, type, origin, priority, openedAt } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             
-            // Verifica se o registro existe e se pertence à família
             const existing = (await pool.query('SELECT * FROM service_orders WHERE id=$1', [id])).rows[0];
             if (existing && existing.family_id !== familyId) {
                 return res.status(403).json({ error: "Acesso negado ao registro." });
