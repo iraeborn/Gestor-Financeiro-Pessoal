@@ -42,43 +42,20 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            // Busca o family_id E o user_id (dono) da ordem
             const orderRes = await pool.query('SELECT id, family_id, user_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
-            
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
-                return res.status(400).json({ error: "Esta proposta já foi processada e não pode ser alterada." });
+                return res.status(400).json({ error: "Esta proposta já foi processada." });
             }
 
-            // Atualiza o banco
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
-            
-            // DETERMINA A SALA DE DESTINO
-            // O sinal deve ir para a sala onde o gestor está ouvindo.
-            // Se o family_id está preenchido, ele é o ID da sala (workspace). 
-            // Se estiver nulo, usamos o user_id do dono (fallback para contas simples).
             const targetRoom = order.family_id || order.user_id;
 
-            // GATILHO DE REATIVIDADE: 
-            await logAudit(
-                pool, 
-                'EXTERNAL_CLIENT', 
-                'UPDATE', 
-                'order', 
-                order.id, 
-                `Cliente respondeu online: ${status}`, 
-                null, 
-                null, 
-                targetRoom
-            );
-            
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${status}`, null, null, targetRoom);
             res.json({ success: true });
-        } catch (err) { 
-            console.error("Public Portal Error:", err);
-            res.status(500).json({ error: err.message }); 
-        }
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     // --- PROTECTED ROUTES (Dashboard do Gestor) ---
@@ -100,20 +77,51 @@ export default function(logAudit) {
             const publicUrl = `${req.get('origin')}?orderToken=${token}`;
             const contactRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [order.contact_id]);
             const contact = contactRes.rows[0];
+            const companyRes = await pool.query('SELECT trade_name FROM company_profiles WHERE user_id = $1', [familyId]);
+            const companyName = companyRes.rows[0]?.trade_name || req.user.name;
 
-            if (channel === 'EMAIL' && contact?.email) {
+            if (channel === 'EMAIL') {
+                if (!contact?.email) {
+                    return res.status(400).json({ error: "O contato selecionado não possui um e-mail cadastrado." });
+                }
+
                 const subject = `Proposta Comercial: ${order.description}`;
-                const body = `<div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px;">
-                    <h2>Olá, ${contact.name}!</h2>
-                    <p>Sua proposta para <strong>${order.description}</strong> está disponível.</p>
-                    <p>Valor total: <strong>R$ ${Number(order.amount).toLocaleString('pt-BR')}</strong></p>
-                    <a href="${publicUrl}" style="background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ver e Aprovar Online</a>
+                const amountFormatted = Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                
+                const plainText = `Olá, ${contact.name}! Sua proposta para ${order.description} no valor de ${amountFormatted} está pronta. Acesse em: ${publicUrl}`;
+                
+                const html = `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; color: #1e293b;">
+                    <div style="background-color: #4f46e5; padding: 32px; text-align: center; color: white;">
+                        <h1 style="margin: 0; font-size: 24px;">Proposta Comercial</h1>
+                        <p style="margin-top: 8px; opacity: 0.9;">Enviado por ${companyName}</p>
+                    </div>
+                    <div style="padding: 32px;">
+                        <h2 style="margin: 0 0 16px 0; font-size: 20px;">Olá, ${contact.name}!</h2>
+                        <p style="font-size: 16px; line-height: 24px;">Sua proposta referente a <strong>${order.description}</strong> já está disponível para análise.</p>
+                        
+                        <div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;">
+                            <span style="display: block; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 4px;">Valor Total</span>
+                            <span style="font-size: 28px; font-weight: 800; color: #0f172a;">${amountFormatted}</span>
+                        </div>
+
+                        <div style="text-align: center; margin: 32px 0;">
+                            <a href="${publicUrl}" style="background-color: #4f46e5; color: white; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; display: inline-block;">Visualizar e Responder Agora</a>
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" />
+                        <p style="font-size: 12px; color: #94a3b8; text-align: center;">Este link de acesso é exclusivo para você. A validade desta proposta é de 7 dias.</p>
+                    </div>
                 </div>`;
-                await sendEmail(contact.email, subject, body, body);
+
+                await sendEmail(contact.email, subject, plainText, html);
             }
 
             res.json({ url: publicUrl, token });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            console.error("Share Error:", err);
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     router.post('/services/os', authenticateToken, async (req, res) => {

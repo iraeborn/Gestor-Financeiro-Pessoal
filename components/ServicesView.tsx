@@ -53,6 +53,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [compositionFilter, setCompositionFilter] = useState<'ALL' | 'SIMPLE' | 'COMPOSITE'>('ALL');
     const [formData, setFormData] = useState<any>({}); 
     const [taxPercent, setTaxPercent] = useState<number>(0);
+    const [sharing, setSharing] = useState(false);
 
     const [isApprovalOpen, setIsApprovalOpen] = useState(false);
     const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<CommercialOrder | null>(null);
@@ -100,26 +101,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 const latest = serviceItems.find(si => si.id === item.serviceItemId);
                 if (latest) {
                     const qty = Number(item.quantity) || 1;
-                    
-                    // CORREÇÃO: Verificamos se o campo unitPrice existe, independente de ser string ou número
-                    // Isso evita que itens vindos do banco (strings no JSONB) sejam ignorados e recarregados do catálogo
                     const hasSavedPrice = item.unitPrice !== undefined && item.unitPrice !== null;
                     const unitPriceToUse = hasSavedPrice ? Number(item.unitPrice) : getResolvedPrice(latest);
+                    const costPriceToUse = (item.costPrice !== undefined && item.costPrice !== null) ? Number(item.costPrice) : (latest.costPrice || 0);
 
-                    const costPriceToUse = (item.costPrice !== undefined && item.costPrice !== null)
-                        ? Number(item.costPrice)
-                        : (latest.costPrice || 0);
-
-                    return {
-                        ...item, 
-                        code: item.code || latest.code, 
-                        description: item.description || latest.name,
-                        unitPrice: unitPriceToUse, 
-                        totalPrice: unitPriceToUse * qty, 
-                        costPrice: costPriceToUse,
-                        estimatedDuration: (latest.defaultDuration || 0) * qty, 
-                        isFromCatalog: true
-                    };
+                    return { ...item, code: item.code || latest.code, description: item.description || latest.name, unitPrice: unitPriceToUse, totalPrice: unitPriceToUse * qty, costPrice: costPriceToUse, estimatedDuration: (latest.defaultDuration || 0) * qty, isFromCatalog: true };
                 }
             }
             const qty = Number(item.quantity) || 1;
@@ -167,6 +153,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         if (!formData.id) { showAlert("Salve o orçamento antes de compartilhar.", "warning"); return; }
         const contact = contacts.find(c => c.id === formData.contactId);
         
+        setSharing(true);
         try {
             const data = await api.shareOrder(formData.id, channel);
             if (channel === 'WHATSAPP') {
@@ -176,8 +163,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             } else {
                 showAlert("Link enviado por e-mail com sucesso!", "success");
             }
-        } catch (e) {
-            showAlert("Erro ao compartilhar orçamento.", "error");
+        } catch (e: any) {
+            showAlert(e.message || "Erro ao compartilhar orçamento.", "error");
+        } finally {
+            setSharing(false);
         }
     };
 
@@ -245,18 +234,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             onSaveOS({ ...formData, ...common, totalAmount: pricing.net, items: pricing.resolvedList }, newContactObj);
         } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const type = currentView === 'SRV_SALES' ? 'SALE' : 'PURCHASE';
-            onSaveOrder({ 
-                ...formData, 
-                ...common, 
-                type, 
-                amount: pricing.net, 
-                grossAmount: pricing.gross, 
-                discountAmount: pricing.disc, 
-                taxAmount: pricing.taxes, 
-                items: pricing.resolvedList, 
-                date: formData.date || new Date().toISOString().split('T')[0], 
-                status: formData.status || 'DRAFT' 
-            }, newContactObj);
+            onSaveOrder({ ...formData, ...common, type, amount: pricing.net, grossAmount: pricing.gross, discountAmount: pricing.disc, taxAmount: pricing.taxes, items: pricing.resolvedList, date: formData.date || new Date().toISOString().split('T')[0], status: formData.status || 'DRAFT' }, newContactObj);
         } else if (currentView === 'SRV_CONTRACTS') {
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
@@ -403,8 +381,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             <div className="flex gap-2">
                                 {isSales && isRecordDraft && formData.id && (
                                     <div className="flex bg-gray-100 p-1 rounded-xl mr-4">
-                                        <button type="button" onClick={() => handleShare('WHATSAPP')} className="p-2 hover:bg-white rounded-lg text-emerald-600 flex items-center gap-2 text-xs font-bold transition-all"><MessageSquare className="w-4 h-4"/> WhatsApp</button>
-                                        <button type="button" onClick={() => handleShare('EMAIL')} className="p-2 hover:bg-white rounded-lg text-indigo-600 flex items-center gap-2 text-xs font-bold transition-all"><Send className="w-4 h-4"/> E-mail</button>
+                                        <button type="button" disabled={sharing} onClick={() => handleShare('WHATSAPP')} className="p-2 hover:bg-white rounded-lg text-emerald-600 flex items-center gap-2 text-xs font-bold transition-all disabled:opacity-50"><MessageSquare className="w-4 h-4"/> WhatsApp</button>
+                                        <button type="button" disabled={sharing} onClick={() => handleShare('EMAIL')} className="p-2 hover:bg-white rounded-lg text-indigo-600 flex items-center gap-2 text-xs font-bold transition-all disabled:opacity-50">
+                                            {sharing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>} E-mail
+                                        </button>
                                     </div>
                                 )}
                                 <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
