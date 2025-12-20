@@ -64,9 +64,9 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[SYNC] Sincronização completa realizada em: ${new Date().toLocaleTimeString()}`);
+      console.log(`[SYNC] Sincronização em: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
-      console.error("Erro na sincronização de dados:", e);
+      console.error("Erro na sincronização", e);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -77,43 +77,51 @@ const App: React.FC = () => {
   // SISTEMA DE REATIVIDADE REAL-TIME
   useEffect(() => {
     if (currentUser?.familyId) {
-      // Limpeza de conexões residuais
       if (socketRef.current) socketRef.current.disconnect();
 
+      // Configuração robusta para o socket
       const socket = io({
           transports: ['websocket', 'polling'],
           withCredentials: true,
           reconnection: true,
-          reconnectionDelay: 1000
+          reconnectionAttempts: 10,
+          reconnectionDelay: 2000
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Conectado. Sala de Trabalho: ${currentUser.familyId}`);
+        console.log(`[SOCKET] Ativo. Ambiente: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('connect_error', (err) => {
-          console.error("[SOCKET] Falha na comunicação em tempo real:", err.message);
+          console.error("[SOCKET] Erro de conexão:", err.message);
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log(`[REALTIME] Notificação recebida:`, payload);
+        console.log(`[REALTIME] Update detectado:`, payload);
         
         // REATIVIDADE CRÍTICA:
-        // Se a alteração não foi feita por mim OU foi feita por um CLIENTE EXTERNO (portal público)
-        if (payload.actorId !== currentUser.id || payload.actorId === 'EXTERNAL_CLIENT') { 
-            console.log("[REALTIME] Recarregando interface para refletir alterações externas...");
-            loadData(true); 
+        // Atualiza se:
+        // 1. O ator for o Cliente Externo (Portal Público)
+        // 2. O ator for outro membro da equipe/família
+        const isExternalAction = payload.actorId === 'EXTERNAL_CLIENT';
+        const isOtherMemberAction = payload.actorId !== currentUser.id;
+
+        if (isExternalAction || isOtherMemberAction) { 
+            console.log("[REALTIME] Recarregando ambiente...");
             
-            if (payload.actorId === 'EXTERNAL_CLIENT') {
-                showAlert("Um cliente acaba de responder a um orçamento enviado por e-mail.", "info");
-            }
+            // Pequeno delay para garantir que o banco terminou a escrita antes do GET
+            setTimeout(() => {
+                loadData(true); 
+                if (isExternalAction) {
+                    showAlert("Um orçamento foi respondido online por um cliente.", "info");
+                }
+            }, 500);
         } 
       });
 
       return () => { 
-        console.log("[SOCKET] Desconectando...");
         socket.disconnect(); 
         socketRef.current = null;
       };
@@ -297,7 +305,7 @@ const App: React.FC = () => {
 
   if (publicToken) return <PublicOrderView token={publicToken} />;
 
-  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Preparando ambiente seguro...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Sincronizando ambiente...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
     return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
@@ -305,7 +313,7 @@ const App: React.FC = () => {
   if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) return <AdminDashboard />;
 
   const renderContent = () => {
-    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
+    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Buscando informações...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
@@ -347,7 +355,7 @@ const App: React.FC = () => {
       case 'SRV_CATALOG':
         return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} companyProfile={data.companyProfile} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Venda salva", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Venda excluída")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salva", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
       default:
-        return <div className="p-8 text-center text-gray-400">Página em construção ou não encontrada.</div>;
+        return <div className="p-8 text-center text-gray-400">Página não encontrada.</div>;
     }
   };
 

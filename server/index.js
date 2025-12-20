@@ -29,55 +29,56 @@ const io = new Server(httpServer, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  allowEIO3: true
+  allowEIO3: true,
+  pingTimeout: 60000
 });
 
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  console.log(`[SOCKET] Nova conexão detectada: ${socket.id}`);
+  console.log(`[SOCKET] Conectado: ${socket.id}`);
   
   socket.on('join_family', (familyId) => {
     if (familyId) {
-        const roomName = String(familyId);
-        // Garante que o socket está em apenas uma sala de família por vez
+        const roomName = String(familyId).trim();
+        // Remove de salas anteriores para evitar lixo de conexão
         socket.rooms.forEach(room => {
             if (room !== socket.id) socket.leave(room);
         });
         socket.join(roomName);
-        console.log(`[SOCKET] Cliente ${socket.id} vinculado à sala (Ambiente): ${roomName}`);
+        console.log(`[SOCKET] Cliente ${socket.id} entrou na sala: ${roomName}`);
     }
   });
 
   socket.on('disconnect', (reason) => {
-    console.log(`[SOCKET] Conexão encerrada (${socket.id}): ${reason}`);
+    console.log(`[SOCKET] Desconectado (${socket.id}): ${reason}`);
   });
 });
 
 /**
  * Helper de Auditoria e Gatilho de Reatividade
- * @param {string} familyIdOverride - Crucial para EXTERNAL_CLIENT, pois define a sala de destino sem precisar consultar a tabela users.
  */
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
-        // 1. Gravação do Log no Banco (userId pode ser 'EXTERNAL_CLIENT' pois a coluna é TEXT)
+        // 1. Gravação do Log no Banco
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
 
-        // 2. Definição do Destino (Sala de Família/Ambiente)
-        let targetRoom = familyIdOverride ? String(familyIdOverride) : null;
+        // 2. Determinação da Sala (Crucial para Reatividade)
+        let targetRoom = null;
         
-        // Se não informado o override e não for cliente externo, tenta descobrir pelo usuário logado
-        if (!targetRoom && userId && userId !== 'EXTERNAL_CLIENT') {
+        if (familyIdOverride) {
+            targetRoom = String(familyIdOverride).trim();
+        } else if (userId && userId !== 'EXTERNAL_CLIENT') {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id) : String(userId);
+            targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id).trim() : String(userId).trim();
         }
 
-        // 3. Emissão do Sinal de Reatividade
+        // 3. Emissão do Sinal em Tempo Real
         if (targetRoom) {
-            console.log(`[REALTIME] SINAL ENVIADO -> Sala: ${targetRoom} | Ator: ${userId} | Entidade: ${entity}`);
+            console.log(`[REALTIME] >>> EMITINDO SINAL PARA SALA: ${targetRoom} | Entidade: ${entity} | Ação: ${action}`);
             io.to(targetRoom).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -85,11 +86,9 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
                 actorId: userId, 
                 timestamp: new Date() 
             });
-        } else {
-            console.warn(`[REALTIME] AVISO: Nenhuma sala identificada para broadcast de ${entity}.${action}`);
         }
     } catch (e) { 
-        console.error("[REALTIME ERROR] Falha no processo de sinalização:", e); 
+        console.error("[REALTIME ERROR]", e); 
     }
 };
 
@@ -114,7 +113,7 @@ app.get('/', (req, res) => {
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         res.send(content);
     } else {
-        res.status(404).send('Frontend não encontrado.');
+        res.status(404).send('Aguardando build...');
     }
 });
 
@@ -128,17 +127,17 @@ app.get('*', (req, res) => {
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         res.send(content);
     } else {
-        res.status(404).send('Frontend não encontrado.');
+        res.status(404).send('Aguardando build...');
     }
 });
 
 const PORT = process.env.PORT || 8080;
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [SERVER] Rodando na porta ${PORT}`);
+    console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
     initDb().then(() => {
-        console.log("✅ [DB] Estrutura OK.");
+        console.log("✅ [DB] Sincronizado.");
     }).catch(err => {
-        console.error("❌ [DB] Erro crítico:", err);
+        console.error("❌ [DB] Erro de conexão:", err);
     });
 });
