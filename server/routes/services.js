@@ -15,9 +15,9 @@ export default function(logAudit) {
         return res.rows[0]?.family_id || userId;
     };
 
-    // --- PUBLIC ACCESS ROUTES (No Token Required) ---
+    // --- PUBLIC ACCESS ROUTES (Prefixado com /services para manter consistência) ---
 
-    router.get('/public/order/:token', async (req, res) => {
+    router.get('/services/public/order/:token', async (req, res) => {
         try {
             const { token } = req.params;
             const orderRes = await pool.query(`
@@ -39,7 +39,7 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.post('/public/order/:token/status', async (req, res) => {
+    router.post('/services/public/order/:token/status', async (req, res) => {
         const { token } = req.params;
         const { status, notes } = req.body; // APPROVED, REJECTED, ON_HOLD
         try {

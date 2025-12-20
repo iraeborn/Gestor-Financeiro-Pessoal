@@ -74,6 +74,9 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
     </div>
   );
 
+  // Proteção contra renderização sem dados
+  if (!order) return null;
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
