@@ -237,18 +237,37 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
         const id = formData.id || crypto.randomUUID();
         const common = { id, contactId: finalContactId, contactName: contactSearch };
-        if (isOS) onSaveOS({ ...formData, ...common, totalAmount: pricing.net }, newContactObj);
-        else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
+        
+        if (isOS) {
+            // No caso de OS, também salvamos a lista resolvida para snapshot técnico
+            onSaveOS({ ...formData, ...common, totalAmount: pricing.net, items: pricing.resolvedList }, newContactObj);
+        } else if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
             const type = currentView === 'SRV_SALES' ? 'SALE' : 'PURCHASE';
-            onSaveOrder({ ...formData, ...common, type, amount: pricing.net, grossAmount: pricing.gross, discountAmount: pricing.disc, taxAmount: pricing.taxes, items: formData.items || [], date: formData.date || new Date().toISOString().split('T')[0], status: formData.status || 'DRAFT' }, newContactObj);
-        } else if (currentView === 'SRV_CONTRACTS') onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
-        else if (currentView === 'SRV_NF') onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
-        else if (isCatalog && onSaveCatalogItem) onSaveCatalogItem({ ...formData, id, defaultPrice: pricing.net, costPrice: pricing.cost, type: formData.type || 'SERVICE', defaultDuration: pricing.duration, isComposite: formData.isComposite || false, items: formData.items || [] });
+            // CRÍTICO: Enviamos 'pricing.resolvedList' para o banco para garantir o snapshot dos valores no momento do orçamento/venda
+            onSaveOrder({ 
+                ...formData, 
+                ...common, 
+                type, 
+                amount: pricing.net, 
+                grossAmount: pricing.gross, 
+                discountAmount: pricing.disc, 
+                taxAmount: pricing.taxes, 
+                items: pricing.resolvedList, 
+                date: formData.date || new Date().toISOString().split('T')[0], 
+                status: formData.status || 'DRAFT' 
+            }, newContactObj);
+        } else if (currentView === 'SRV_CONTRACTS') {
+            onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
+        } else if (currentView === 'SRV_NF') {
+            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
+        } else if (isCatalog && onSaveCatalogItem) {
+            onSaveCatalogItem({ ...formData, id, defaultPrice: pricing.net, costPrice: pricing.cost, type: formData.type || 'SERVICE', defaultDuration: pricing.duration, isComposite: formData.isComposite || false, items: formData.items || [] });
+        }
+        
         setIsModalOpen(false);
         setFormData({});
     };
 
-    // Fix: Missing handleConfirmApproval implementation.
     const handleConfirmApproval = (approvalData: any) => {
         if (selectedOrderForApproval && onApproveOrder) {
             onApproveOrder(selectedOrderForApproval, approvalData);

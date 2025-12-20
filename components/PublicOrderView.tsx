@@ -131,6 +131,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                     <div className="bg-slate-50 rounded-3xl p-8 space-y-3 border border-slate-100 shadow-inner">
                         <div className="flex justify-between text-gray-500 font-medium">
                             <span className="text-sm">Subtotal Bruto</span>
+                            {/* O valor bruto agora vem do snapshot salvo no banco (gross_amount) */}
                             <span className="text-sm">{formatCurrency(order.gross_amount || order.amount)}</span>
                         </div>
                         {Number(order.discount_amount) > 0 && (
@@ -141,6 +142,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                         )}
                         <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
                             <span className="text-lg font-black text-gray-800">Total da Proposta</span>
+                            {/* O total final é estritamente o valor do banco 'amount' salvo no ato do orçamento */}
                             <span className="text-3xl font-black text-indigo-700">{formatCurrency(order.amount)}</span>
                         </div>
                     </div>
