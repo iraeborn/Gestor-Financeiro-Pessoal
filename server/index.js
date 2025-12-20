@@ -28,40 +28,54 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+  
   socket.on('join_family', (familyId) => {
-    socket.join(familyId);
-    console.log(`Socket joined room: ${familyId}`);
+    if (familyId) {
+        socket.join(familyId);
+        console.log(`Socket ${socket.id} joined room: ${familyId}`);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 
 // Helper para Auditoria e Reatividade
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
+        // 1. Grava no Banco de Dados
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
 
-        // Determina para qual sala de socket enviar a atualização
+        // 2. Determina para qual sala enviar a atualização em tempo real
         let targetFamilyId = familyIdOverride;
         
-        if (!targetFamilyId && userId !== 'EXTERNAL_CLIENT') {
+        // Se não veio override e temos um userId real, buscamos a family do usuário
+        if (!targetFamilyId && userId && userId !== 'EXTERNAL_CLIENT') {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             targetFamilyId = res.rows[0]?.family_id || userId;
         }
 
+        // 3. Emite via Socket se houver um destino
         if (targetFamilyId) {
-            console.log(`Emitting DATA_UPDATED to room: ${targetFamilyId} [Entity: ${entity}, Action: ${action}]`);
+            console.log(`[REALTIME] Broadcasting to family ${targetFamilyId}: ${entity} ${action}`);
             io.to(targetFamilyId).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
+                entityId,
                 actorId: userId, 
                 timestamp: new Date() 
             });
         } else {
-            console.warn("Could not determine targetFamilyId for WebSocket emission.");
+            console.warn("[REALTIME] Missing familyId for broadcast - Activity logged but not synced.");
         }
-    } catch (e) { console.error("Audit error:", e); }
+    } catch (e) { 
+        console.error("Audit error:", e); 
+    }
 };
 
 app.use(cors());

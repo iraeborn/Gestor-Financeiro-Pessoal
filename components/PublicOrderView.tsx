@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getPublicOrder, updatePublicOrderStatus } from '../services/storageService';
-import { ShoppingBag, CheckCircle, XCircle, Clock, Info, User, Package, Calculator, ReceiptText, Smartphone, Mail, Globe, Lock } from 'lucide-react';
+import { ShoppingBag, CheckCircle, XCircle, Clock, Info, User, Package, Calculator, ReceiptText, Smartphone, Mail, Globe, Lock, Loader2 } from 'lucide-react';
 
 interface PublicOrderViewProps {
   token: string;
@@ -30,13 +30,19 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
   };
 
   const handleAction = async (status: string) => {
+    if (actionLoading) return;
     setActionLoading(true);
     try {
+      // Chama a API que altera o status e dispara o Socket.io no backend
       await updatePublicOrderStatus(token, status);
-      setSuccess(`Recebemos sua resposta! O status do orçamento foi atualizado para: ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Recusado' : 'Em Espera'}.`);
+      
+      // Feedback imediato no portal
+      setSuccess(`Proposta atualizada! O status agora é: ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Recusado' : 'Em Análise'}.`);
+      
+      // Atualiza o estado local para desabilitar botões
       setOrder({ ...order, status });
     } catch (e: any) {
-      alert("Erro ao processar ação: " + e.message);
+      alert("Erro ao processar sua resposta: " + e.message);
     } finally {
       setActionLoading(false);
     }
@@ -46,7 +52,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
         <div className="animate-pulse space-y-4">
             <div className="w-16 h-16 bg-indigo-100 rounded-full mx-auto flex items-center justify-center"><ShoppingBag className="w-8 h-8 text-indigo-400"/></div>
-            <p className="text-gray-400 font-medium">Sincronizando proposta...</p>
+            <p className="text-gray-400 font-medium">Carregando sua proposta...</p>
         </div>
     </div>
   );
@@ -57,10 +63,10 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
             <div className="w-20 h-20 bg-rose-50 rounded-full mx-auto flex items-center justify-center mb-6">
                 <Lock className="w-10 h-10 text-rose-500" />
             </div>
-            <h2 className="text-2xl font-black text-gray-900">Acesso Indisponível</h2>
+            <h2 className="text-2xl font-black text-gray-900">Link Indisponível</h2>
             <p className="text-gray-500 mt-4 leading-relaxed">{error}</p>
             <div className="mt-8 pt-6 border-t border-gray-100">
-                <p className="text-xs text-gray-400">Se você acredita que isso é um erro, entre em contato com o fornecedor.</p>
+                <p className="text-xs text-gray-400">Este link pode ter expirado ou o orçamento foi removido pelo gestor.</p>
             </div>
         </div>
     </div>
@@ -72,16 +78,17 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
             <div className="w-20 h-20 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-6">
                 <CheckCircle className="w-10 h-10 text-emerald-600" />
             </div>
-            <h2 className="text-2xl font-black text-gray-900">Resposta Enviada!</h2>
+            <h2 className="text-2xl font-black text-gray-900">Tudo certo!</h2>
             <p className="text-gray-600 mt-4 leading-relaxed font-medium">{success}</p>
-            <p className="text-sm text-gray-400 mt-8">Nossa equipe entrará em contato em breve.</p>
+            <p className="text-sm text-gray-400 mt-8">Obrigado pela sua resposta. O gestor já foi notificado em tempo real.</p>
         </div>
     </div>
   );
 
   if (!order) return null;
 
-  const isFinalized = order.status === 'APPROVED' || order.status === 'CONFIRMED';
+  // Se o status já é algo "final", não permite mais interações
+  const isFinalized = ['APPROVED', 'CONFIRMED', 'CANCELED', 'REJECTED'].includes(order.status);
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
@@ -92,7 +99,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                     <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-100">F</div>
                     <div className="flex flex-col">
                         <h1 className="text-sm font-black text-gray-900 uppercase tracking-tighter leading-none">{order.trade_name || order.company_name}</h1>
-                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Portal do Cliente</span>
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Proposta Digital</span>
                     </div>
                 </div>
                 <div className="flex gap-4">
@@ -108,9 +115,9 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                     <ShoppingBag className="absolute right-10 top-10 w-32 h-32 opacity-10" />
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-3">
-                             <span className="bg-white/20 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest">OS #{order.id.substring(0,8).toUpperCase()}</span>
+                             <span className="bg-white/20 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest">Ref: #${order.id.substring(0,8).toUpperCase()}</span>
                              <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${isFinalized ? 'bg-emerald-400 text-emerald-900' : 'bg-amber-400 text-amber-900'}`}>
-                                {isFinalized ? 'Proposta Aprovada' : 'Aguardando sua Análise'}
+                                {order.status === 'APPROVED' ? 'Aprovada' : order.status === 'CONFIRMED' ? 'Confirmada' : order.status === 'REJECTED' ? 'Recusada' : 'Aguardando Análise'}
                              </span>
                         </div>
                         <h2 className="text-4xl font-black leading-tight">{order.description}</h2>
@@ -121,7 +128,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                 <div className="p-8 md:p-12">
                     <div className="flex items-center justify-between mb-8">
                         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Package className="w-4 h-4"/> Detalhamento da Proposta</h3>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">Snapshot de Valores: V.1.0</span>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase">Valores Fixados</span>
                     </div>
                     
                     <div className="space-y-1 mb-8">
@@ -139,18 +146,13 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                                 </div>
                             </div>
                         ))}
-                        {(!order.items || order.items.length === 0) && (
-                            <div className="py-10 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                                <p className="text-gray-400 font-medium">Nenhum item detalhado disponível para esta proposta.</p>
-                            </div>
-                        )}
                     </div>
 
                     <div className="bg-slate-900 rounded-[2rem] p-10 text-white space-y-4 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
                         
                         <div className="flex justify-between items-center opacity-60 text-sm font-bold uppercase tracking-widest">
-                            <span>Subtotal Bruto</span>
+                            <span>Subtotal</span>
                             <span>{formatCurrency(order.gross_amount || order.amount)}</span>
                         </div>
                         
@@ -163,12 +165,12 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                         
                         <div className="pt-6 mt-6 border-t border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                                <span className="text-indigo-400 text-xs font-black uppercase tracking-[0.2em] block mb-1">Total do Investimento</span>
+                                <span className="text-indigo-400 text-xs font-black uppercase tracking-[0.2em] block mb-1">Total da Proposta</span>
                                 <span className="text-5xl font-black">{formatCurrency(order.amount)}</span>
                             </div>
                             <div className="bg-white/10 px-6 py-3 rounded-2xl border border-white/10 text-xs font-bold flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-amber-400" />
-                                <span>Válido até: {new Date(new Date(order.date).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR')}</span>
+                                <span>Expira em: {new Date(new Date(order.date).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR')}</span>
                             </div>
                         </div>
                     </div>
@@ -181,21 +183,22 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                             disabled={actionLoading}
                             className="flex-[2] bg-emerald-600 text-white py-6 rounded-2xl font-black shadow-lg shadow-emerald-100 hover:bg-emerald-700 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                         >
-                            <CheckCircle className="w-7 h-7" /> Aceitar Proposta
+                            {actionLoading ? <Loader2 className="animate-spin w-7 h-7" /> : <CheckCircle className="w-7 h-7" />}
+                            Aceitar e Aprovar
                         </button>
                         <button 
                             onClick={() => handleAction('ON_HOLD')}
                             disabled={actionLoading}
                             className="flex-1 bg-white border-2 border-slate-200 text-slate-600 py-6 rounded-2xl font-black hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                         >
-                            <Clock className="w-5 h-5" /> Tenho Dúvidas
+                            Dúvidas
                         </button>
                         <button 
                             onClick={() => handleAction('REJECTED')}
                             disabled={actionLoading}
                             className="flex-1 bg-rose-50 text-rose-600 py-6 rounded-2xl font-black hover:bg-rose-100 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                         >
-                            <XCircle className="w-5 h-5" /> Recusar
+                            Recusar
                         </button>
                     </div>
                 ) : (
@@ -204,16 +207,16 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
                             <CheckCircle className="w-10 h-10 text-emerald-600" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-emerald-900">Proposta já Processada</h3>
-                            <p className="text-emerald-700 font-medium max-w-sm mt-1">Este orçamento foi {order.status === 'APPROVED' ? 'Aprovado' : 'Confirmado'} e está seguindo para faturamento.</p>
+                            <h3 className="text-xl font-black text-emerald-900">Proposta Concluída</h3>
+                            <p className="text-emerald-700 font-medium max-w-sm mt-1">Este orçamento já foi respondido e está em processamento.</p>
                         </div>
                     </div>
                 )}
             </div>
 
             <div className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest space-y-2 opacity-50">
-                <p>Este link é seguro e exclusivo para o cliente {order.contact_name}.</p>
-                <p>Tecnologia FinManager Pro • Todos os Direitos Reservados</p>
+                <p>Link de acesso exclusivo e rastreado para {order.contact_name}.</p>
+                <p>FinManager Pro Security • Ambiente Criptografado</p>
             </div>
         </main>
     </div>

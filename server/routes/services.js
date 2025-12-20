@@ -9,7 +9,6 @@ const router = express.Router();
 
 export default function(logAudit) {
 
-    // --- HELPER ---
     const getFamilyId = async (userId) => {
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         return res.rows[0]?.family_id || userId;
@@ -40,7 +39,6 @@ export default function(logAudit) {
             }
 
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
-
             res.json(order);
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -49,6 +47,7 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status, notes } = req.body;
         try {
+            // Busca a ordem para pegar o ID interno e o family_id para notificação
             const orderRes = await pool.query('SELECT id, family_id, status FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
@@ -58,13 +57,17 @@ export default function(logAudit) {
                 return res.status(400).json({ error: "Este orçamento já foi processado e não pode mais ser alterado." });
             }
 
+            // Executa a atualização
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
-            // Notifica o gestor passando o family_id do pedido para o socket emitir na sala correta
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status} (${notes || ''})`, null, null, order.family_id);
+            // Dispara reatividade para o gestor através do family_id capturado anteriormente
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status}`, null, null, order.family_id);
             
             res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            console.error("Public Status Update Error:", err);
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     // --- PROTECTED ROUTES ---

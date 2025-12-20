@@ -63,6 +63,7 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
+      console.log("[DATA] State synchronized successfully.");
     } catch (e) {
       showAlert("Erro ao carregar dados.", "error");
     } finally {
@@ -74,19 +75,24 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (currentUser?.familyId) {
-      const socket = io(window.location.origin);
+      const socket = io(); // Conecta automaticamente ao host de origem
       
       socket.on('connect', () => { 
-        console.log("Connected to Realtime Server");
+        console.log("[SOCKET] Connected to realtime server. ID:", socket.id);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log("Realtime Update Received:", payload);
-        // Recarrega se a alteração veio de outro usuário ou do cliente externo
+        console.log("[SOCKET] Update signal received:", payload);
+        // Recarrega se veio de um ator externo ou outro membro da equipe
         if (payload.actorId !== currentUser.id) { 
+          console.log("[SOCKET] Forcing reactive reload...");
           loadData(true); 
         } 
+      });
+
+      socket.on('disconnect', () => {
+        console.warn("[SOCKET] Disconnected from server.");
       });
 
       return () => { socket.disconnect(); };
