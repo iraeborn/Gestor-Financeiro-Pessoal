@@ -30,6 +30,7 @@ const io = new Server(httpServer, {
 io.on('connection', (socket) => {
   socket.on('join_family', (familyId) => {
     socket.join(familyId);
+    console.log(`Socket joined room: ${familyId}`);
   });
 });
 
@@ -50,12 +51,15 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
         }
 
         if (targetFamilyId) {
+            console.log(`Emitting DATA_UPDATED to room: ${targetFamilyId} [Entity: ${entity}, Action: ${action}]`);
             io.to(targetFamilyId).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
                 actorId: userId, 
                 timestamp: new Date() 
             });
+        } else {
+            console.warn("Could not determine targetFamilyId for WebSocket emission.");
         }
     } catch (e) { console.error("Audit error:", e); }
 };

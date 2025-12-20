@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   User, AuthResponse, AppState, ViewMode, Transaction, Account, 
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
@@ -58,16 +58,40 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const initialData = await loadInitialData();
+      setData(initialData);
+    } catch (e) {
+      showAlert("Erro ao carregar dados.", "error");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [showAlert]);
+
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
   useEffect(() => {
     if (currentUser?.familyId) {
       const socket = io(window.location.origin);
-      socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
-      socket.on('DATA_UPDATED', (payload) => { if (payload.actorId !== currentUser.id) { loadData(true); } });
+      
+      socket.on('connect', () => { 
+        console.log("Connected to Realtime Server");
+        socket.emit('join_family', currentUser.familyId); 
+      });
+
+      socket.on('DATA_UPDATED', (payload) => { 
+        console.log("Realtime Update Received:", payload);
+        // Recarrega se a alteração veio de outro usuário ou do cliente externo
+        if (payload.actorId !== currentUser.id) { 
+          loadData(true); 
+        } 
+      });
+
       return () => { socket.disconnect(); };
     }
-  }, [currentUser?.familyId, currentUser?.id]);
+  }, [currentUser?.familyId, currentUser?.id, loadData]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -82,18 +106,6 @@ const App: React.FC = () => {
       }
     }
     setAuthChecked(true);
-  };
-
-  const loadData = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const initialData = await loadInitialData();
-      setData(initialData);
-    } catch (e) {
-      showAlert("Erro ao carregar dados.", "error");
-    } finally {
-      if (!silent) setLoading(false);
-    }
   };
 
   const handleLoginSuccess = async (user: User) => {
@@ -270,7 +282,7 @@ const App: React.FC = () => {
     if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
       case 'FIN_TRANSACTIONS':
         return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} pjData={{branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onDelete={handleDeleteTransaction} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} onUpdateAttachments={handleUpdateAttachments} />;
       case 'FIN_CALENDAR':
@@ -307,7 +319,7 @@ const App: React.FC = () => {
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
       case 'SRV_CATALOG':
-        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} companyProfile={data.companyProfile} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salvo", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
+        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} companyProfile={data.companyProfile} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salva", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
       default:
         return <div className="p-8 text-center text-gray-400">Página em construção ou não encontrada.</div>;
     }
