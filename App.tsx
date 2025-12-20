@@ -63,7 +63,7 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log("[DATA] State synchronized successfully.");
+      console.log("[DATA] Sincronização concluída:", new Date().toLocaleTimeString());
     } catch (e) {
       showAlert("Erro ao carregar dados.", "error");
     } finally {
@@ -75,24 +75,27 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (currentUser?.familyId) {
-      const socket = io(); // Conecta automaticamente ao host de origem
+      // Conecta ao host atual
+      const socket = io();
       
       socket.on('connect', () => { 
-        console.log("[SOCKET] Connected to realtime server. ID:", socket.id);
+        console.log("[SOCKET] Conectado ao canal de reatividade. ID:", socket.id);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log("[SOCKET] Update signal received:", payload);
-        // Recarrega se veio de um ator externo ou outro membro da equipe
+        console.log("[SOCKET] Sinal de atualização recebido:", payload);
+        // Recarrega se a alteração veio de outro usuário ou do cliente externo
+        // Se actorId for igual ao meu, eu já tenho os dados atualizados localmente (geralmente)
+        // Mas recarregamos por segurança se for EXTERNAL_CLIENT
         if (payload.actorId !== currentUser.id) { 
-          console.log("[SOCKET] Forcing reactive reload...");
+          console.log("[SOCKET] Executando recarregamento reativo...");
           loadData(true); 
         } 
       });
 
       socket.on('disconnect', () => {
-        console.warn("[SOCKET] Disconnected from server.");
+        console.warn("[SOCKET] Conexão perdida com o servidor.");
       });
 
       return () => { socket.disconnect(); };

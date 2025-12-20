@@ -28,17 +28,17 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+  console.log(`[SOCKET] Connected: ${socket.id}`);
   
   socket.on('join_family', (familyId) => {
     if (familyId) {
         socket.join(familyId);
-        console.log(`Socket ${socket.id} joined room: ${familyId}`);
+        console.log(`[SOCKET] Socket ${socket.id} joined family room: ${familyId}`);
     }
   });
 
   socket.on('disconnect', () => {
-    console.log(`Socket disconnected: ${socket.id}`);
+    console.log(`[SOCKET] Disconnected: ${socket.id}`);
   });
 });
 
@@ -62,7 +62,7 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
 
         // 3. Emite via Socket se houver um destino
         if (targetFamilyId) {
-            console.log(`[REALTIME] Broadcasting to family ${targetFamilyId}: ${entity} ${action}`);
+            console.log(`[REALTIME] Signal to family ${targetFamilyId}: [Actor: ${userId}] [Entity: ${entity}] [Action: ${action}]`);
             io.to(targetFamilyId).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -71,10 +71,10 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
                 timestamp: new Date() 
             });
         } else {
-            console.warn("[REALTIME] Missing familyId for broadcast - Activity logged but not synced.");
+            console.warn("[REALTIME] Broadcast skipped: familyId could not be determined.");
         }
     } catch (e) { 
-        console.error("Audit error:", e); 
+        console.error("[REALTIME] Audit/Broadcast error:", e); 
     }
 };
 

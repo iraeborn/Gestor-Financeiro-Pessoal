@@ -47,8 +47,7 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status, notes } = req.body;
         try {
-            // Busca a ordem para pegar o ID interno e o family_id para notificação
-            const orderRes = await pool.query('SELECT id, family_id, status FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
+            const orderRes = await pool.query('SELECT id, family_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
@@ -57,11 +56,10 @@ export default function(logAudit) {
                 return res.status(400).json({ error: "Este orçamento já foi processado e não pode mais ser alterado." });
             }
 
-            // Executa a atualização
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
-            // Dispara reatividade para o gestor através do family_id capturado anteriormente
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status}`, null, null, order.family_id);
+            // Notifica o gestor e outros usuários do ambiente sobre a ação do cliente
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente alterou status do orçamento (${order.description}) para: ${status}`, null, null, order.family_id);
             
             res.json({ success: true });
         } catch (err) { 
@@ -165,6 +163,8 @@ export default function(logAudit) {
                  ON CONFLICT (id) DO UPDATE SET title=$2, description=$3, contact_id=$4, status=$5, total_amount=$6, start_date=$7, end_date=$8, items=$9, type=$10, origin=$11, priority=$12, opened_at=$13, deleted_at=NULL`,
                 [id, title, description, sanitizeValue(contactId), status, totalAmount || 0, sanitizeValue(startDate), sanitizeValue(endDate), JSON.stringify(items || []), type, origin, priority, sanitizeValue(openedAt), req.user.id, familyId]
             );
+            
+            await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'os', id, title);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -173,6 +173,7 @@ export default function(logAudit) {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE service_orders SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'os', req.params.id, 'OS removida');
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -191,6 +192,8 @@ export default function(logAudit) {
                  ON CONFLICT (id) DO UPDATE SET type=$2, description=$3, contact_id=$4, amount=$5, gross_amount=$6, discount_amount=$7, tax_amount=$8, items=$9, date=$10, status=$11, transaction_id=$12, deleted_at=NULL`,
                 [id, type, description, sanitizeValue(contactId), amount || 0, grossAmount || 0, discountAmount || 0, taxAmount || 0, JSON.stringify(items || []), date, status, sanitizeValue(transactionId), req.user.id, familyId]
             );
+            
+            await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'order', id, description);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -199,6 +202,7 @@ export default function(logAudit) {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE commercial_orders SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'order', req.params.id, 'Pedido/Orçamento removido');
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -217,6 +221,8 @@ export default function(logAudit) {
                  ON CONFLICT (id) DO UPDATE SET title=$2, contact_id=$3, value=$4, start_date=$5, end_date=$6, status=$7, billing_day=$8, deleted_at=NULL`,
                 [id, title, sanitizeValue(contactId), value || 0, startDate, sanitizeValue(endDate), status, billingDay || null, req.user.id, familyId]
             );
+            
+            await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'contract', id, title);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
@@ -235,6 +241,8 @@ export default function(logAudit) {
                  ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, file_url=$9, deleted_at=NULL`,
                 [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), fileUrl, req.user.id, familyId]
             );
+            
+            await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'invoice', id, `NF ${number}`);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
