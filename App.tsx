@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   User, AuthResponse, AppState, ViewMode, Transaction, Account, 
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
@@ -10,7 +10,7 @@ import {
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
 import { Menu } from 'lucide-react';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
@@ -42,6 +42,9 @@ const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [landingInitType, setLandingInitType] = useState<EntityType>(EntityType.PERSONAL);
   const [landingInitPlan, setLandingInitPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
+  
+  // Referência para o socket para evitar múltiplas conexões
+  const socketRef = useRef<Socket | null>(null);
 
   // PUBLIC VIEW DETECTION
   const urlParams = new URLSearchParams(window.location.search);
@@ -63,44 +66,61 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log("[DATA] Sincronização concluída:", new Date().toLocaleTimeString());
+      console.log(`[DATA SYNC] Sucesso em: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
-      showAlert("Erro ao carregar dados.", "error");
+      console.error("Erro ao sincronizar dados", e);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showAlert]);
+  }, []);
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
+  // GERENCIAMENTO DE SOCKET (Reatividade Real)
   useEffect(() => {
     if (currentUser?.familyId) {
-      // Conecta ao host atual
-      const socket = io();
+      console.log("[SOCKET] Iniciando canal de reatividade...");
       
+      // Fecha socket anterior se existir
+      if (socketRef.current) {
+          socketRef.current.disconnect();
+      }
+
+      const socket = io({
+          transports: ['websocket', 'polling'],
+          withCredentials: true
+      });
+      socketRef.current = socket;
+
       socket.on('connect', () => { 
-        console.log("[SOCKET] Conectado ao canal de reatividade. ID:", socket.id);
+        console.log(`[SOCKET] Conectado! ID: ${socket.id}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log("[SOCKET] Sinal de atualização recebido:", payload);
-        // Recarrega se a alteração veio de outro usuário ou do cliente externo
-        // Se actorId for igual ao meu, eu já tenho os dados atualizados localmente (geralmente)
-        // Mas recarregamos por segurança se for EXTERNAL_CLIENT
+        console.log(`[REATIVIDADE] Sinal de atualização recebido de ${payload.actorId}:`, payload);
+        // Atualiza para todos, exceto se eu mesmo fiz a alteração (já tenho no estado local)
         if (payload.actorId !== currentUser.id) { 
-          console.log("[SOCKET] Executando recarregamento reativo...");
-          loadData(true); 
+            console.log("[REATIVIDADE] Forçando recarregamento silencioso...");
+            loadData(true); 
+            // Feedback discreto se for uma alteração do cliente
+            if (payload.actorId === 'EXTERNAL_CLIENT') {
+                showAlert("Um cliente atualizou um orçamento agora mesmo.", "info");
+            }
         } 
       });
 
-      socket.on('disconnect', () => {
-        console.warn("[SOCKET] Conexão perdida com o servidor.");
+      socket.on('disconnect', (reason) => {
+        console.warn(`[SOCKET] Desconectado: ${reason}`);
       });
 
-      return () => { socket.disconnect(); };
+      return () => { 
+        console.log("[SOCKET] Limpando conexão...");
+        socket.disconnect(); 
+        socketRef.current = null;
+      };
     }
-  }, [currentUser?.familyId, currentUser?.id, loadData]);
+  }, [currentUser?.familyId, currentUser?.id, loadData, showAlert]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -280,7 +300,7 @@ const App: React.FC = () => {
   // IF PUBLIC TOKEN PRESENT, ONLY SHOW PUBLIC VIEW
   if (publicToken) return <PublicOrderView token={publicToken} />;
 
-  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400">Carregando...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">Carregando ambiente...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
     return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
@@ -288,7 +308,7 @@ const App: React.FC = () => {
   if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) return <AdminDashboard />;
 
   const renderContent = () => {
-    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
+    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
@@ -328,7 +348,7 @@ const App: React.FC = () => {
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
       case 'SRV_CATALOG':
-        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} companyProfile={data.companyProfile} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Pedido salvo", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Pedido excluído")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salva", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
+        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} companyProfile={data.companyProfile} serviceItems={data.serviceItems || []} onSaveOS={async (d, nc) => wrapSave(api.saveServiceOrder, d, "OS salva", nc)} onDeleteOS={async (id) => wrapDel(api.deleteServiceOrder, id, "OS excluída")} onSaveOrder={async (d, nc) => wrapSave(api.saveCommercialOrder, d, "Venda salva", nc)} onDeleteOrder={async (id) => wrapDel(api.deleteCommercialOrder, id, "Venda excluída")} onApproveOrder={handleApproveOrder} onSaveContract={async (d, nc) => wrapSave(api.saveContract, d, "Contrato salva", nc)} onDeleteContract={async (id) => wrapDel(api.deleteContract, id, "Contrato excluído")} onSaveInvoice={async (d, nc) => wrapSave(api.saveInvoice, d, "Nota salva", nc)} onDeleteInvoice={async (id) => wrapDel(api.deleteInvoice, id, "Nota excluída")} onAddTransaction={handleAddTransaction} onSaveCatalogItem={async (d) => wrapSave(api.saveServiceItem, { ...d, moduleTag: 'GENERAL' }, "Item salvo")} onDeleteCatalogItem={async (id) => wrapDel(api.deleteServiceItem, id, "Item excluído")} />;
       default:
         return <div className="p-8 text-center text-gray-400">Página em construção ou não encontrada.</div>;
     }
