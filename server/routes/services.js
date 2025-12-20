@@ -35,7 +35,6 @@ export default function(logAudit) {
 
             const order = orderRes.rows[0];
 
-            // Verificação de Status Impeditivos para o Cliente
             if (['CANCELED', 'REJECTED', 'CANCELADA'].includes(order.status)) {
                 return res.status(403).json({ error: "Este orçamento não está mais disponível para visualização." });
             }
@@ -55,13 +54,15 @@ export default function(logAudit) {
 
             const order = orderRes.rows[0];
             
-            // Impede alteração de status se já estiver finalizado/cancelado
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
                 return res.status(400).json({ error: "Este orçamento já foi processado e não pode mais ser alterado." });
             }
 
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status} (${notes || ''})`);
+            
+            // Notifica o gestor passando o family_id do pedido para o socket emitir na sala correta
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status} (${notes || ''})`, null, null, order.family_id);
+            
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -90,7 +91,6 @@ export default function(logAudit) {
                 const subject = `Proposta Comercial: ${order.description}`;
                 const items = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []);
                 
-                // Snapshot de preços garantido no HTML do e-mail
                 const itemsHtml = items.map(i => `
                     <tr>
                         <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b;">${i.description}</td>

@@ -33,16 +33,30 @@ io.on('connection', (socket) => {
   });
 });
 
-// Helper para Auditoria
-const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null) => {
+// Helper para Auditoria e Reatividade
+const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
-        const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-        const familyId = res.rows[0]?.family_id || userId;
-        io.to(familyId).emit('DATA_UPDATED', { action, entity, actorId: userId, timestamp: new Date() });
+
+        // Determina para qual sala de socket enviar a atualização
+        let targetFamilyId = familyIdOverride;
+        
+        if (!targetFamilyId && userId !== 'EXTERNAL_CLIENT') {
+            const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            targetFamilyId = res.rows[0]?.family_id || userId;
+        }
+
+        if (targetFamilyId) {
+            io.to(targetFamilyId).emit('DATA_UPDATED', { 
+                action, 
+                entity, 
+                actorId: userId, 
+                timestamp: new Date() 
+            });
+        }
     } catch (e) { console.error("Audit error:", e); }
 };
 
@@ -62,16 +76,12 @@ app.use('/api', servicesRoutes(logAudit));
 // --- STATIC FILES & ENV INJECTION ---
 const distPath = path.join(__dirname, '../dist');
 
-// Interceptamos a requisição do index.html para injetar variáveis do Cloud Run
 app.get('/', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        
-        // Substitui os placeholders pelas variáveis de ambiente reais do servidor (Cloud Run)
         const googleId = process.env.GOOGLE_CLIENT_ID || "";
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
-        
         res.send(content);
     } else {
         res.status(404).send('Frontend não encontrado.');
@@ -80,7 +90,6 @@ app.get('/', (req, res) => {
 
 app.use(express.static(distPath));
 
-// Fallback para SPA (também com injeção)
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
