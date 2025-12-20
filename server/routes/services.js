@@ -29,9 +29,17 @@ export default function(logAudit) {
                 WHERE o.access_token = $1 AND o.deleted_at IS NULL
             `, [token]);
 
-            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado ou link expirado." });
+            if (orderRes.rows.length === 0) {
+                return res.status(404).json({ error: "Este orçamento não existe ou foi removido." });
+            }
 
             const order = orderRes.rows[0];
+
+            // Verificação de Status Impeditivos para o Cliente
+            if (['CANCELED', 'REJECTED', 'CANCELADA'].includes(order.status)) {
+                return res.status(403).json({ error: "Este orçamento não está mais disponível para visualização." });
+            }
+
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
 
             res.json(order);
@@ -42,12 +50,18 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status, notes } = req.body;
         try {
-            const orderRes = await pool.query('SELECT id, family_id, description FROM commercial_orders WHERE access_token = $1', [token]);
-            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Inválido." });
+            const orderRes = await pool.query('SELECT id, family_id, status FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
-            const orderId = orderRes.rows[0].id;
-            await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, orderId]);
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', orderId, `Status alterado via link público: ${status} (${notes || ''})`);
+            const order = orderRes.rows[0];
+            
+            // Impede alteração de status se já estiver finalizado/cancelado
+            if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
+                return res.status(400).json({ error: "Este orçamento já foi processado e não pode mais ser alterado." });
+            }
+
+            await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Status alterado via portal: ${status} (${notes || ''})`);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -73,35 +87,37 @@ export default function(logAudit) {
             const contact = contactRes.rows[0];
 
             if (channel === 'EMAIL' && contact?.email) {
-                const subject = `Orçamento: ${order.description}`;
+                const subject = `Proposta Comercial: ${order.description}`;
                 const items = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []);
                 
+                // Snapshot de preços garantido no HTML do e-mail
                 const itemsHtml = items.map(i => `
                     <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #eee;">${i.description}</td>
-                        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${i.quantity}</td>
-                        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">R$ ${Number(i.unitPrice).toFixed(2)}</td>
-                        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;"><strong>R$ ${Number(i.totalPrice).toFixed(2)}</strong></td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b;">${i.description}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: center; color: #64748b;">${i.quantity}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #64748b;">R$ ${Number(i.unitPrice).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #0f172a; font-weight: bold;">R$ ${Number(i.totalPrice).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                     </tr>
                 `).join('');
 
                 const body = `
-                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                        <h2 style="color: #4f46e5;">Olá, ${contact.name}!</h2>
-                        <p>Temos um novo orçamento disponível para sua análise:</p>
+                    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 20px; color: #334155;">
+                        <h2 style="color: #4f46e5; margin-bottom: 5px;">Olá, ${contact.name}!</h2>
+                        <p style="font-size: 16px; margin-top: 0;">Enviamos a proposta solicitada para sua análise.</p>
                         
-                        <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                            <strong>Descrição:</strong> ${order.description}<br>
-                            <strong>Data:</strong> ${new Date(order.date).toLocaleDateString('pt-BR')}
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin: 25px 0; border: 1px solid #f1f5f9;">
+                            <strong style="display: block; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">Referência</strong>
+                            <span style="font-size: 18px; font-weight: bold; color: #1e293b;">${order.description}</span>
+                            <div style="margin-top: 10px; font-size: 13px; color: #94a3b8;">Data de emissão: ${new Date(order.date).toLocaleDateString('pt-BR')}</div>
                         </div>
 
-                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 14px;">
                             <thead>
-                                <tr style="background: #f3f4f6; color: #374151;">
-                                    <th style="padding: 10px; text-align: left;">Item</th>
-                                    <th style="padding: 10px; text-align: center;">Qtd</th>
-                                    <th style="padding: 10px; text-align: right;">Unit.</th>
-                                    <th style="padding: 10px; text-align: right;">Subtotal</th>
+                                <tr style="background: #f1f5f9;">
+                                    <th style="padding: 12px 10px; text-align: left; border-radius: 8px 0 0 8px; color: #475569;">Item</th>
+                                    <th style="padding: 12px 10px; text-align: center; color: #475569;">Qtd</th>
+                                    <th style="padding: 12px 10px; text-align: right; color: #475569;">Unit.</th>
+                                    <th style="padding: 12px 10px; text-align: right; border-radius: 0 8px 8px 0; color: #475569;">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -109,16 +125,20 @@ export default function(logAudit) {
                             </tbody>
                         </table>
 
-                        <div style="text-align: right; font-size: 18px; margin-bottom: 30px;">
-                            <span style="color: #6b7280; font-size: 14px;">Total da Proposta:</span><br>
-                            <strong style="color: #4f46e5; font-size: 24px;">R$ ${Number(order.amount).toFixed(2)}</strong>
+                        <div style="text-align: right; margin-bottom: 40px; padding: 20px; background: #eef2ff; border-radius: 12px;">
+                            <span style="color: #4338ca; font-size: 13px; font-weight: bold; text-transform: uppercase;">Investimento Total</span><br>
+                            <strong style="color: #4f46e5; font-size: 32px;">R$ ${Number(order.amount).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</strong>
                         </div>
 
-                        <p>Você pode visualizar mais detalhes e aprovar online clicando no botão abaixo:</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="${publicUrl}" style="display: inline-block; background: #4f46e5; color: white; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4);">Acessar Portal do Cliente</a>
+                        <div style="text-align: center;">
+                            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Você pode aprovar esta proposta online com um clique:</p>
+                            <a href="${publicUrl}" style="display: inline-block; background: #4f46e5; color: white; padding: 18px 40px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);">Visualizar e Aprovar</a>
                         </div>
-                        <p style="color: #9ca3af; font-size: 11px; margin-top: 40px; text-align: center;">Este link é seguro e exclusivo. Processado por FinManager Pro.</p>
+                        
+                        <p style="color: #94a3b8; font-size: 11px; margin-top: 50px; text-align: center; border-top: 1px solid #f1f5f9; pt: 20px;">
+                            Este é um documento digital seguro gerado por FinManager Pro.<br>
+                            Link válido enquanto a proposta estiver ativa.
+                        </p>
                     </div>
                 `;
                 await sendEmail(contact.email, subject, body, body);
