@@ -42,13 +42,12 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            // Busca o family_id da ordem para saber quem notificar
-            const orderRes = await pool.query('SELECT id, family_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
+            // Busca o family_id E o user_id da ordem para garantir a entrega do sinal
+            const orderRes = await pool.query('SELECT id, family_id, user_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
             
-            // Impede alterações se já estiver finalizado
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
                 return res.status(400).json({ error: "Este documento já foi processado." });
             }
@@ -56,9 +55,22 @@ export default function(logAudit) {
             // Atualiza o banco
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
+            // DETERMINA A SALA DE REATIVIDADE
+            // Se o family_id for nulo (raro), usa o user_id (dono) como sala alvo
+            const targetFamily = order.family_id || order.user_id;
+
             // GATILHO DE REATIVIDADE: 
-            // O sinal é enviado para a sala do 'family_id' da ordem, que é onde o gestor está ouvindo.
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu ao orçamento: ${status}`, null, null, order.family_id);
+            await logAudit(
+                pool, 
+                'EXTERNAL_CLIENT', 
+                'UPDATE', 
+                'order', 
+                order.id, 
+                `Cliente respondeu à proposta (${order.description}): ${status}`, 
+                null, 
+                null, 
+                targetFamily
+            );
             
             res.json({ success: true });
         } catch (err) { 

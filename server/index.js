@@ -25,64 +25,71 @@ const httpServer = createServer(app);
 // --- Socket.io Setup (Production Ready) ---
 const io = new Server(httpServer, {
   cors: {
-    origin: "*", // Em produção, você pode restringir ao seu domínio
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   },
-  allowEIO3: true // Compatibilidade
+  allowEIO3: true
 });
 
-// Disponibiliza o io para as rotas via req.app.get('io')
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  console.log(`[SOCKET] Conexão ativa: ${socket.id}`);
+  console.log(`[SOCKET] Nova conexão detectada: ${socket.id}`);
   
   socket.on('join_family', (familyId) => {
     if (familyId) {
-        // Limpa participações anteriores para evitar duplicidade de mensagens
+        const roomName = String(familyId);
+        // Garante que o socket está em apenas uma sala de família por vez
         socket.rooms.forEach(room => {
             if (room !== socket.id) socket.leave(room);
         });
-        socket.join(familyId);
-        console.log(`[SOCKET] Usuário ${socket.id} monitorando sala: ${familyId}`);
+        socket.join(roomName);
+        console.log(`[SOCKET] Cliente ${socket.id} vinculado à sala: ${roomName}`);
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log(`[SOCKET] Conexão encerrada: ${socket.id}`);
+  socket.on('disconnect', (reason) => {
+    console.log(`[SOCKET] Conexão encerrada (${socket.id}): ${reason}`);
   });
 });
 
-// Helper de Auditoria e Gatilho de Reatividade
+/**
+ * Helper de Auditoria e Gatilho de Reatividade
+ * @param {string} familyIdOverride - Força o envio para uma sala específica (crucial para área do cliente)
+ */
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
-        // 1. Persistência no Banco
+        // 1. Gravação do Log no Banco
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
 
-        // 2. Localização da Sala (Family ID)
-        let targetFamilyId = familyIdOverride;
-        if (!targetFamilyId && userId && userId !== 'EXTERNAL_CLIENT') {
+        // 2. Definição do Destino (Sala de Família/Ambiente)
+        let targetRoom = familyIdOverride ? String(familyIdOverride) : null;
+        
+        // Se não informado o override, tenta descobrir pelo usuário que fez a ação
+        if (!targetRoom && userId && userId !== 'EXTERNAL_CLIENT') {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            targetFamilyId = res.rows[0]?.family_id || userId;
+            targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id) : String(userId);
         }
 
-        // 3. Emissão em Tempo Real
-        if (targetFamilyId) {
-            console.log(`[REALTIME] Enviando sinal para sala ${targetFamilyId}: ${entity}.${action}`);
-            io.to(targetFamilyId).emit('DATA_UPDATED', { 
+        // 3. Emissão do Sinal de Reatividade
+        if (targetRoom) {
+            console.log(`[REALTIME] >>> EMITINDO SINAL PARA SALA: ${targetRoom} | Entidade: ${entity} | Ação: ${action} | Ator: ${userId}`);
+            io.to(targetRoom).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
                 entityId,
                 actorId: userId, 
                 timestamp: new Date() 
             });
+        } else {
+            console.warn(`[REALTIME] !!! FALHA NO SINAL: Não foi possível determinar a sala para ${entity}.${action}`);
         }
     } catch (e) { 
-        console.error("[AUDIT ERROR]", e); 
+        console.error("[REALTIME ERROR]", e); 
     }
 };
 
@@ -99,7 +106,6 @@ app.use('/api', servicesRoutes(logAudit));
 // --- STATIC FILES ---
 const distPath = path.join(__dirname, '../dist');
 
-// Middleware para injetar variáveis de ambiente no HTML em tempo de execução
 app.get('/', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -108,13 +114,12 @@ app.get('/', (req, res) => {
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         res.send(content);
     } else {
-        res.status(404).send('Build não encontrado. Execute npm run build.');
+        res.status(404).send('Aguardando build do frontend...');
     }
 });
 
 app.use(express.static(distPath));
 
-// Fallback para SPA (Single Page Application)
 app.get('*', (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -132,8 +137,8 @@ const PORT = process.env.PORT || 8080;
 httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
     initDb().then(() => {
-        console.log("✅ [DB] Tabelas e migrações verificadas.");
+        console.log("✅ [DB] Tabelas prontas para uso.");
     }).catch(err => {
-        console.error("❌ [DB] Falha na conexão:", err);
+        console.error("❌ [DB] Falha crítica na conexão:", err);
     });
 });

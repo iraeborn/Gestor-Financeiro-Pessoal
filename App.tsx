@@ -43,10 +43,8 @@ const App: React.FC = () => {
   const [landingInitType, setLandingInitType] = useState<EntityType>(EntityType.PERSONAL);
   const [landingInitPlan, setLandingInitPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
   
-  // Referência para o socket para evitar múltiplas conexões
   const socketRef = useRef<Socket | null>(null);
 
-  // PUBLIC VIEW DETECTION
   const urlParams = new URLSearchParams(window.location.search);
   const publicToken = urlParams.get('orderToken');
 
@@ -66,9 +64,9 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[DATA SYNC] Sucesso em: ${new Date().toLocaleTimeString()}`);
+      console.log(`[DATA SYNC] Dados atualizados: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
-      console.error("Erro ao sincronizar dados", e);
+      console.error("Erro na sincronização", e);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -76,46 +74,43 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // GERENCIAMENTO DE SOCKET (Reatividade Real)
   useEffect(() => {
     if (currentUser?.familyId) {
-      console.log("[SOCKET] Iniciando canal de reatividade...");
-      
-      // Fecha socket anterior se existir
-      if (socketRef.current) {
-          socketRef.current.disconnect();
-      }
+      // Limpeza de conexão anterior
+      if (socketRef.current) socketRef.current.disconnect();
 
       const socket = io({
           transports: ['websocket', 'polling'],
-          withCredentials: true
+          withCredentials: true,
+          reconnection: true
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Conectado! ID: ${socket.id}`);
+        console.log(`[SOCKET] Conectado. ID: ${socket.id}. Workspace: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
+      socket.on('connect_error', (err) => {
+          console.error("[SOCKET] Erro de conexão:", err.message);
+      });
+
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log(`[REATIVIDADE] Sinal de atualização recebido de ${payload.actorId}:`, payload);
-        // Atualiza para todos, exceto se eu mesmo fiz a alteração (já tenho no estado local)
-        if (payload.actorId !== currentUser.id) { 
-            console.log("[REATIVIDADE] Forçando recarregamento silencioso...");
+        console.log(`[REATIVIDADE] Alteração detectada via Socket:`, payload);
+        
+        // Se a alteração não foi feita por mim (ou foi feita pelo cliente externo)
+        if (payload.actorId !== currentUser.id || payload.actorId === 'EXTERNAL_CLIENT') { 
+            console.log("[REATIVIDADE] Executando recarregamento silencioso...");
             loadData(true); 
-            // Feedback discreto se for uma alteração do cliente
+            
             if (payload.actorId === 'EXTERNAL_CLIENT') {
-                showAlert("Um cliente atualizou um orçamento agora mesmo.", "info");
+                showAlert("Um orçamento foi atualizado por um cliente.", "info");
             }
         } 
       });
 
-      socket.on('disconnect', (reason) => {
-        console.warn(`[SOCKET] Desconectado: ${reason}`);
-      });
-
       return () => { 
-        console.log("[SOCKET] Limpando conexão...");
+        console.log("[SOCKET] Desconectando...");
         socket.disconnect(); 
         socketRef.current = null;
       };
@@ -297,10 +292,9 @@ const App: React.FC = () => {
       try { await fn(id); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao excluir.", "error"); }
   };
 
-  // IF PUBLIC TOKEN PRESENT, ONLY SHOW PUBLIC VIEW
   if (publicToken) return <PublicOrderView token={publicToken} />;
 
-  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">Carregando ambiente...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Sincronizando segurança...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
     return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
@@ -308,7 +302,7 @@ const App: React.FC = () => {
   if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) return <AdminDashboard />;
 
   const renderContent = () => {
-    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando ambiente...</div>;
+    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Carregando ambiente...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
