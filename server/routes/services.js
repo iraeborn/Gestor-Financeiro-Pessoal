@@ -42,31 +42,33 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            // Busca o family_id E o user_id da ordem para garantir a entrega do sinal
+            // Busca o family_id E o user_id da ordem original
             const orderRes = await pool.query('SELECT id, family_id, user_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
             
+            // Impede alteração se já estiver processado
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
-                return res.status(400).json({ error: "Este documento já foi processado." });
+                return res.status(400).json({ error: "Este documento já foi processado e não aceita mais alterações." });
             }
 
-            // Atualiza o banco
+            // Atualiza o banco de dados
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
-            // DETERMINA A SALA DE REATIVIDADE
-            // Se o family_id for nulo (raro), usa o user_id (dono) como sala alvo
+            // DETERMINA A SALA DE REATIVIDADE (Onde o gestor está ouvindo)
+            // Usamos o family_id da ordem. Se for nulo, usamos o user_id do criador.
             const targetFamily = order.family_id || order.user_id;
 
             // GATILHO DE REATIVIDADE: 
+            // Informamos explicitamente 'EXTERNAL_CLIENT' e passamos o ID do ambiente (targetFamily)
             await logAudit(
                 pool, 
                 'EXTERNAL_CLIENT', 
                 'UPDATE', 
                 'order', 
                 order.id, 
-                `Cliente respondeu à proposta (${order.description}): ${status}`, 
+                `Cliente Externo respondeu à proposta (${order.description}): ${status}`, 
                 null, 
                 null, 
                 targetFamily
@@ -74,7 +76,7 @@ export default function(logAudit) {
             
             res.json({ success: true });
         } catch (err) { 
-            console.error("Public Portal Error:", err);
+            console.error("Public Portal Status Error:", err);
             res.status(500).json({ error: err.message }); 
         }
     });
@@ -103,7 +105,7 @@ export default function(logAudit) {
                 const subject = `Proposta Comercial: ${order.description}`;
                 const body = `<div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px;">
                     <h2>Olá, ${contact.name}!</h2>
-                    <p>Sua proposta para <strong>${order.description}</strong> está pronta.</p>
+                    <p>Sua proposta para <strong>${order.description}</strong> está pronta para visualização.</p>
                     <p>Valor total: <strong>R$ ${Number(order.amount).toLocaleString('pt-BR')}</strong></p>
                     <a href="${publicUrl}" style="background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Ver e Aprovar Online</a>
                 </div>`;

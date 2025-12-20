@@ -45,7 +45,7 @@ io.on('connection', (socket) => {
             if (room !== socket.id) socket.leave(room);
         });
         socket.join(roomName);
-        console.log(`[SOCKET] Cliente ${socket.id} vinculado à sala: ${roomName}`);
+        console.log(`[SOCKET] Cliente ${socket.id} vinculado à sala (Ambiente): ${roomName}`);
     }
   });
 
@@ -56,11 +56,11 @@ io.on('connection', (socket) => {
 
 /**
  * Helper de Auditoria e Gatilho de Reatividade
- * @param {string} familyIdOverride - Força o envio para uma sala específica (crucial para área do cliente)
+ * @param {string} familyIdOverride - Crucial para EXTERNAL_CLIENT, pois define a sala de destino sem precisar consultar a tabela users.
  */
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
-        // 1. Gravação do Log no Banco
+        // 1. Gravação do Log no Banco (userId pode ser 'EXTERNAL_CLIENT' pois a coluna é TEXT)
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
@@ -69,7 +69,7 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
         // 2. Definição do Destino (Sala de Família/Ambiente)
         let targetRoom = familyIdOverride ? String(familyIdOverride) : null;
         
-        // Se não informado o override, tenta descobrir pelo usuário que fez a ação
+        // Se não informado o override e não for cliente externo, tenta descobrir pelo usuário logado
         if (!targetRoom && userId && userId !== 'EXTERNAL_CLIENT') {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id) : String(userId);
@@ -77,7 +77,7 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
 
         // 3. Emissão do Sinal de Reatividade
         if (targetRoom) {
-            console.log(`[REALTIME] >>> EMITINDO SINAL PARA SALA: ${targetRoom} | Entidade: ${entity} | Ação: ${action} | Ator: ${userId}`);
+            console.log(`[REALTIME] SINAL ENVIADO -> Sala: ${targetRoom} | Ator: ${userId} | Entidade: ${entity}`);
             io.to(targetRoom).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -86,10 +86,10 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
                 timestamp: new Date() 
             });
         } else {
-            console.warn(`[REALTIME] !!! FALHA NO SINAL: Não foi possível determinar a sala para ${entity}.${action}`);
+            console.warn(`[REALTIME] AVISO: Nenhuma sala identificada para broadcast de ${entity}.${action}`);
         }
     } catch (e) { 
-        console.error("[REALTIME ERROR]", e); 
+        console.error("[REALTIME ERROR] Falha no processo de sinalização:", e); 
     }
 };
 
@@ -114,7 +114,7 @@ app.get('/', (req, res) => {
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         res.send(content);
     } else {
-        res.status(404).send('Aguardando build do frontend...');
+        res.status(404).send('Frontend não encontrado.');
     }
 });
 
@@ -128,17 +128,17 @@ app.get('*', (req, res) => {
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         res.send(content);
     } else {
-        res.status(404).send('Frontend indisponível.');
+        res.status(404).send('Frontend não encontrado.');
     }
 });
 
 const PORT = process.env.PORT || 8080;
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
+    console.log(`🚀 [SERVER] Rodando na porta ${PORT}`);
     initDb().then(() => {
-        console.log("✅ [DB] Tabelas prontas para uso.");
+        console.log("✅ [DB] Estrutura OK.");
     }).catch(err => {
-        console.error("❌ [DB] Falha crítica na conexão:", err);
+        console.error("❌ [DB] Erro crítico:", err);
     });
 });

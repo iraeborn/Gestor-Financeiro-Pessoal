@@ -64,9 +64,9 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[DATA SYNC] Dados atualizados: ${new Date().toLocaleTimeString()}`);
+      console.log(`[SYNC] Sincronização completa realizada em: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
-      console.error("Erro na sincronização", e);
+      console.error("Erro na sincronização de dados:", e);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -74,37 +74,40 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
+  // SISTEMA DE REATIVIDADE REAL-TIME
   useEffect(() => {
     if (currentUser?.familyId) {
-      // Limpeza de conexão anterior
+      // Limpeza de conexões residuais
       if (socketRef.current) socketRef.current.disconnect();
 
       const socket = io({
           transports: ['websocket', 'polling'],
           withCredentials: true,
-          reconnection: true
+          reconnection: true,
+          reconnectionDelay: 1000
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Conectado. ID: ${socket.id}. Workspace: ${currentUser.familyId}`);
+        console.log(`[SOCKET] Conectado. Sala de Trabalho: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('connect_error', (err) => {
-          console.error("[SOCKET] Erro de conexão:", err.message);
+          console.error("[SOCKET] Falha na comunicação em tempo real:", err.message);
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log(`[REATIVIDADE] Alteração detectada via Socket:`, payload);
+        console.log(`[REALTIME] Notificação recebida:`, payload);
         
-        // Se a alteração não foi feita por mim (ou foi feita pelo cliente externo)
+        // REATIVIDADE CRÍTICA:
+        // Se a alteração não foi feita por mim OU foi feita por um CLIENTE EXTERNO (portal público)
         if (payload.actorId !== currentUser.id || payload.actorId === 'EXTERNAL_CLIENT') { 
-            console.log("[REATIVIDADE] Executando recarregamento silencioso...");
+            console.log("[REALTIME] Recarregando interface para refletir alterações externas...");
             loadData(true); 
             
             if (payload.actorId === 'EXTERNAL_CLIENT') {
-                showAlert("Um orçamento foi atualizado por um cliente.", "info");
+                showAlert("Um cliente acaba de responder a um orçamento enviado por e-mail.", "info");
             }
         } 
       });
@@ -294,7 +297,7 @@ const App: React.FC = () => {
 
   if (publicToken) return <PublicOrderView token={publicToken} />;
 
-  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Sincronizando segurança...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Preparando ambiente seguro...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
     return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
@@ -302,7 +305,7 @@ const App: React.FC = () => {
   if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) return <AdminDashboard />;
 
   const renderContent = () => {
-    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Carregando ambiente...</div>;
+    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Sincronizando dados...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
