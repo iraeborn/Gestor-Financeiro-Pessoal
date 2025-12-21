@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getPublicOrder, updatePublicOrderStatus } from '../services/storageService';
 import { ShoppingBag, CheckCircle, XCircle, Clock, Info, User, Package, Calculator, ReceiptText, Smartphone, Mail, Globe, Lock, Loader2 } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 interface PublicOrderViewProps {
   token: string;
@@ -13,38 +14,71 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
-  useEffect(() => {
-    loadOrder();
-  }, [token]);
-
-  const loadOrder = async () => {
+  const loadOrder = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await getPublicOrder(token);
       setOrder(data);
     } catch (e: any) {
       setError(e.message || 'Orçamento não encontrado ou link expirado.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadOrder();
+  }, [token]);
+
+  // Sincronização em Tempo Real (Gestor <-> Clientes <-> Clientes)
+  useEffect(() => {
+    if (order?.family_id || order?.user_id) {
+        const targetRoom = order.family_id || order.user_id;
+        
+        if (socketRef.current) socketRef.current.disconnect();
+
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true
+        });
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            console.log("[SOCKET CLIENT] Sintonizado na sala de negociação.");
+            socket.emit('join_family', targetRoom);
+        });
+
+        socket.on('DATA_UPDATED', (payload) => {
+            // Sincroniza se a alteração for neste orçamento específico
+            if (payload.entity === 'order' && payload.entityId === order.id) {
+                // Se o sinal veio de um GESTOR ou de OUTRO CLIENTE que não eu mesmo
+                // (Como não temos ID único de cliente anônimo, o actionLoading serve como trava local)
+                if (!actionLoading) {
+                    console.log("[SOCKET CLIENT] Atualização externa detectada. Sincronizando...");
+                    loadOrder(true);
+                }
+            }
+        });
+
+        return () => { socket.disconnect(); };
+    }
+  }, [order?.id, order?.family_id, order?.user_id, actionLoading]);
 
   const handleAction = async (status: string) => {
     if (actionLoading) return;
     setActionLoading(true);
     try {
-      // Chama a API que altera o status e dispara o Socket.io no backend
       await updatePublicOrderStatus(token, status);
-      
-      // Feedback imediato no portal
+      // O sucesso aqui já atualiza a UI localmente enquanto o sinal viaja pelo socket
       setSuccess(`Proposta atualizada! O status agora é: ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Recusado' : 'Em Análise'}.`);
-      
-      // Atualiza o estado local para desabilitar botões
       setOrder({ ...order, status });
     } catch (e: any) {
       alert("Erro ao processar sua resposta: " + e.message);
     } finally {
-      setActionLoading(false);
+      // Pequeno delay para evitar que o sinal de volta do socket limpe o estado de sucesso
+      setTimeout(() => setActionLoading(false), 1000);
     }
   };
 
@@ -87,7 +121,6 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
 
   if (!order) return null;
 
-  // Se o status já é algo "final", não permite mais interações
   const isFinalized = ['APPROVED', 'CONFIRMED', 'CANCELED', 'REJECTED'].includes(order.status);
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
