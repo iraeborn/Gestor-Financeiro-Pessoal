@@ -64,7 +64,7 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[SYNC] Sincronização em: ${new Date().toLocaleTimeString()}`);
+      console.log(`[SYNC] Dados atualizados: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
       console.error("Erro na sincronização", e);
     } finally {
@@ -74,56 +74,52 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // SISTEMA DE REATIVIDADE REAL-TIME
+  // SISTEMA DE REATIVIDADE REAL-TIME (CORREÇÃO GESTOR)
   useEffect(() => {
     if (currentUser?.familyId) {
+      // Limpa conexão anterior se houver
       if (socketRef.current) socketRef.current.disconnect();
 
-      // Configuração robusta para o socket
       const socket = io({
           transports: ['websocket', 'polling'],
           withCredentials: true,
           reconnection: true,
           reconnectionAttempts: 10,
-          reconnectionDelay: 2000
+          reconnectionDelay: 1000
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Ativo. Ambiente: ${currentUser.familyId}`);
+        console.log(`[SOCKET] Conectado ao workspace: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
-      socket.on('connect_error', (err) => {
-          console.error("[SOCKET] Erro de conexão:", err.message);
-      });
-
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log(`[REALTIME] Update detectado:`, payload);
+        console.log(`[REALTIME] Sinal recebido:`, payload);
         
         // REATIVIDADE CRÍTICA:
         // Atualiza se:
         // 1. O ator for o Cliente Externo (Portal Público)
         // 2. O ator for outro membro da equipe/família
-        const isExternalAction = payload.actorId === 'EXTERNAL_CLIENT';
-        const isOtherMemberAction = payload.actorId !== currentUser.id;
+        const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
+        const isOthers = payload.actorId !== currentUser.id;
 
-        if (isExternalAction || isOtherMemberAction) { 
-            console.log("[REALTIME] Recarregando ambiente...");
-            
-            // Pequeno delay para garantir que o banco terminou a escrita antes do GET
+        if (isExternal || isOthers) { 
+            // Pequeno delay para garantir que o banco persistiu a transação
             setTimeout(() => {
                 loadData(true); 
-                if (isExternalAction) {
-                    showAlert("Um orçamento foi respondido online por um cliente.", "info");
+                if (isExternal) {
+                    showAlert("Um cliente acaba de responder online à sua proposta!", "info");
                 }
             }, 500);
         } 
       });
 
       return () => { 
-        socket.disconnect(); 
-        socketRef.current = null;
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
       };
     }
   }, [currentUser?.familyId, currentUser?.id, loadData, showAlert]);

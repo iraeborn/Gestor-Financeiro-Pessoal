@@ -42,18 +42,31 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            const orderRes = await pool.query('SELECT id, family_id, user_id, status, description FROM commercial_orders WHERE access_token = $1 AND deleted_at IS NULL', [token]);
+            // Buscamos a ordem e o workspace dono (family_id)
+            const orderRes = await pool.query(`
+                SELECT o.id, o.family_id, o.user_id, o.status, u.family_id as owner_workspace 
+                FROM commercial_orders o 
+                JOIN users u ON o.user_id = u.id
+                WHERE o.access_token = $1 AND o.deleted_at IS NULL
+            `, [token]);
+
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
+            
+            // Impede alteração se já estiver confirmado ou cancelado por segurança
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
-                return res.status(400).json({ error: "Esta proposta já foi processada." });
+                return res.status(400).json({ error: "Esta proposta já foi finalizada pelo gestor." });
             }
 
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
-            const targetRoom = order.family_id || order.user_id;
+            
+            // Determinamos a sala de rádio correta (ID do Workspace)
+            const targetRoom = order.family_id || order.owner_workspace || order.user_id;
 
+            // Emitimos o sinal de atualização em tempo real
             await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${status}`, null, null, targetRoom);
+            
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
