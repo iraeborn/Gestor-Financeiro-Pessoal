@@ -23,35 +23,51 @@ export default function(logAudit) {
             
             const xmlContent = req.file.buffer.toString('utf-8');
             
-            // Parser Simples via Regex (Para ambiente de demonstração sem bibliotecas pesadas)
+            // Parser Robusto via Regex para múltiplos padrões (NFe e NFSe)
             const extract = (tag, content) => {
                 const match = content.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`, 'i'));
                 return match ? match[1] : null;
             };
 
-            const nNF = extract('nNF', xmlContent);
-            const serie = extract('serie', xmlContent);
-            const vNF = extract('vNF', xmlContent);
-            const dhEmi = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent);
-            const xNome = extract('xNome', xmlContent); // Nome do destinatário
+            // 1. Número da Nota (nNF para NFe, nNFSe para NFSe)
+            const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent);
             
-            if (!nNF || !vNF) {
-                return res.status(422).json({ error: "O arquivo XML não parece ser uma Nota Fiscal Eletrônica válida." });
+            // 2. Série
+            const series = extract('serie', xmlContent);
+            
+            // 3. Valor (vNF para NFe total, vLiq ou vServ para NFSe)
+            const amountStr = extract('vNF', xmlContent) || extract('vLiq', xmlContent) || extract('vServ', xmlContent);
+            
+            // 4. Data de Emissão (dhEmi, dEmi ou dhProc)
+            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent);
+            
+            // 5. Nome do Cliente (xNome) 
+            // Em Notas Fiscais, o primeiro xNome costuma ser o EMISSOR. O segundo costuma ser o DESTINATÁRIO/TOMADOR.
+            const xNomeMatches = xmlContent.match(/<xNome[^>]*>(.*?)<\/xNome>/gi);
+            let customerName = 'Importado via XML';
+            if (xNomeMatches && xNomeMatches.length >= 2) {
+                // Pega o conteúdo da segunda ocorrência (Destinatário)
+                customerName = xNomeMatches[1].replace(/<\/?xNome[^>]*>/gi, '').trim();
+            } else if (xNomeMatches && xNomeMatches.length === 1) {
+                customerName = xNomeMatches[0].replace(/<\/?xNome[^>]*>/gi, '').trim();
+            }
+            
+            if (!number || !amountStr) {
+                return res.status(422).json({ error: "O arquivo XML não possui os campos básicos (Número/Valor) de uma Nota Fiscal válida." });
             }
 
             res.json({
-                number: nNF,
-                series: serie,
-                amount: parseFloat(vNF),
-                issueDate: dhEmi ? dhEmi.substring(0, 10) : new Date().toISOString().split('T')[0],
-                contactName: xNome || 'Importado via XML',
+                number: number,
+                series: series,
+                amount: parseFloat(amountStr),
+                issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
+                contactName: customerName,
                 status: 'ISSUED'
             });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // --- PUBLIC ACCESS ROUTES (Área do Cliente) ---
-
+    // --- PUBLIC ACCESS ROUTES ---
     router.get('/services/public/order/:token', async (req, res) => {
         try {
             const { token } = req.params;
@@ -65,14 +81,9 @@ export default function(logAudit) {
                 LEFT JOIN company_profiles cp ON o.family_id = cp.user_id
                 WHERE o.access_token = $1 AND o.deleted_at IS NULL
             `, [token]);
-
-            if (orderRes.rows.length === 0) {
-                return res.status(404).json({ error: "Orçamento não encontrado ou expirado." });
-            }
-
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado ou expirado." });
             const order = orderRes.rows[0];
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
-            
             order.workspace_id = order.workspace_id || order.user_id;
             res.json(order);
         } catch (err) { res.status(500).json({ error: err.message }); }
@@ -88,70 +99,40 @@ export default function(logAudit) {
                 JOIN users u ON o.user_id = u.id
                 WHERE o.access_token = $1 AND o.deleted_at IS NULL
             `, [token]);
-
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
-
             const order = orderRes.rows[0];
-            if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
-                return res.status(400).json({ error: "Esta proposta já foi finalizada." });
-            }
-
+            if (['CONFIRMED', 'CANCELED'].includes(order.status)) return res.status(400).json({ error: "Esta proposta já foi finalizada." });
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             const targetRoom = order.owner_workspace || order.family_id || order.user_id;
-
             await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${order.description}`, { status: order.status }, { status: status }, targetRoom);
-
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // --- PROTECTED ROUTES ---
-
+    // --- CRUD ROUTES ---
     router.post('/services/orders/:id/share', authenticateToken, async (req, res) => {
         const { channel } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const orderRes = await pool.query('SELECT * FROM commercial_orders WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Pedido não encontrado." });
-            
             const order = orderRes.rows[0];
             let token = order.access_token;
             if (!token) {
                 token = crypto.randomBytes(16).toString('hex');
                 await pool.query('UPDATE commercial_orders SET access_token = $1 WHERE id = $2', [token, req.params.id]);
             }
-
             const publicUrl = `${req.get('origin')}?orderToken=${token}`;
             const contactRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [order.contact_id]);
             const contact = contactRes.rows[0];
             const companyRes = await pool.query('SELECT trade_name FROM company_profiles WHERE user_id = $1', [familyId]);
             const companyName = companyRes.rows[0]?.trade_name || req.user.name;
-
             if (channel === 'EMAIL') {
                 if (!contact?.email) return res.status(400).json({ error: "O contato selecionado não possui um e-mail cadastrado." });
                 const subject = `Proposta Comercial: ${order.description}`;
                 const amountFormatted = Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                 const plainText = `Olá, ${contact.name}! Sua proposta para ${order.description} no valor de ${amountFormatted} está pronta. Acesse em: ${publicUrl}`;
-                const html = `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; color: #1e293b;">
-                    <div style="background-color: #4f46e5; padding: 32px; text-align: center; color: white;">
-                        <h1 style="margin: 0; font-size: 24px;">Proposta Comercial</h1>
-                        <p style="margin-top: 8px; opacity: 0.9;">Enviado por ${companyName}</p>
-                    </div>
-                    <div style="padding: 32px;">
-                        <h2 style="margin: 0 0 16px 0; font-size: 20px;">Olá, ${contact.name}!</h2>
-                        <p style="font-size: 16px; line-height: 24px;">Sua proposta referente a <strong>${order.description}</strong> já está disponível para análise.</p>
-                        <div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;">
-                            <span style="display: block; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 4px;">Valor Total</span>
-                            <span style="font-size: 28px; font-weight: 800; color: #0f172a;">${amountFormatted}</span>
-                        </div>
-                        <div style="text-align: center; margin: 32px 0;">
-                            <a href="${publicUrl}" style="background-color: #4f46e5; color: white; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; display: inline-block;">Visualizar e Responder Agora</a>
-                        </div>
-                        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" />
-                        <p style="font-size: 12px; color: #94a3b8; text-align: center;">Este link de acesso é exclusivo para você. A validade desta proposta é de 7 dias.</p>
-                    </div>
-                </div>`;
+                const html = `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; color: #1e293b;"><div style="background-color: #4f46e5; padding: 32px; text-align: center; color: white;"><h1 style="margin: 0; font-size: 24px;">Proposta Comercial</h1><p style="margin-top: 8px; opacity: 0.9;">Enviado por ${companyName}</p></div><div style="padding: 32px;"><h2 style="margin: 0 0 16px 0; font-size: 20px;">Olá, ${contact.name}!</h2><p style="font-size: 16px; line-height: 24px;">Sua proposta referente a <strong>${order.description}</strong> já está disponível para análise.</p><div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;"><span style="display: block; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 4px;">Valor Total</span><span style="font-size: 28px; font-weight: 800; color: #0f172a;">${amountFormatted}</span></div><div style="text-align: center; margin: 32px 0;"><a href="${publicUrl}" style="background-color: #4f46e5; color: white; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; display: inline-block;">Visualizar e Responder Agora</a></div><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" /><p style="font-size: 12px; color: #94a3b8; text-align: center;">Este link de acesso é exclusivo para você. A validade desta proposta é de 7 dias.</p></div></div>`;
                 await sendEmail(contact.email, subject, plainText, html);
             }
             res.json({ url: publicUrl, token });
