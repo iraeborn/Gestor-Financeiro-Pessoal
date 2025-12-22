@@ -91,33 +91,114 @@ export default function(logAudit) {
     router.post('/invoices/import-xml', authenticateToken, upload.single('xml'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: "Arquivo não enviado." });
+            
             const xmlContent = req.file.buffer.toString('utf-8');
+            
+            // Parser Robusto via Regex para múltiplos padrões (NFe e NFSe)
             const extract = (tag, content) => {
                 const match = content.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
                 return match ? match[1].trim() : null;
             };
+
             const sanitizeFloat = (str) => {
                 if (!str) return "0";
+                // Remove R$, espaços, pontos de milhar e converte vírgula decimal para ponto
                 let clean = str.replace(/[R\$\s]/g, '');
-                if (clean.includes(',') && clean.includes('.')) clean = clean.replace(/\./g, '');
+                if (clean.includes(',') && clean.includes('.')) {
+                    clean = clean.replace(/\./g, ''); // Remove separador de milhar
+                }
                 clean = clean.replace(',', '.');
                 return clean;
             };
+
+            // 1. Número da Nota
             const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent) || extract('Numero', xmlContent);
+            
+            // 2. Série
             const series = extract('serie', xmlContent) || extract('Serie', xmlContent);
-            const amountStr = extract('vNF', xmlContent) || extract('vLiq', xmlContent) || extract('vServ', xmlContent) || extract('vServicos', xmlContent) || extract('ValorLiquido', xmlContent) || extract('ValorTotal', xmlContent);
+            
+            // 3. Valor (Busca agressiva por tags de valor)
+            const amountStr = extract('vNF', xmlContent) || 
+                              extract('vLiq', xmlContent) || 
+                              extract('vServ', xmlContent) || 
+                              extract('vServicos', xmlContent) || 
+                              extract('vLiquido', xmlContent) ||
+                              extract('ValorServicos', xmlContent) ||
+                              extract('ValorLiquido', xmlContent) ||
+                              extract('ValorTotal', xmlContent);
+            
             const parsedAmount = parseFloat(sanitizeFloat(amountStr));
-            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('DataEmissao', xmlContent);
+
+            // 4. Data de Emissão
+            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent) || extract('DataEmissao', xmlContent);
+            
+            // 5. Descrição
             const description = extract('xDescServ', xmlContent) || extract('Discriminacao', xmlContent) || 'Importado via XML';
-            const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i) || xmlContent.match(/<Tomador[^>]*>([\s\S]*?)<\/Tomador>/i);
+
+            // 6. Tomador (Destinatário)
+            const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || 
+                              xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i) ||
+                              xmlContent.match(/<Tomador[^>]*>([\s\S]*?)<\/Tomador>/i);
+            
             let customerName = 'Importado via XML';
             let customerDoc = '';
+
             if (tomaBlock) {
                 customerName = extract('xNome', tomaBlock[1]) || extract('RazaoSocial', tomaBlock[1]) || customerName;
-                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || '';
+                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || extract('Cpf', tomaBlock[1]) || '';
             }
-            if (isNaN(parsedAmount) || parsedAmount === 0) return res.status(422).json({ error: "Valor não detectado no XML." });
-            res.json({ number, series, amount: parsedAmount, issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0], contactName: customerName, contactDoc: customerDoc, description, status: 'ISSUED' });
+
+            // 7. Extração de Itens
+            const items = [];
+
+            if (xmlContent.includes('NFSe') || xmlContent.includes('infNFSe')) {
+                const vServValue = parseFloat(sanitizeFloat(extract('vServ', xmlContent) || extract('vServicos', xmlContent) || extract('ValorServicos', xmlContent) || amountStr));
+                items.push({
+                    id: crypto.randomUUID(),
+                    description: description.substring(0, 100),
+                    quantity: 1,
+                    unitPrice: vServValue,
+                    totalPrice: vServValue,
+                    isBillable: true
+                });
+            } else {
+                const detMatches = xmlContent.match(/<det[^>]*>([\s\S]*?)<\/det>/gi);
+                if (detMatches) {
+                    detMatches.forEach(detHtml => {
+                        const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
+                        if (prodMatch) {
+                            const p = prodMatch[1];
+                            const q = parseFloat(sanitizeFloat(extract('qCom', p) || '1'));
+                            const v = parseFloat(sanitizeFloat(extract('vUnCom', p) || '0'));
+                            items.push({
+                                id: crypto.randomUUID(),
+                                code: extract('cProd', p),
+                                description: extract('xProd', p),
+                                quantity: q,
+                                unitPrice: v,
+                                totalPrice: q * v,
+                                isBillable: true
+                            });
+                        }
+                    });
+                }
+            }
+            
+            if (isNaN(parsedAmount) || parsedAmount === 0) {
+                return res.status(422).json({ error: "Não foi possível identificar o valor da nota no XML. Verifique se o arquivo é uma nota fiscal eletrônica válida." });
+            }
+
+            res.json({
+                number: number,
+                series: series,
+                amount: parsedAmount,
+                issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
+                contactName: customerName,
+                contactDoc: customerDoc,
+                description: description,
+                items: items,
+                status: 'ISSUED'
+            });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 

@@ -39,19 +39,17 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
         
         if (socketRef.current) socketRef.current.disconnect();
 
-        // Fix: Resolve Socket.io typing issues by asserting the options and the returned socket instance
+        // Tipagem assertiva para evitar erros de compilação
         const socket = io({
             transports: ['websocket', 'polling'],
             reconnection: true
         } as any) as any;
         socketRef.current = socket;
 
-        // Fix: use inferred 'any' type for socket to avoid property 'on' errors
         socket.on('connect', () => {
             socket.emit('join_family', targetRoom);
         });
 
-        // Fix: use inferred 'any' type for payload parameter
         socket.on('DATA_UPDATED', (payload: any) => {
             if (payload.entity === 'order' && payload.entityId === order.id) {
                 if (!actionLoading) {
@@ -60,7 +58,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
             }
         });
 
-        return () => { socket.disconnect(); };
+        return () => { if (socketRef.current) socketRef.current.disconnect(); };
     }
   }, [order?.id, order?.workspace_id, order?.family_id, order?.user_id, actionLoading]);
 
@@ -105,7 +103,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
 
   if (success) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center">
-        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-md border border-emerald-100 animate-scale-up">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl max-md border border-emerald-100 animate-scale-up">
             <div className="w-20 h-20 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-6">
                 <CheckCircle className="w-10 h-10 text-emerald-600" />
             </div>
