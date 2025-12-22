@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// --- Socket.io Setup (Production Ready) ---
+// --- Socket.io Setup ---
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
@@ -36,39 +36,37 @@ const io = new Server(httpServer, {
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  console.log(`[SOCKET] Conectado: ${socket.id}`);
+  console.log(`[SOCKET] Novo cliente conectado: ${socket.id}`);
   
   socket.on('join_family', (familyId) => {
     if (familyId) {
         const roomName = String(familyId).trim();
-        // Remove de salas anteriores para evitar lixo de conexão
         socket.rooms.forEach(room => {
             if (room !== socket.id) socket.leave(room);
         });
         socket.join(roomName);
-        console.log(`[SOCKET] Cliente ${socket.id} entrou na sala: ${roomName}`);
+        console.log(`[SOCKET] Cliente ${socket.id} sintonizado na sala: ${roomName}`);
     }
   });
 
   socket.on('disconnect', (reason) => {
-    console.log(`[SOCKET] Desconectado (${socket.id}): ${reason}`);
+    console.log(`[SOCKET] Cliente desconectado (${socket.id}): ${reason}`);
   });
 });
 
 /**
- * Helper de Auditoria e Gatilho de Reatividade
+ * logAudit - Centralizador de Logs e Disparador de Reatividade
  */
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
     try {
-        // 1. Gravação do Log no Banco
+        // 1. Gravação no Banco
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
 
-        // 2. Determinação da Sala (Crucial para Reatividade)
+        // 2. Determinação do Alvo (Target Room)
         let targetRoom = null;
-        
         if (familyIdOverride) {
             targetRoom = String(familyIdOverride).trim();
         } else if (userId && userId !== 'EXTERNAL_CLIENT') {
@@ -76,9 +74,9 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
             targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id).trim() : String(userId).trim();
         }
 
-        // 3. Emissão do Sinal em Tempo Real
+        // 3. Emissão do Evento
         if (targetRoom) {
-            console.log(`[REALTIME] >>> EMITINDO SINAL PARA SALA: ${targetRoom} | Entidade: ${entity} | Ação: ${action}`);
+            console.log(`[REALTIME] >>> BROADCAST para sala [${targetRoom}] | Ação: ${action} | Entidade: ${entity} | Ator: ${userId}`);
             io.to(targetRoom).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -86,6 +84,8 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
                 actorId: userId, 
                 timestamp: new Date() 
             });
+        } else {
+            console.warn(`[REALTIME] Aviso: Não foi possível determinar a sala para o evento ${entity}:${action}`);
         }
     } catch (e) { 
         console.error("[REALTIME ERROR]", e); 
@@ -95,17 +95,15 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
 app.use(cors());
 app.use(express.json());
 
-// --- ROUTES ---
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 
-// --- STATIC FILES ---
 const distPath = path.join(__dirname, '../dist');
 
-app.get('/', (req, res) => {
+const renderIndex = (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
         let content = fs.readFileSync(indexPath, 'utf8');
@@ -115,29 +113,14 @@ app.get('/', (req, res) => {
     } else {
         res.status(404).send('Aguardando build...');
     }
-});
+};
 
+app.get('/', renderIndex);
 app.use(express.static(distPath));
-
-app.get('*', (req, res) => {
-    const indexPath = path.join(distPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-        let content = fs.readFileSync(indexPath, 'utf8');
-        const googleId = process.env.GOOGLE_CLIENT_ID || "";
-        content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
-        res.send(content);
-    } else {
-        res.status(404).send('Aguardando build...');
-    }
-});
+app.get('*', renderIndex);
 
 const PORT = process.env.PORT || 8080;
-
 httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
-    initDb().then(() => {
-        console.log("✅ [DB] Sincronizado.");
-    }).catch(err => {
-        console.error("❌ [DB] Erro de conexão:", err);
-    });
+    initDb().then(() => console.log("✅ [DB] Sincronizado."));
 });

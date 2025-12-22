@@ -19,7 +19,6 @@ export default function(logAudit) {
     router.get('/services/public/order/:token', async (req, res) => {
         try {
             const { token } = req.params;
-            // Buscamos a ordem e garantimos o ID do Workspace (family_id do dono)
             const orderRes = await pool.query(`
                 SELECT o.*, c.name as contact_name, u.name as company_name, 
                        cp.trade_name, cp.phone as company_phone, cp.email as company_email,
@@ -38,7 +37,7 @@ export default function(logAudit) {
             const order = orderRes.rows[0];
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
             
-            // Garantimos que o workspace_id seja o ID do dono se o family_id for nulo
+            // Garantimos que o workspace_id seja o ID do dono se o family_id do criador for nulo
             order.workspace_id = order.workspace_id || order.user_id;
             
             res.json(order);
@@ -49,6 +48,7 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
+            // Buscamos quem é o dono do orçamento (criador e seu respectivo workspace)
             const orderRes = await pool.query(`
                 SELECT o.id, o.family_id, o.user_id, o.status, u.family_id as owner_workspace 
                 FROM commercial_orders o 
@@ -65,10 +65,22 @@ export default function(logAudit) {
 
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
-            // O targetRoom deve ser o ID do Workspace (Dono)
+            // CRÍTICO: targetRoom DEVE ser o family_id do dono do ambiente
             const targetRoom = order.owner_workspace || order.family_id || order.user_id;
 
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente alterou status para: ${status}`, null, null, targetRoom);
+            // Enviamos 9 argumentos para o logAudit, garantindo que o targetRoom chegue no lugar certo
+            await logAudit(
+                pool, 
+                'EXTERNAL_CLIENT', 
+                'UPDATE', 
+                'order', 
+                order.id, 
+                `Cliente respondeu online (Status: ${status})`, 
+                null, // previousState
+                null, // changes
+                targetRoom // familyIdOverride (8º argumento após pool)
+            );
+
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });

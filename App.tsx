@@ -64,7 +64,7 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[SYNC] Sincronização em: ${new Date().toLocaleTimeString()}`);
+      console.log(`[SYNC] Banco de dados sintonizado: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
       console.error("Erro na sincronização", e);
     } finally {
@@ -74,39 +74,43 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // SISTEMA DE REATIVIDADE REAL-TIME
+  // SISTEMA DE REATIVIDADE REAL-TIME (DASHBOARD GESTOR)
   useEffect(() => {
     if (currentUser?.familyId) {
-      if (socketRef.current) socketRef.current.disconnect();
+      if (socketRef.current) {
+          socketRef.current.disconnect();
+      }
 
       const socket = io({
           transports: ['websocket', 'polling'],
           withCredentials: true,
           reconnection: true,
-          reconnectionAttempts: 15,
-          reconnectionDelay: 1000
+          reconnectionAttempts: 20
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Ativo no ambiente: ${currentUser.familyId}`);
+        console.log(`[SOCKET GESTOR] Conectado e ouvindo workspace: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
-        console.log(`[REALTIME] Sinal recebido:`, payload);
+        console.log(`[REALTIME GESTOR] Evento detectado!`, payload);
         
-        const isExternalAction = payload.actorId === 'EXTERNAL_CLIENT';
-        const isOtherMemberAction = payload.actorId !== currentUser.id;
+        // Se a ação veio de um cliente externo ou outro membro, precisamos atualizar.
+        // Se veio de mim mesmo, o frontend já deve estar atualizado (mas loadData garante consistência)
+        const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
+        const isOtherMember = payload.actorId !== currentUser.id;
 
-        if (isExternalAction || isOtherMemberAction) { 
-            // Aumento do delay para garantir que o Cloud SQL terminou o COMMIT
+        if (isExternal || isOtherMember) { 
+            console.log(`[REALTIME GESTOR] Atualização externa detectada. Recarregando...`);
+            // Pequeno delay para garantir que o Cloud SQL terminou o commit da transação
             setTimeout(() => {
                 loadData(true); 
-                if (isExternalAction) {
-                    showAlert("Um cliente respondeu a um orçamento online!", "info");
+                if (isExternal) {
+                    showAlert("Um cliente acaba de interagir com uma proposta online!", "info");
                 }
-            }, 1200);
+            }, 800);
         } 
       });
 
