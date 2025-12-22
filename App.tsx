@@ -62,42 +62,44 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   
-  // Gestão de Notificações
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
-
-  // Estado para controle de aprovação remota
   const [remoteApprovalOrder, setRemoteApprovalOrder] = useState<CommercialOrder | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const initialData = await loadInitialData();
-      setData(initialData);
-      
-      const pendingOrders = initialData.commercialOrders.filter(o => o.status === 'APPROVED');
-      const orderNotifications: AppNotification[] = pendingOrders.map(o => ({
-          id: `order-${o.id}`,
-          title: "Aprovação Pendente",
-          message: `O cliente ${o.contactName} aprovou: "${o.description}".`,
-          type: 'SUCCESS',
-          entity: 'order',
-          entityId: o.id,
-          timestamp: new Date().toISOString(),
-          isRead: false,
-          data: o
-      }));
+      if (initialData) {
+          setData(prev => ({
+              ...prev,
+              ...initialData
+          }));
+          
+          const pendingOrders = (initialData.commercialOrders || []).filter(o => o.status === 'APPROVED');
+          const orderNotifications: AppNotification[] = pendingOrders.map(o => ({
+              id: `order-${o.id}`,
+              title: "Aprovação Pendente",
+              message: `O cliente ${o.contactName} aprovou: "${o.description}".`,
+              type: 'SUCCESS',
+              entity: 'order',
+              entityId: o.id,
+              timestamp: new Date().toISOString(),
+              isRead: false,
+              data: o
+          }));
 
-      setNotifications(prev => {
-          const existingIds = new Set(prev.map(n => n.id));
-          const newNotifs = orderNotifications.filter(n => !existingIds.has(n.id));
-          return [...prev, ...newNotifs];
-      });
-
+          setNotifications(prev => {
+              const existingIds = new Set(prev.map(n => n.id));
+              const newNotifs = orderNotifications.filter(n => !existingIds.has(n.id));
+              return [...prev, ...newNotifs];
+          });
+      }
       return initialData;
     } catch (e) {
-      console.error("Erro na sincronização", e);
-      throw e;
+      console.error("Erro na sincronização de dados:", e);
+      // Não limpa o estado se falhar para evitar crashes na UI
+      return null;
     } finally {
       if (!silent) setLoading(false);
     }
@@ -127,8 +129,8 @@ const App: React.FC = () => {
         const isOtherMember = payload.actorId !== currentUser.id;
         if (isExternal || isOtherMember) { 
             const updatedData = await loadData(true); 
-            if (isExternal && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
-                const approvedOrder = updatedData.commercialOrders.find((o: any) => o.id === payload.entityId);
+            if (isExternal && updatedData && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
+                const approvedOrder = (updatedData.commercialOrders || []).find((o: any) => o.id === payload.entityId);
                 if (approvedOrder) {
                     const newNotif: AppNotification = { 
                       id: `order-live-${approvedOrder.id}-${Date.now()}`, 
@@ -186,7 +188,7 @@ const App: React.FC = () => {
       if (newContact) await api.saveContact(newContact);
       if (newCategory) await api.saveCategory(newCategory);
       const newT = { ...t, id: crypto.randomUUID(), contactId: newContact ? newContact.id : t.contactId, category: newCategory ? newCategory.name : t.category };
-      await api.saveTransaction(newT);
+      await api.saveTransaction(newT as Transaction);
       await loadData(true);
       showAlert("Lançamento salvo!");
     } catch (e) { showAlert("Erro ao salvar transação.", "error"); }

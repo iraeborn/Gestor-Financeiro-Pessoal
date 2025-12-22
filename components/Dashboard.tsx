@@ -31,25 +31,33 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     const fetchDiag = async () => {
-      if (state.transactions.length > 0) {
+      // Verificação defensiva de estado
+      if (state && state.transactions && state.transactions.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
           setDiagnostic(res);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Falha no diagnóstico IA:", e); }
         setLoadingDiag(false);
       }
     };
     fetchDiag();
-  }, [state.transactions.length, state.accounts.length]);
+  }, [state?.transactions?.length, state?.accounts?.length]);
 
-  const currentRealBalance = state.accounts.reduce((acc, curr) => curr.balance + acc, 0);
-  const pendingIncome = state.transactions.filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
-  const pendingExpenses = state.transactions.filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
+  // Fallback para estado nulo durante transição de carregamento
+  if (!state) return null;
+
+  const accounts = state.accounts || [];
+  const transactions = state.transactions || [];
+  const goals = state.goals || [];
+
+  const currentRealBalance = accounts.reduce((acc, curr) => curr.balance + acc, 0);
+  const pendingIncome = transactions.filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
+  const pendingExpenses = transactions.filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
   const handleEditClick = (t: Transaction) => {
-      setEditingTransaction({ ...t }); // Deep copy to ensure state refresh
+      setEditingTransaction({ ...t });
       setTransModalOpen(true);
   };
 
@@ -82,7 +90,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         </button>
       </div>
 
-      {/* IA ADVISOR WIDGET */}
       <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
               <BrainCircuit className="w-48 h-48" />
@@ -132,7 +139,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Saldo em Caixa" amount={currentRealBalance} type="neutral" icon={<Wallet className="w-6 h-6 text-indigo-600"/>} />
         <StatCard title="Saldo Projetado" amount={projectedBalance} type={projectedBalance >= 0 ? 'info' : 'negative'} icon={<CalendarClock className="w-6 h-6 text-blue-600"/>} subtitle="Até final do mês" />
-        <StatCard title="Patrimônio em Metas" amount={state.goals.reduce((acc,g)=>acc+g.currentAmount, 0)} type="positive" icon={<Target className="w-6 h-6 text-emerald-600"/>} />
+        <StatCard title="Patrimônio em Metas" amount={goals.reduce((acc,g)=>acc+g.currentAmount, 0)} type="positive" icon={<Target className="w-6 h-6 text-emerald-600"/>} />
         <StatCard title="Contas Pendentes" amount={pendingExpenses} type="negative" icon={<TrendingDown className="w-6 h-6 text-rose-600"/>} />
       </div>
 
@@ -141,13 +148,13 @@ const Dashboard: React.FC<DashboardProps> = ({
           <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-500"/> Fluxo de Caixa Mensal
           </h3>
-          <CashFlowChart transactions={state.transactions} />
+          <CashFlowChart transactions={transactions} />
         </div>
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-rose-500"/> Categorias
           </h3>
-          <ExpensesByCategory transactions={state.transactions} />
+          <ExpensesByCategory transactions={transactions} />
         </div>
       </div>
 
@@ -159,9 +166,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             </button>
         </div>
         <TransactionList 
-            transactions={state.transactions.slice(0, 10)} 
-            accounts={state.accounts} 
-            contacts={state.contacts} 
+            transactions={transactions.slice(0, 10)} 
+            accounts={accounts} 
+            contacts={state.contacts || []} 
             onDelete={onDeleteTransaction}
             onEdit={handleEditClick}
             onToggleStatus={onUpdateStatus}
@@ -173,9 +180,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         isOpen={isTransModalOpen} 
         onClose={handleCloseModal} 
         onSave={handleSave}
-        accounts={state.accounts}
-        contacts={state.contacts}
-        categories={state.categories}
+        accounts={accounts}
+        contacts={state.contacts || []}
+        categories={state.categories || []}
         userEntity={userEntity}
         initialData={editingTransaction}
       />
