@@ -1,5 +1,15 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'export interface AppNotification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+    entity: 'order' | 'os' | 'system';
+    entityId: string;
+    timestamp: string;
+    isRead: boolean;
+    data?: any;
+}
 import { 
   User, AuthResponse, AppState, ViewMode, Transaction, Account, 
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
@@ -108,10 +118,17 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentUser?.familyId) {
       if (socketRef.current) socketRef.current.disconnect();
-      const socket = io({ transports: ['websocket', 'polling'], withCredentials: true, reconnection: true, reconnectionAttempts: 20 });
+      // Fix: cast options to any and the result to any to bypass strict type checking for socket.io-client initialization and event methods
+      const socket = io({ 
+        transports: ['websocket', 'polling'], 
+        withCredentials: true, 
+        reconnection: true, 
+        reconnectionAttempts: 20 
+      } as any) as any;
       socketRef.current = socket;
+      // Fix: use inferred 'any' type for socket to avoid property 'on' errors
       socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
-      socket.on('DATA_UPDATED', async (payload) => { 
+      socket.on('DATA_UPDATED', async (payload: any) => { 
         const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
         const isOtherMember = payload.actorId !== currentUser.id;
         if (isExternal || isOtherMember) { 
@@ -213,21 +230,39 @@ const App: React.FC = () => {
       try {
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
+          
+          // 1. Gerar Transação Financeira
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = { id: transactionId, description: `Venda: ${order.description} (Ref: #${orderRef})`, amount: order.amount, type: TransactionType.INCOME, category: 'Vendas e Serviços', date: new Date().toISOString().split('T')[0], status: TransactionStatus.PENDING, accountId: approvalData.accountId, contactId: order.contactId, isRecurring: false };
               await api.saveTransaction(trans);
           }
+
+          // 2. Gerar Nota Fiscal com Vínculo
           if (approvalData.generateInvoice) {
-              const inv: Invoice = { id: crypto.randomUUID(), amount: order.amount, issue_date: new Date().toISOString().split('T')[0], status: 'ISSUED', type: approvalData.invoiceType, contactId: order.contactId, number: Math.floor(Math.random() * 10000).toString(), series: '1' };
+              const inv: Invoice = { 
+                id: crypto.randomUUID(), 
+                amount: order.amount, 
+                issue_date: new Date().toISOString().split('T')[0], 
+                status: 'ISSUED', 
+                type: approvalData.invoiceType, 
+                contactId: order.contactId, 
+                number: Math.floor(Math.random() * 10000).toString(), 
+                series: '1',
+                orderId: order.id, // Vínculo Automático!
+                description: `Nota Fiscal referente ao pedido #${orderRef}: ${order.description}`
+              };
               await api.saveInvoice(inv);
           }
+
+          // 3. Atualizar Status do Pedido
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
           setNotifications(prev => prev.filter(n => n.entityId !== order.id));
           await loadData(true);
           setLoading(false);
 
+          // 4. Fluxo de OS
           const confirmOS = await showConfirm({ title: "Venda Aprovada!", message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?", confirmText: "Sim, criar OS", cancelText: "Não, apenas aprovar" });
           if (confirmOS) {
               setLoading(true);

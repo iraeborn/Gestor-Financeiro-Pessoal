@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2 } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api } from '../services/storageService';
@@ -126,14 +126,24 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const costSum = resolvedList.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.quantity || 1)), 0);
         const durationSum = resolvedList.reduce((sum, item) => sum + (Number(item.estimatedDuration || 0)), 0);
         const disc = Number(formData.discountAmount) || 0;
+        
         let netValue = 0;
-        if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') netValue = itemsSum - disc;
-        else if (isCatalog) netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
-        else if (isOS) netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
-        else netValue = items.length > 0 ? itemsSum : (Number(formData.amount || formData.value || 0));
+        if (currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') {
+            netValue = itemsSum - disc;
+        } else if (isCatalog) {
+            netValue = formData.isComposite ? itemsSum : (Number(formData.defaultPrice) || 0);
+        } else if (isOS) {
+            netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
+        } else if (isNF) {
+            // Se houver soma nos itens, usa ela. Caso contrário, prioriza o valor direto (importado ou digitado)
+            netValue = itemsSum > 0 ? itemsSum : (Number(formData.amount || 0));
+        } else {
+            netValue = items.length > 0 ? itemsSum : (Number(formData.amount || formData.value || 0));
+        }
+
         const taxes = netValue * (taxPercent / 100);
         return { gross: itemsSum, disc, taxes, net: netValue, cost: isCatalog && !formData.isComposite ? (Number(formData.costPrice) || 0) : costSum, duration: isCatalog && !formData.isComposite ? (Number(formData.defaultDuration) || 0) : durationSum, resolvedList };
-    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.totalAmount, formData.amount, formData.value, formData.costPrice, formData.defaultDuration, formData.isComposite, formData.status, taxPercent, currentView, isCatalog, isOS, serviceItems]);
+    }, [formData.items, formData.discountAmount, formData.defaultPrice, formData.totalAmount, formData.amount, formData.value, formData.costPrice, formData.defaultDuration, formData.isComposite, formData.status, taxPercent, currentView, isCatalog, isOS, isNF, serviceItems]);
 
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
@@ -290,7 +300,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_CONTRACTS') {
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
-            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS', description: formData.description, items: pricing.resolvedList }, newContactObj);
+            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount || pricing.net), issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS', description: formData.description, items: pricing.resolvedList, orderId: formData.orderId, serviceOrderId: formData.serviceOrderId }, newContactObj);
         } else if (isCatalog && onSaveCatalogItem) {
             onSaveCatalogItem({ ...formData, id, defaultPrice: pricing.net, costPrice: pricing.cost, type: formData.type || 'SERVICE', defaultDuration: pricing.duration, isComposite: formData.isComposite || false, items: formData.items || [] });
         }
@@ -407,6 +417,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 <th className="px-6 py-4">Data</th>
                                 <th className="px-6 py-4">Número/Série</th>
                                 <th className="px-6 py-4">Pessoa/Empresa</th>
+                                <th className="px-6 py-4">Vínculos</th>
                                 <th className="px-6 py-4">Tipo</th>
                                 <th className="px-6 py-4 text-right">Valor</th>
                                 <th className="px-6 py-4 text-center">Status</th>
@@ -414,35 +425,45 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {filtered.map(nf => (
-                                <tr key={nf.id} className="hover:bg-gray-50/50 transition-colors group">
-                                    <td className="px-6 py-4 text-gray-500">{new Date(nf.issue_date || nf.issueDate).toLocaleDateString('pt-BR')}</td>
-                                    <td className="px-6 py-4 font-black text-gray-800">
-                                        {nf.number || '---'} 
-                                        {nf.series && <span className="text-gray-400 font-normal ml-1">/{nf.series}</span>}
-                                    </td>
-                                    <td className="px-6 py-4 font-medium text-gray-600">
-                                        <div className="flex flex-col">
-                                            <span className="truncate max-w-[150px]">{nf.contactName || '---'}</span>
-                                            {nf.description && <span className="text-[10px] text-gray-400 truncate max-w-[150px] italic">{nf.description}</span>}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black">{nf.type}</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-black text-gray-900">{formatCurrency(nf.amount)}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${getOSStatusColor(nf.status)}`}>{nf.status === 'ISSUED' ? 'Emitida' : nf.status}</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {nf.fileUrl && <a href={nf.fileUrl} target="_blank" className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Download className="w-4 h-4"/></a>}
-                                            <button onClick={() => handleOpenModal(nf)} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Wrench className="w-4 h-4"/></button>
-                                            <button onClick={() => handleDeleteRecord('INVOICE', nf.id, `NF ${nf.number}`)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {filtered.map(nf => {
+                                const linkedOrder = commercialOrders.find(o => o.id === nf.orderId);
+                                const linkedOS = serviceOrders.find(o => o.id === nf.serviceOrderId);
+                                return (
+                                    <tr key={nf.id} className="hover:bg-gray-50/50 transition-colors group">
+                                        <td className="px-6 py-4 text-gray-500">{new Date(nf.issue_date || nf.issueDate).toLocaleDateString('pt-BR')}</td>
+                                        <td className="px-6 py-4 font-black text-gray-800">
+                                            {nf.number || '---'} 
+                                            {nf.series && <span className="text-gray-400 font-normal ml-1">/{nf.series}</span>}
+                                        </td>
+                                        <td className="px-6 py-4 font-medium text-gray-600">
+                                            <div className="flex flex-col">
+                                                <span className="truncate max-w-[150px] font-bold text-gray-800">{nf.contactName || '---'}</span>
+                                                {nf.description && <span className="text-[10px] text-gray-400 truncate max-w-[150px] italic">{nf.description}</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {linkedOrder && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex items-center gap-1 border border-blue-100"><ShoppingBag className="w-2.5 h-2.5" /> Venda #{linkedOrder.id.substring(0,4)}</span>}
+                                                {linkedOS && <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex items-center gap-1 border border-amber-100"><Wrench className="w-2.5 h-2.5" /> OS #{linkedOS.number || linkedOS.id.substring(0,4)}</span>}
+                                                {!linkedOrder && !linkedOS && <span className="text-[9px] text-gray-300 font-bold uppercase">Nenhum</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black">{nf.type}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-black text-gray-900">{formatCurrency(nf.amount)}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${getOSStatusColor(nf.status)}`}>{nf.status === 'ISSUED' ? 'Emitida' : nf.status}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {nf.fileUrl && <a href={nf.fileUrl} target="_blank" className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Download className="w-4 h-4"/></a>}
+                                                <button onClick={() => handleOpenModal(nf)} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Wrench className="w-4 h-4"/></button>
+                                                <button onClick={() => handleDeleteRecord('INVOICE', nf.id, `NF ${nf.number}`)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )})}
                         </tbody>
                     </table>
                 </div>
@@ -587,6 +608,28 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Série</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.series || ''} onChange={e => setFormData({...formData, series: e.target.value})} /></div>
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Data de Emissão</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.issue_date || formData.issueDate || ''} onChange={e => setFormData({...formData, issueDate: e.target.value})} /></div>
                                                 <div className="md:col-span-3"><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Serviços Prestados / Itens</label><textarea className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold min-h-[100px]" value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Ex: Manutenção de computadores, consultoria..." /></div>
+                                                
+                                                {/* Vincular Venda ou OS */}
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Venda Associada</label>
+                                                    <div className="relative">
+                                                        <ShoppingBag className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-3" />
+                                                        <select value={formData.orderId || ''} onChange={e => setFormData({...formData, orderId: e.target.value})} className="w-full border border-gray-200 rounded-xl pl-7 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none bg-white">
+                                                            <option value="">Sem Venda</option>
+                                                            {commercialOrders.filter(o => o.type === 'SALE').map(o => <option key={o.id} value={o.id}>Venda: {o.description} (#{o.id.substring(0,4)})</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">OS Associada</label>
+                                                    <div className="relative">
+                                                        <Wrench className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-3" />
+                                                        <select value={formData.serviceOrderId || ''} onChange={e => setFormData({...formData, serviceOrderId: e.target.value})} className="w-full border border-gray-200 rounded-xl pl-7 pr-2 py-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none bg-white">
+                                                            <option value="">Sem OS</option>
+                                                            {serviceOrders.map(o => <option key={o.id} value={o.id}>OS #{o.number || o.id.substring(0,4)}: {o.title}</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
                                             </div>
                                             
                                             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">

@@ -365,8 +365,10 @@ export interface Invoice {
   contactId?: string;
   contactName?: string;
   description?: string;
-  items?: OSItem[]; // NOVO: Detalhamento técnico
+  items?: OSItem[];
   fileUrl?: string;
+  orderId?: string; // Vínculo com Pedido de Venda
+  serviceOrderId?: string; // Vínculo com OS
 }
 
 export interface AppNotification {

@@ -29,51 +29,65 @@ export default function(logAudit) {
                 return match ? match[1] : null;
             };
 
-            // 1. Número da Nota (nNF para NFe, nNFSe para NFSe)
-            const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent);
+            const sanitizeFloat = (str) => {
+                if (!str) return "0";
+                // Remove R$, espaços e converte vírgula decimal para ponto
+                return str.replace(/[R\$\s]/g, '').replace(',', '.');
+            };
+
+            // 1. Número da Nota (nNF para NFe, nNFSe ou Numero para NFSe)
+            const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent) || extract('Numero', xmlContent);
             
             // 2. Série
-            const series = extract('serie', xmlContent);
+            const series = extract('serie', xmlContent) || extract('Serie', xmlContent);
             
-            // 3. Valor (vNF para NFe total, vLiq ou vServ para NFSe)
-            const amountStr = extract('vNF', xmlContent) || extract('vLiq', xmlContent) || extract('vServ', xmlContent);
+            // 3. Valor (vNF para NFe total, vLiq/vServ para NFSe padrão, ValorServicos/vServicos para outros)
+            const amountStr = extract('vNF', xmlContent) || 
+                              extract('vLiq', xmlContent) || 
+                              extract('vServ', xmlContent) || 
+                              extract('vServicos', xmlContent) || 
+                              extract('vLiquido', xmlContent) ||
+                              extract('ValorServicos', xmlContent) ||
+                              extract('ValorLiquido', xmlContent);
             
-            // 4. Data de Emissão (dhEmi, dEmi ou dhProc)
-            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent);
+            const parsedAmount = parseFloat(sanitizeFloat(amountStr));
+
+            // 4. Data de Emissão (dhEmi, dEmi ou dhProc ou DataEmissao)
+            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent) || extract('DataEmissao', xmlContent);
             
-            // 5. Descrição do Serviço (xDescServ)
-            const description = extract('xDescServ', xmlContent) || 'Importado via XML';
+            // 5. Descrição do Serviço (xDescServ ou Discriminacao)
+            const description = extract('xDescServ', xmlContent) || extract('Discriminacao', xmlContent) || 'Importado via XML';
 
             // 6. Tomador (Destinatário)
             const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || 
-                              xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i);
+                              xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i) ||
+                              xmlContent.match(/<Tomador[^>]*>([\s\S]*?)<\/Tomador>/i);
             
             let customerName = 'Importado via XML';
             let customerDoc = '';
 
             if (tomaBlock) {
-                customerName = extract('xNome', tomaBlock[1]) || customerName;
-                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || '';
+                customerName = extract('xNome', tomaBlock[1]) || extract('RazaoSocial', tomaBlock[1]) || customerName;
+                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || extract('Cpf', tomaBlock[1]) || '';
             } else {
-                const xNomeMatches = xmlContent.match(/<xNome[^>]*>(.*?)<\/xNome>/gi);
+                const xNomeMatches = xmlContent.match(/<(?:xNome|RazaoSocial)[^>]*>(.*?)<\/(?:xNome|RazaoSocial)>/gi);
                 if (xNomeMatches && xNomeMatches.length >= 2) {
-                    customerName = xNomeMatches[1].replace(/<\/?xNome[^>]*>/gi, '').trim();
+                    customerName = xNomeMatches[1].replace(/<\/?(?:xNome|RazaoSocial)[^>]*>/gi, '').trim();
                 }
             }
 
             // 7. Extração de Itens (Composição Técnica)
             const items = [];
-            const parsedAmount = parseFloat(amountStr || '0');
 
-            // Caso A: Nota de Serviço (NFSe) - Geralmente um item único
-            if (xmlContent.includes('NFSe') || xmlContent.includes('infNFSe')) {
-                const vServ = extract('vServ', xmlContent) || amountStr;
+            // Caso A: Nota de Serviço (NFSe) - Geralmente um item único ou bloco de serviços
+            if (xmlContent.includes('NFSe') || xmlContent.includes('infNFSe') || xmlContent.includes('ListaServicos')) {
+                const vServValue = parseFloat(sanitizeFloat(extract('vServ', xmlContent) || extract('vServicos', xmlContent) || extract('ValorServicos', xmlContent) || amountStr));
                 items.push({
                     id: crypto.randomUUID(),
-                    description: description,
+                    description: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
                     quantity: 1,
-                    unitPrice: parseFloat(vServ || '0'),
-                    totalPrice: parseFloat(vServ || '0'),
+                    unitPrice: vServValue,
+                    totalPrice: vServValue,
                     isBillable: true
                 });
             } 
@@ -85,8 +99,8 @@ export default function(logAudit) {
                         const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
                         if (prodMatch) {
                             const p = prodMatch[1];
-                            const q = parseFloat(extract('qCom', p) || '1');
-                            const v = parseFloat(extract('vUnCom', p) || '0');
+                            const q = parseFloat(sanitizeFloat(extract('qCom', p) || '1'));
+                            const v = parseFloat(sanitizeFloat(extract('vUnCom', p) || '0'));
                             items.push({
                                 id: crypto.randomUUID(),
                                 code: extract('cProd', p),
@@ -101,8 +115,10 @@ export default function(logAudit) {
                 }
             }
             
-            if (!number || !amountStr) {
-                return res.status(422).json({ error: "O arquivo XML não possui os campos básicos (Número/Valor) de uma Nota Fiscal válida." });
+            if (!number || parsedAmount === 0) {
+                // Log para debug se necessário
+                console.warn(`[XML IMPORT] Falha ao extrair campos críticos. Numero: ${number}, Valor: ${parsedAmount}`);
+                return res.status(422).json({ error: "O arquivo XML não possui os campos básicos (Número/Valor) reconhecidos. Verifique se é uma nota eletrônica válida." });
             }
 
             res.json({
@@ -267,15 +283,17 @@ export default function(logAudit) {
     });
 
     router.post('/services/invoices', authenticateToken, async (req, res) => {
-        const { id, number, series, type, amount, issueDate, status, contactId, description, items, fileUrl } = req.body;
+        const { id, number, series, type, amount, issueDate, status, contactId, description, items, fileUrl, orderId, serviceOrderId } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const existing = (await pool.query('SELECT id FROM invoices WHERE id=$1', [id])).rows[0];
             await pool.query(
-                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, description, items, file_url, user_id, family_id) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-                 ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, description=$9, items=$10, file_url=$11, deleted_at=NULL`,
-                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), description, JSON.stringify(items || []), fileUrl, req.user.id, familyId]
+                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, description, items, file_url, order_id, service_order_id, user_id, family_id) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) 
+                 ON CONFLICT (id) DO UPDATE SET 
+                    number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, 
+                    description=$9, items=$10, file_url=$11, order_id=$12, service_order_id=$13, deleted_at=NULL`,
+                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), description, JSON.stringify(items || []), fileUrl, sanitizeValue(orderId), sanitizeValue(serviceOrderId), req.user.id, familyId]
             );
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'invoice', id, `NF ${number}`);
             res.json({ success: true });

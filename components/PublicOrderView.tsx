@@ -39,17 +39,20 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
         
         if (socketRef.current) socketRef.current.disconnect();
 
+        // Fix: Resolve Socket.io typing issues by asserting the options and the returned socket instance
         const socket = io({
             transports: ['websocket', 'polling'],
             reconnection: true
-        });
+        } as any) as any;
         socketRef.current = socket;
 
+        // Fix: use inferred 'any' type for socket to avoid property 'on' errors
         socket.on('connect', () => {
             socket.emit('join_family', targetRoom);
         });
 
-        socket.on('DATA_UPDATED', (payload) => {
+        // Fix: use inferred 'any' type for payload parameter
+        socket.on('DATA_UPDATED', (payload: any) => {
             if (payload.entity === 'order' && payload.entityId === order.id) {
                 if (!actionLoading) {
                     loadOrder(true);
