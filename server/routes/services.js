@@ -50,7 +50,7 @@ export default function(logAudit) {
         try {
             // Buscamos quem é o dono do orçamento (criador e seu respectivo workspace)
             const orderRes = await pool.query(`
-                SELECT o.id, o.family_id, o.user_id, o.status, u.family_id as owner_workspace 
+                SELECT o.id, o.family_id, o.user_id, o.status, o.description, u.family_id as owner_workspace 
                 FROM commercial_orders o 
                 JOIN users u ON o.user_id = u.id
                 WHERE o.access_token = $1 AND o.deleted_at IS NULL
@@ -68,17 +68,17 @@ export default function(logAudit) {
             // CRÍTICO: targetRoom DEVE ser o family_id do dono do ambiente
             const targetRoom = order.owner_workspace || order.family_id || order.user_id;
 
-            // Enviamos 9 argumentos para o logAudit, garantindo que o targetRoom chegue no lugar certo
+            // Enviamos metadados no campo 'changes' para o Socket emitir o status novo
             await logAudit(
                 pool, 
                 'EXTERNAL_CLIENT', 
                 'UPDATE', 
                 'order', 
                 order.id, 
-                `Cliente respondeu online (Status: ${status})`, 
-                null, // previousState
-                null, // changes
-                targetRoom // familyIdOverride (8º argumento após pool)
+                `Cliente respondeu online: ${order.description}`, 
+                { status: order.status }, // previousState
+                { status: status }, // changes (O socket enviará isso)
+                targetRoom // familyIdOverride
             );
 
             res.json({ success: true });

@@ -9,7 +9,7 @@ import {
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Menu } from 'lucide-react';
+import { Menu, Wrench } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 import Auth from './components/Auth';
@@ -33,6 +33,7 @@ import CollaborationModal from './components/CollaborationModal';
 import ServiceModule from './components/ServiceModule';
 import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
+import ApprovalModal from './components/ApprovalModal';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -59,14 +60,19 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
+  // Estado para controle de aprovação remota (OS a partir do Socket)
+  const [remoteApprovalOrder, setRemoteApprovalOrder] = useState<CommercialOrder | null>(null);
+
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const initialData = await loadInitialData();
       setData(initialData);
       console.log(`[SYNC] Banco de dados sintonizado: ${new Date().toLocaleTimeString()}`);
+      return initialData;
     } catch (e) {
       console.error("Erro na sincronização", e);
+      throw e;
     } finally {
       if (!silent) setLoading(false);
     }
@@ -94,23 +100,42 @@ const App: React.FC = () => {
         socket.emit('join_family', currentUser.familyId); 
       });
 
-      socket.on('DATA_UPDATED', (payload) => { 
+      socket.on('DATA_UPDATED', async (payload) => { 
         console.log(`[REALTIME GESTOR] Evento detectado!`, payload);
         
-        // Se a ação veio de um cliente externo ou outro membro, precisamos atualizar.
-        // Se veio de mim mesmo, o frontend já deve estar atualizado (mas loadData garante consistência)
         const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
         const isOtherMember = payload.actorId !== currentUser.id;
 
         if (isExternal || isOtherMember) { 
-            console.log(`[REALTIME GESTOR] Atualização externa detectada. Recarregando...`);
-            // Pequeno delay para garantir que o Cloud SQL terminou o commit da transação
-            setTimeout(() => {
-                loadData(true); 
-                if (isExternal) {
-                    showAlert("Um cliente acaba de interagir com uma proposta online!", "info");
+            console.log(`[REALTIME GESTOR] Atualização remota detectada. Sincronizando...`);
+            
+            const updatedData = await loadData(true); 
+
+            // Lógica Especial: Se for uma aprovação de orçamento por cliente externo
+            if (isExternal && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
+                const approvedOrder = updatedData.commercialOrders.find((o: any) => o.id === payload.entityId);
+                
+                if (approvedOrder) {
+                    const wantToConvert = await showConfirm({
+                        title: "Orçamento Aprovado Online!",
+                        message: (
+                            <div className="space-y-2">
+                                <p>O cliente <strong>{approvedOrder.contactName}</strong> acaba de aprovar a proposta: <em>"{approvedOrder.description}"</em>.</p>
+                                <p>Deseja processar o faturamento e abrir a <strong>Ordem de Serviço (OS)</strong> agora?</p>
+                            </div>
+                        ),
+                        confirmText: "Sim, processar agora",
+                        cancelText: "Depois"
+                    });
+
+                    if (wantToConvert) {
+                        setRemoteApprovalOrder(approvedOrder);
+                        setCurrentView('SRV_SALES'); // O modal de aprovação precisa dos dados de contas carregados na tela certa
+                    }
                 }
-            }, 800);
+            } else if (isExternal) {
+                showAlert("Um cliente interagiu com uma proposta online.", "info");
+            }
         } 
       });
 
@@ -121,7 +146,7 @@ const App: React.FC = () => {
         }
       };
     }
-  }, [currentUser?.familyId, currentUser?.id, loadData, showAlert]);
+  }, [currentUser?.familyId, currentUser?.id, loadData, showAlert, showConfirm]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -374,6 +399,20 @@ const App: React.FC = () => {
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
       </main>
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
+      
+      {/* Modal de Aprovação Remota (Triggered by Socket) */}
+      {remoteApprovalOrder && (
+          <ApprovalModal 
+              isOpen={!!remoteApprovalOrder}
+              onClose={() => setRemoteApprovalOrder(null)}
+              order={remoteApprovalOrder}
+              accounts={data.accounts}
+              onConfirm={(approvalData) => {
+                  handleApproveOrder(remoteApprovalOrder, approvalData);
+                  setRemoteApprovalOrder(null);
+              }}
+          />
+      )}
     </div>
   );
 };
