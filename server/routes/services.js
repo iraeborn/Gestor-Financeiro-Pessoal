@@ -19,8 +19,11 @@ export default function(logAudit) {
     router.get('/services/public/order/:token', async (req, res) => {
         try {
             const { token } = req.params;
+            // Buscamos a ordem e garantimos o ID do Workspace (family_id do dono)
             const orderRes = await pool.query(`
-                SELECT o.*, c.name as contact_name, u.name as company_name, cp.trade_name, cp.phone as company_phone, cp.email as company_email
+                SELECT o.*, c.name as contact_name, u.name as company_name, 
+                       cp.trade_name, cp.phone as company_phone, cp.email as company_email,
+                       u.family_id as workspace_id
                 FROM commercial_orders o
                 LEFT JOIN contacts c ON o.contact_id = c.id
                 JOIN users u ON o.user_id = u.id
@@ -34,6 +37,10 @@ export default function(logAudit) {
 
             const order = orderRes.rows[0];
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
+            
+            // Garantimos que o workspace_id seja o ID do dono se o family_id for nulo
+            order.workspace_id = order.workspace_id || order.user_id;
+            
             res.json(order);
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -42,7 +49,6 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            // Buscamos a ordem e o workspace dono (family_id)
             const orderRes = await pool.query(`
                 SELECT o.id, o.family_id, o.user_id, o.status, u.family_id as owner_workspace 
                 FROM commercial_orders o 
@@ -53,20 +59,16 @@ export default function(logAudit) {
             if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
 
             const order = orderRes.rows[0];
-            
-            // Impede alteração se já estiver confirmado ou cancelado por segurança
             if (['CONFIRMED', 'CANCELED'].includes(order.status)) {
-                return res.status(400).json({ error: "Esta proposta já foi finalizada pelo gestor." });
+                return res.status(400).json({ error: "Esta proposta já foi finalizada." });
             }
 
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
             
-            // Determinamos a sala de rádio correta (ID do Workspace)
-            const targetRoom = order.family_id || order.owner_workspace || order.user_id;
+            // O targetRoom deve ser o ID do Workspace (Dono)
+            const targetRoom = order.owner_workspace || order.family_id || order.user_id;
 
-            // Emitimos o sinal de atualização em tempo real
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${status}`, null, null, targetRoom);
-            
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente alterou status para: ${status}`, null, null, targetRoom);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });

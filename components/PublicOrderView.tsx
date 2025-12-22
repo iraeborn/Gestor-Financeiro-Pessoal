@@ -34,8 +34,9 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
 
   // Sincronização em Tempo Real (Gestor <-> Clientes <-> Clientes)
   useEffect(() => {
-    if (order?.family_id || order?.user_id) {
-        const targetRoom = order.family_id || order.user_id;
+    // IMPORTANTE: workspace_id retornado pela API garante a sala correta
+    if (order?.workspace_id || order?.family_id || order?.user_id) {
+        const targetRoom = order.workspace_id || order.family_id || order.user_id;
         
         if (socketRef.current) socketRef.current.disconnect();
 
@@ -46,15 +47,14 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            console.log("[SOCKET CLIENT] Sintonizado na sala de negociação.");
+            console.log(`[SOCKET CLIENT] Sintonizado na sala de negociação: ${targetRoom}`);
             socket.emit('join_family', targetRoom);
         });
 
         socket.on('DATA_UPDATED', (payload) => {
             // Sincroniza se a alteração for neste orçamento específico
             if (payload.entity === 'order' && payload.entityId === order.id) {
-                // Se o sinal veio de um GESTOR ou de OUTRO CLIENTE que não eu mesmo
-                // (Como não temos ID único de cliente anônimo, o actionLoading serve como trava local)
+                // Evita recarregar se eu for o ator da ação (para não piscar a tela)
                 if (!actionLoading) {
                     console.log("[SOCKET CLIENT] Atualização externa detectada. Sincronizando...");
                     loadOrder(true);
@@ -64,21 +64,20 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
 
         return () => { socket.disconnect(); };
     }
-  }, [order?.id, order?.family_id, order?.user_id, actionLoading]);
+  }, [order?.id, order?.workspace_id, order?.family_id, order?.user_id, actionLoading]);
 
   const handleAction = async (status: string) => {
     if (actionLoading) return;
     setActionLoading(true);
     try {
       await updatePublicOrderStatus(token, status);
-      // O sucesso aqui já atualiza a UI localmente enquanto o sinal viaja pelo socket
       setSuccess(`Proposta atualizada! O status agora é: ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Recusado' : 'Em Análise'}.`);
       setOrder({ ...order, status });
     } catch (e: any) {
       alert("Erro ao processar sua resposta: " + e.message);
     } finally {
       // Pequeno delay para evitar que o sinal de volta do socket limpe o estado de sucesso
-      setTimeout(() => setActionLoading(false), 1000);
+      setTimeout(() => setActionLoading(false), 1500);
     }
   };
 

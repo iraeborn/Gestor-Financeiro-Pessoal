@@ -64,7 +64,7 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
-      console.log(`[SYNC] Dados atualizados: ${new Date().toLocaleTimeString()}`);
+      console.log(`[SYNC] Sincronização em: ${new Date().toLocaleTimeString()}`);
     } catch (e) {
       console.error("Erro na sincronização", e);
     } finally {
@@ -74,44 +74,39 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // SISTEMA DE REATIVIDADE REAL-TIME (CORREÇÃO GESTOR)
+  // SISTEMA DE REATIVIDADE REAL-TIME
   useEffect(() => {
     if (currentUser?.familyId) {
-      // Limpa conexão anterior se houver
       if (socketRef.current) socketRef.current.disconnect();
 
       const socket = io({
           transports: ['websocket', 'polling'],
           withCredentials: true,
           reconnection: true,
-          reconnectionAttempts: 10,
+          reconnectionAttempts: 15,
           reconnectionDelay: 1000
       });
       socketRef.current = socket;
 
       socket.on('connect', () => { 
-        console.log(`[SOCKET] Conectado ao workspace: ${currentUser.familyId}`);
+        console.log(`[SOCKET] Ativo no ambiente: ${currentUser.familyId}`);
         socket.emit('join_family', currentUser.familyId); 
       });
 
       socket.on('DATA_UPDATED', (payload) => { 
         console.log(`[REALTIME] Sinal recebido:`, payload);
         
-        // REATIVIDADE CRÍTICA:
-        // Atualiza se:
-        // 1. O ator for o Cliente Externo (Portal Público)
-        // 2. O ator for outro membro da equipe/família
-        const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
-        const isOthers = payload.actorId !== currentUser.id;
+        const isExternalAction = payload.actorId === 'EXTERNAL_CLIENT';
+        const isOtherMemberAction = payload.actorId !== currentUser.id;
 
-        if (isExternal || isOthers) { 
-            // Pequeno delay para garantir que o banco persistiu a transação
+        if (isExternalAction || isOtherMemberAction) { 
+            // Aumento do delay para garantir que o Cloud SQL terminou o COMMIT
             setTimeout(() => {
                 loadData(true); 
-                if (isExternal) {
-                    showAlert("Um cliente acaba de responder online à sua proposta!", "info");
+                if (isExternalAction) {
+                    showAlert("Um cliente respondeu a um orçamento online!", "info");
                 }
-            }, 500);
+            }, 1200);
         } 
       });
 
