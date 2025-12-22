@@ -35,6 +35,7 @@ import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
 import ApprovalModal from './components/ApprovalModal';
 import NotificationPanel from './components/NotificationPanel';
+import LoadingOverlay from './components/LoadingOverlay';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -65,7 +66,7 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
 
-  // Estado para controle de aprovação remota (OS a partir do Socket ou Notificação)
+  // Estado para controle de aprovação remota
   const [remoteApprovalOrder, setRemoteApprovalOrder] = useState<CommercialOrder | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
@@ -74,7 +75,6 @@ const App: React.FC = () => {
       const initialData = await loadInitialData();
       setData(initialData);
       
-      // Sincroniza notificações baseadas em itens do banco (ex: ordens APPROVED)
       const pendingOrders = initialData.commercialOrders.filter(o => o.status === 'APPROVED');
       const orderNotifications: AppNotification[] = pendingOrders.map(o => ({
           id: `order-${o.id}`,
@@ -94,7 +94,6 @@ const App: React.FC = () => {
           return [...prev, ...newNotifs];
       });
 
-      console.log(`[SYNC] Banco de dados sintonizado: ${new Date().toLocaleTimeString()}`);
       return initialData;
     } catch (e) {
       console.error("Erro na sincronização", e);
@@ -106,188 +105,132 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // SISTEMA DE REATIVIDADE REAL-TIME (DASHBOARD GESTOR)
   useEffect(() => {
     if (currentUser?.familyId) {
-      if (socketRef.current) {
-          socketRef.current.disconnect();
-      }
-
-      const socket = io({
-          transports: ['websocket', 'polling'],
-          withCredentials: true,
-          reconnection: true,
-          reconnectionAttempts: 20
-      });
+      if (socketRef.current) socketRef.current.disconnect();
+      const socket = io({ transports: ['websocket', 'polling'], withCredentials: true, reconnection: true, reconnectionAttempts: 20 });
       socketRef.current = socket;
-
-      socket.on('connect', () => { 
-        console.log(`[SOCKET GESTOR] Conectado e ouvindo workspace: ${currentUser.familyId}`);
-        socket.emit('join_family', currentUser.familyId); 
-      });
-
+      socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
       socket.on('DATA_UPDATED', async (payload) => { 
-        console.log(`[REALTIME GESTOR] Evento detectado!`, payload);
-        
         const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
         const isOtherMember = payload.actorId !== currentUser.id;
-
         if (isExternal || isOtherMember) { 
-            console.log(`[REALTIME GESTOR] Atualização remota detectada. Sincronizando...`);
-            
             const updatedData = await loadData(true); 
-
-            // Se for uma aprovação de orçamento por cliente externo
             if (isExternal && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
                 const approvedOrder = updatedData.commercialOrders.find((o: any) => o.id === payload.entityId);
-                
                 if (approvedOrder) {
-                    const newNotif: AppNotification = {
-                        id: `order-live-${approvedOrder.id}-${Date.now()}`,
-                        title: "Orçamento Aprovado!",
-                        message: `${approvedOrder.contactName} aprovou a proposta online.`,
-                        type: 'SUCCESS',
-                        entity: 'order',
-                        entityId: approvedOrder.id,
-                        timestamp: new Date().toISOString(),
-                        isRead: false,
-                        data: approvedOrder
-                    };
+                    const newNotif: AppNotification = { id: `order-live-${approvedOrder.id}-${Date.now()}`, title: "Orçamento Aprovado!", message: `${approvedOrder.contactName} aprovou a proposta online.`, type: 'SUCCESS', entity: 'order', entityId: approvedOrder.id, timestamp: new Date().toISOString(), isRead: false, data: approvedOrder };
                     setNotifications(prev => [newNotif, ...prev]);
                     showAlert(`Nova aprovação de ${approvedOrder.contactName}`, "success");
                 }
-            } else if (isExternal) {
-                showAlert("Um cliente interagiu com uma proposta online.", "info");
             }
         } 
       });
-
-      return () => { 
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-            socketRef.current = null;
-        }
-      };
+      return () => { if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; } };
     }
   }, [currentUser?.familyId, currentUser?.id, loadData, showAlert]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (token) {
+      setLoading(true);
       try {
         const user = await refreshUser();
         setCurrentUser(user);
         setShowLanding(false);
-        await loadData();
+        await loadData(true);
       } catch (e) {
         localStorage.removeItem('token');
+      } finally {
+        setLoading(false);
       }
     }
     setAuthChecked(true);
   };
 
   const handleLoginSuccess = async (user: User) => {
-    setCurrentUser(user);
-    setShowLanding(false);
-    await loadData();
+    setLoading(true);
+    try {
+        setCurrentUser(user);
+        setShowLanding(false);
+        await loadData(true);
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleAddTransaction = async (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
+    setLoading(true);
     try {
       if (newContact) await api.saveContact(newContact);
       if (newCategory) await api.saveCategory(newCategory);
       const newT = { ...t, id: crypto.randomUUID(), contactId: newContact ? newContact.id : t.contactId, category: newCategory ? newCategory.name : t.category };
       await api.saveTransaction(newT);
-      await loadData();
+      await loadData(true);
       showAlert("Lançamento salvo!");
     } catch (e) { showAlert("Erro ao salvar transação.", "error"); }
+    finally { setLoading(false); }
   };
 
   const handleEditTransaction = async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
+    setLoading(true);
     try {
       if (newContact) await api.saveContact(newContact);
       if (newCategory) await api.saveCategory(newCategory);
       const updatedT = { ...t, contactId: newContact ? newContact.id : t.contactId, category: newCategory ? newCategory.name : t.category };
       await api.saveTransaction(updatedT);
-      await loadData();
+      await loadData(true);
       showAlert("Transação atualizada.");
     } catch (e) { showAlert("Erro ao atualizar.", "error"); }
+    finally { setLoading(false); }
   };
 
   const handleDeleteTransaction = async (id: string) => {
+    setLoading(true);
     try {
       await api.deleteTransaction(id);
-      await loadData();
+      await loadData(true);
       showAlert("Transação excluída.");
     } catch (e) { showAlert("Erro ao excluir.", "error"); }
+    finally { setLoading(false); }
   };
 
   const handleUpdateAttachments = async (t: Transaction, urls: string[]) => {
+      setLoading(true);
       try {
-          setLoading(true);
           const wasPaid = t.status === TransactionStatus.PAID;
           const isNowPaid = urls.length > (t.receiptUrls?.length || 0);
           const updatedT = { ...t, receiptUrls: urls, status: isNowPaid ? TransactionStatus.PAID : t.status };
           await api.saveTransaction(updatedT);
           await loadData(true);
           if (!wasPaid && isNowPaid) { showAlert("Comprovante anexado e transação quitada!", "success"); } else { showAlert("Anexos atualizados.", "success"); }
-      } catch (e) { showAlert("Erro ao atualizar anexos.", "error"); } finally { setLoading(false); }
+      } catch (e) { showAlert("Erro ao atualizar anexos.", "error"); } 
+      finally { setLoading(false); }
   };
 
   const handleApproveOrder = async (order: CommercialOrder, approvalData: any) => {
+      setLoading(true);
       try {
-          setLoading(true);
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
-
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
-              const trans: Transaction = {
-                  id: transactionId,
-                  description: `Venda: ${order.description} (Ref: #${orderRef})`,
-                  amount: order.amount,
-                  type: TransactionType.INCOME,
-                  category: 'Vendas e Serviços',
-                  date: new Date().toISOString().split('T')[0],
-                  status: TransactionStatus.PENDING,
-                  accountId: approvalData.accountId,
-                  contactId: order.contactId,
-                  isRecurring: false
-              };
+              const trans: Transaction = { id: transactionId, description: `Venda: ${order.description} (Ref: #${orderRef})`, amount: order.amount, type: TransactionType.INCOME, category: 'Vendas e Serviços', date: new Date().toISOString().split('T')[0], status: TransactionStatus.PENDING, accountId: approvalData.accountId, contactId: order.contactId, isRecurring: false };
               await api.saveTransaction(trans);
           }
-
           if (approvalData.generateInvoice) {
-              const inv: Invoice = {
-                  id: crypto.randomUUID(),
-                  amount: order.amount,
-                  issue_date: new Date().toISOString().split('T')[0],
-                  status: 'ISSUED',
-                  type: approvalData.invoiceType,
-                  contactId: order.contactId,
-                  number: Math.floor(Math.random() * 10000).toString(),
-                  series: '1'
-              };
+              const inv: Invoice = { id: crypto.randomUUID(), amount: order.amount, issue_date: new Date().toISOString().split('T')[0], status: 'ISSUED', type: approvalData.invoiceType, contactId: order.contactId, number: Math.floor(Math.random() * 10000).toString(), series: '1' };
               await api.saveInvoice(inv);
           }
-
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
-
-          // Remove notificação após processar
           setNotifications(prev => prev.filter(n => n.entityId !== order.id));
-
           await loadData(true);
           setLoading(false);
 
-          const confirmOS = await showConfirm({
-              title: "Venda Aprovada!",
-              message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?",
-              confirmText: "Sim, criar OS",
-              cancelText: "Não, apenas aprovar"
-          });
-
+          const confirmOS = await showConfirm({ title: "Venda Aprovada!", message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?", confirmText: "Sim, criar OS", cancelText: "Não, apenas aprovar" });
           if (confirmOS) {
+              setLoading(true);
               let totalEstimatedMinutes = 0;
               const osItems: OSItem[] = (order.items || []).map(item => {
                   const catalogItem = data.serviceItems.find(si => si.id === item.serviceItemId);
@@ -301,25 +244,33 @@ const App: React.FC = () => {
               await api.saveServiceOrder(newOS);
               await loadData(true);
               showAlert("Venda aprovada e OS criada!", "success");
-          } else {
-              showAlert("Venda aprovada!", "success");
-          }
-      } catch (e) {
-          showAlert("Erro no processo.", "error");
-          setLoading(false);
-      }
+          } else { showAlert("Venda aprovada!", "success"); }
+      } catch (e) { showAlert("Erro no processo.", "error"); }
+      finally { setLoading(false); }
   };
 
   const wrapSave = async (fn: any, item: any, msg: string, newContact?: Contact) => {
-      try { if (newContact) await api.saveContact(newContact); await fn(item); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao salvar.", "error"); }
+      setLoading(true);
+      try { 
+          if (newContact) await api.saveContact(newContact); 
+          await fn(item); 
+          await loadData(true); 
+          showAlert(msg, "success"); 
+      } catch(e) { showAlert("Erro ao salvar.", "error"); }
+      finally { setLoading(false); }
   };
   
   const wrapDel = async (fn: any, id: string, msg: string) => {
-      try { await fn(id); await loadData(); showAlert(msg, "success"); } catch(e) { showAlert("Erro ao excluir.", "error"); }
+      setLoading(true);
+      try { 
+          await fn(id); 
+          await loadData(true); 
+          showAlert(msg, "success"); 
+      } catch(e) { showAlert("Erro ao excluir.", "error"); }
+      finally { setLoading(false); }
   };
 
   if (publicToken) return <PublicOrderView token={publicToken} />;
-
   if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Sincronizando ambiente...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
@@ -328,7 +279,6 @@ const App: React.FC = () => {
   if (currentUser.role === 'ADMIN' && currentUser.email?.includes('admin')) return <AdminDashboard />;
 
   const renderContent = () => {
-    if (loading && !data.accounts.length) return <div className="p-8 text-center text-gray-400 animate-pulse">Buscando informações...</div>;
     switch (currentView) {
       case 'FIN_DASHBOARD':
         return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} onUpdateAttachments={handleUpdateAttachments} />;
@@ -353,7 +303,7 @@ const App: React.FC = () => {
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={data} />;
       case 'SYS_SETTINGS':
-        return <SettingsView user={currentUser} pjData={{companyProfile: data.companyProfile, branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onUpdateSettings={async (s) => { await updateSettings(s); setCurrentUser({...currentUser, settings: s}); showAlert("Configurações salvas", "success"); }} onOpenCollab={() => setIsCollabModalOpen(true)} onSavePJEntity={async (type, d) => { if(type==='company') await api.saveCompanyProfile(d); if(type==='branch') await api.saveBranch(d); if(type==='costCenter') await api.saveCostCenter(d); if(type==='department') await api.saveDepartment(d); if(type==='project') await api.saveProject(d); await loadData(); showAlert("Item salvo", "success"); }} onDeletePJEntity={async (type, id) => { if(type==='branch') await api.deleteBranch(id); if(type==='costCenter') await api.deleteCostCenter(id); if(type==='department') await api.deleteDepartment(id); if(type==='project') await api.deleteProject(id); await loadData(); showAlert("Item excluído", "success"); }} />;
+        return <SettingsView user={currentUser} pjData={{companyProfile: data.companyProfile, branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onUpdateSettings={async (s) => { setLoading(true); try { await updateSettings(s); setCurrentUser({...currentUser, settings: s}); showAlert("Configurações salvas", "success"); } finally { setLoading(false); } }} onOpenCollab={() => setIsCollabModalOpen(true)} onSavePJEntity={async (type, d) => { if(type==='company') await api.saveCompanyProfile(d); if(type==='branch') await api.saveBranch(d); if(type==='costCenter') await api.saveCostCenter(d); if(type==='department') await api.saveDepartment(d); if(type==='project') await api.saveProject(d); await loadData(true); showAlert("Item salvo", "success"); }} onDeletePJEntity={async (type, id) => { if(type==='branch') await api.deleteBranch(id); if(type==='costCenter') await api.deleteCostCenter(id); if(type==='department') await api.deleteDepartment(id); if(type==='project') await api.deleteProject(id); await loadData(true); showAlert("Item excluído", "success"); }} />;
       case 'SYS_ACCESS':
         return <AccessView currentUser={currentUser} />;
       case 'SYS_LOGS':
@@ -376,6 +326,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
+      <LoadingOverlay isVisible={loading} />
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-gray-800/50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-xl" onClick={e => e.stopPropagation()}>
@@ -392,36 +343,11 @@ const App: React.FC = () => {
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"><Menu className="w-6 h-6" /></button>
         </div>
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
-        
-        {/* Painel de Notificações */}
-        <NotificationPanel 
-            isOpen={isNotifPanelOpen} 
-            onClose={() => setIsNotifPanelOpen(false)} 
-            notifications={notifications} 
-            onMarkAsRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? {...n, isRead: true} : n))}
-            onAction={(notif) => {
-                if (notif.entity === 'order') {
-                    setRemoteApprovalOrder(notif.data);
-                    setIsNotifPanelOpen(false);
-                }
-            }}
-        />
+        <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} notifications={notifications} onMarkAsRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? {...n, isRead: true} : n))} onAction={(notif) => { if (notif.entity === 'order') { setRemoteApprovalOrder(notif.data); setIsNotifPanelOpen(false); } }} />
       </main>
-
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
-      
-      {/* Modal de Aprovação Remota (Triggered by Socket ou Notificação) */}
       {remoteApprovalOrder && (
-          <ApprovalModal 
-              isOpen={!!remoteApprovalOrder}
-              onClose={() => setRemoteApprovalOrder(null)}
-              order={remoteApprovalOrder}
-              accounts={data.accounts}
-              onConfirm={(approvalData) => {
-                  handleApproveOrder(remoteApprovalOrder, approvalData);
-                  setRemoteApprovalOrder(null);
-              }}
-          />
+          <ApprovalModal isOpen={!!remoteApprovalOrder} onClose={() => setRemoteApprovalOrder(null)} order={remoteApprovalOrder} accounts={data.accounts} onConfirm={(approvalData) => { handleApproveOrder(remoteApprovalOrder, approvalData); setRemoteApprovalOrder(null); }} />
       )}
     </div>
   );
