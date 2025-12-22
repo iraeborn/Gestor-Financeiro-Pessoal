@@ -116,6 +116,7 @@ export const initDb = async () => {
             issue_date DATE, 
             status TEXT, 
             contact_id TEXT, 
+            description TEXT,
             file_url TEXT, 
             user_id TEXT, 
             family_id TEXT, 
@@ -130,7 +131,7 @@ export const initDb = async () => {
             await pool.query(q);
         }
 
-        // Migração para remover a FK que está causando erro no socket do cliente externo
+        // Migração para campos novos e correções
         const dbCleanup = [
             `ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
@@ -142,7 +143,8 @@ export const initDb = async () => {
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`
+            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`,
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`
         ];
 
         for (const q of dbCleanup) {

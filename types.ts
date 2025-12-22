@@ -364,6 +364,7 @@ export interface Invoice {
   status: 'ISSUED' | 'CANCELED';
   contactId?: string;
   contactName?: string;
+  description?: string; // NOVO: Serviços prestados
   fileUrl?: string;
 }
 

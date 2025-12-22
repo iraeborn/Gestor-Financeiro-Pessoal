@@ -204,6 +204,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 amount: data.amount,
                 issue_date: data.issueDate,
                 issueDate: data.issueDate,
+                description: data.description || prev.description,
                 status: data.status
             }));
             
@@ -288,7 +289,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_CONTRACTS') {
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
-            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS' }, newContactObj);
+            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS', description: formData.description }, newContactObj);
         } else if (isCatalog && onSaveCatalogItem) {
             onSaveCatalogItem({ ...formData, id, defaultPrice: pricing.net, costPrice: pricing.cost, type: formData.type || 'SERVICE', defaultDuration: pricing.duration, isComposite: formData.isComposite || false, items: formData.items || [] });
         }
@@ -419,7 +420,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         {nf.number || '---'} 
                                         {nf.series && <span className="text-gray-400 font-normal ml-1">/{nf.series}</span>}
                                     </td>
-                                    <td className="px-6 py-4 font-medium text-gray-600">{nf.contactName || '---'}</td>
+                                    <td className="px-6 py-4 font-medium text-gray-600">
+                                        <div className="flex flex-col">
+                                            <span className="truncate max-w-[150px]">{nf.contactName || '---'}</span>
+                                            {nf.description && <span className="text-[10px] text-gray-400 truncate max-w-[150px] italic">{nf.description}</span>}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4">
                                         <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black">{nf.type}</span>
                                     </td>
@@ -579,6 +585,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Número da Nota</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.number || ''} onChange={e => setFormData({...formData, number: e.target.value})} /></div>
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Série</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.series || ''} onChange={e => setFormData({...formData, series: e.target.value})} /></div>
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Data de Emissão</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.issue_date || formData.issueDate || ''} onChange={e => setFormData({...formData, issueDate: e.target.value})} /></div>
+                                                <div className="md:col-span-3"><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Serviços Prestados / Itens</label><textarea className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold min-h-[100px]" value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Ex: Manutenção de computadores, consultoria..." /></div>
                                             </div>
                                             
                                             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">

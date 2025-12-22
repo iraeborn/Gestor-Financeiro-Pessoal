@@ -41,15 +41,26 @@ export default function(logAudit) {
             // 4. Data de Emissão (dhEmi, dEmi ou dhProc)
             const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent);
             
-            // 5. Nome do Cliente (xNome) 
-            // Em Notas Fiscais, o primeiro xNome costuma ser o EMISSOR. O segundo costuma ser o DESTINATÁRIO/TOMADOR.
-            const xNomeMatches = xmlContent.match(/<xNome[^>]*>(.*?)<\/xNome>/gi);
+            // 5. Descrição do Serviço (xDescServ)
+            const description = extract('xDescServ', xmlContent) || 'Importado via XML';
+
+            // 6. Tomador (Destinatário)
+            // Tenta isolar o bloco do tomador para pegar o CNPJ/Nome corretos
+            const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || 
+                              xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i);
+            
             let customerName = 'Importado via XML';
-            if (xNomeMatches && xNomeMatches.length >= 2) {
-                // Pega o conteúdo da segunda ocorrência (Destinatário)
-                customerName = xNomeMatches[1].replace(/<\/?xNome[^>]*>/gi, '').trim();
-            } else if (xNomeMatches && xNomeMatches.length === 1) {
-                customerName = xNomeMatches[0].replace(/<\/?xNome[^>]*>/gi, '').trim();
+            let customerDoc = '';
+
+            if (tomaBlock) {
+                customerName = extract('xNome', tomaBlock[1]) || customerName;
+                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || '';
+            } else {
+                // Fallback: tenta pegar o segundo xNome do arquivo (geralmente o destinatário)
+                const xNomeMatches = xmlContent.match(/<xNome[^>]*>(.*?)<\/xNome>/gi);
+                if (xNomeMatches && xNomeMatches.length >= 2) {
+                    customerName = xNomeMatches[1].replace(/<\/?xNome[^>]*>/gi, '').trim();
+                }
             }
             
             if (!number || !amountStr) {
@@ -62,6 +73,8 @@ export default function(logAudit) {
                 amount: parseFloat(amountStr),
                 issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
                 contactName: customerName,
+                contactDoc: customerDoc,
+                description: description,
                 status: 'ISSUED'
             });
         } catch (err) { res.status(500).json({ error: err.message }); }
@@ -215,15 +228,15 @@ export default function(logAudit) {
     });
 
     router.post('/services/invoices', authenticateToken, async (req, res) => {
-        const { id, number, series, type, amount, issueDate, status, contactId, fileUrl } = req.body;
+        const { id, number, series, type, amount, issueDate, status, contactId, description, fileUrl } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const existing = (await pool.query('SELECT id FROM invoices WHERE id=$1', [id])).rows[0];
             await pool.query(
-                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, file_url, user_id, family_id) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
-                 ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, file_url=$9, deleted_at=NULL`,
-                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), fileUrl, req.user.id, familyId]
+                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, description, file_url, user_id, family_id) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+                 ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, description=$9, file_url=$10, deleted_at=NULL`,
+                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), description, fileUrl, req.user.id, familyId]
             );
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'invoice', id, `NF ${number}`);
             res.json({ success: true });
