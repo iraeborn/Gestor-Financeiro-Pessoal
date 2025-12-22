@@ -16,107 +16,113 @@ export default function(logAudit) {
         return res.rows[0]?.family_id || userId;
     };
 
+    // --- ROTAS PÚBLICAS (Acesso via Token, sem Login) ---
+    
+    router.get('/public/order/:token', async (req, res) => {
+        const { token } = req.params;
+        try {
+            const orderRes = await pool.query(`
+                SELECT 
+                    o.*, 
+                    c.name as contact_name, 
+                    c.email as contact_email,
+                    u.name as owner_name,
+                    cp.trade_name,
+                    cp.legal_name as company_name,
+                    cp.phone as company_phone,
+                    cp.email as company_email
+                FROM commercial_orders o
+                LEFT JOIN contacts c ON o.contact_id = c.id
+                JOIN users u ON o.user_id = u.id
+                LEFT JOIN company_profiles cp ON o.family_id = cp.user_id
+                WHERE o.access_token = $1 AND o.deleted_at IS NULL
+            `, [token]);
+
+            if (orderRes.rows.length === 0) {
+                return res.status(404).json({ error: "Orçamento não encontrado ou link expirado." });
+            }
+
+            const order = orderRes.rows[0];
+            // Sanitização de itens (JSON string -> Object)
+            if (typeof order.items === 'string') {
+                try { order.items = JSON.parse(order.items); } catch (e) { order.items = []; }
+            }
+
+            res.json(order);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/public/order/:token/status', async (req, res) => {
+        const { token } = req.params;
+        const { status, notes } = req.body;
+        try {
+            const orderRes = await pool.query('SELECT id, description, family_id, contact_id FROM commercial_orders WHERE access_token = $1', [token]);
+            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento inválido." });
+
+            const order = orderRes.rows[0];
+            
+            await pool.query(
+                'UPDATE commercial_orders SET status = $1 WHERE id = $2',
+                [status, order.id]
+            );
+
+            // Log de Auditoria e Gatilho Real-time (Socket)
+            await logAudit(
+                pool, 
+                'EXTERNAL_CLIENT', 
+                'UPDATE', 
+                'order', 
+                order.id, 
+                `Cliente respondeu orçamento: ${status}`, 
+                null, 
+                { status: status },
+                order.family_id // Envia para a sala da empresa dona do orçamento
+            );
+
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // --- XML IMPORT ---
-    router.post('/services/invoices/import-xml', authenticateToken, upload.single('xml'), async (req, res) => {
+    router.post('/invoices/import-xml', authenticateToken, upload.single('xml'), async (req, res) => {
         try {
             if (!req.file) return res.status(400).json({ error: "Arquivo não enviado." });
-            
             const xmlContent = req.file.buffer.toString('utf-8');
-            
-            // Parser Robusto via Regex para múltiplos padrões (NFe e NFSe)
             const extract = (tag, content) => {
                 const match = content.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
                 return match ? match[1].trim() : null;
             };
-
             const sanitizeFloat = (str) => {
                 if (!str) return "0";
-                // Remove R$, espaços, pontos de milhar e converte vírgula decimal para ponto
                 let clean = str.replace(/[R\$\s]/g, '');
-                // Se tem ponto e vírgula, o ponto é milhar (ex: 1.250,50)
-                if (clean.includes(',') && clean.includes('.')) {
-                    clean = clean.replace(/\./g, '');
-                }
-                // Converte vírgula para ponto se for o único separador decimal
+                if (clean.includes(',') && clean.includes('.')) clean = clean.replace(/\./g, '');
                 clean = clean.replace(',', '.');
                 return clean;
             };
-
-            // 1. Número da Nota
             const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent) || extract('Numero', xmlContent);
-            
-            // 2. Série
             const series = extract('serie', xmlContent) || extract('Serie', xmlContent);
-            
-            // 3. Valor (Busca agressiva)
-            const amountStr = extract('vNF', xmlContent) || 
-                              extract('vLiq', xmlContent) || 
-                              extract('vServ', xmlContent) || 
-                              extract('vServicos', xmlContent) || 
-                              extract('vLiquido', xmlContent) ||
-                              extract('ValorServicos', xmlContent) ||
-                              extract('ValorLiquido', xmlContent) ||
-                              extract('ValorTotal', xmlContent);
-            
+            const amountStr = extract('vNF', xmlContent) || extract('vLiq', xmlContent) || extract('vServ', xmlContent) || extract('vServicos', xmlContent) || extract('ValorLiquido', xmlContent) || extract('ValorTotal', xmlContent);
             const parsedAmount = parseFloat(sanitizeFloat(amountStr));
-
-            // 4. Data de Emissão
-            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent) || extract('DataEmissao', xmlContent);
-            
-            // 5. Descrição
+            const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('DataEmissao', xmlContent);
             const description = extract('xDescServ', xmlContent) || extract('Discriminacao', xmlContent) || 'Importado via XML';
-
-            // 6. Tomador (Destinatário)
-            const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || 
-                              xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i) ||
-                              xmlContent.match(/<Tomador[^>]*>([\s\S]*?)<\/Tomador>/i);
-            
+            const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i) || xmlContent.match(/<Tomador[^>]*>([\s\S]*?)<\/Tomador>/i);
             let customerName = 'Importado via XML';
             let customerDoc = '';
-
             if (tomaBlock) {
                 customerName = extract('xNome', tomaBlock[1]) || extract('RazaoSocial', tomaBlock[1]) || customerName;
-                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || extract('Cpf', tomaBlock[1]) || '';
+                customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || '';
             }
-
-            const items = [];
-            // Detalhamento de itens se for NFe (Produto)
-            const detMatches = xmlContent.match(/<det[^>]*>([\s\S]*?)<\/det>/gi);
-            if (detMatches) {
-                detMatches.forEach(detHtml => {
-                    const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
-                    if (prodMatch) {
-                        const p = prodMatch[1];
-                        const q = parseFloat(sanitizeFloat(extract('qCom', p) || '1'));
-                        const v = parseFloat(sanitizeFloat(extract('vUnCom', p) || '0'));
-                        items.push({
-                            id: crypto.randomUUID(),
-                            code: extract('cProd', p),
-                            description: extract('xProd', p),
-                            quantity: q,
-                            unitPrice: v,
-                            totalPrice: q * v,
-                            isBillable: true
-                        });
-                    }
-                });
-            }
-
-            if (isNaN(parsedAmount) || parsedAmount === 0) {
-                return res.status(422).json({ error: "Valor não detectado no XML. Verifique se é uma nota eletrônica válida." });
-            }
-
-            res.json({
-                number, series, amount: parsedAmount,
-                issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
-                contactName: customerName, contactDoc: customerDoc,
-                description, items, status: 'ISSUED'
-            });
+            if (isNaN(parsedAmount) || parsedAmount === 0) return res.status(422).json({ error: "Valor não detectado no XML." });
+            res.json({ number, series, amount: parsedAmount, issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0], contactName: customerName, contactDoc: customerDoc, description, status: 'ISSUED' });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     // --- CRUD ROUTES ---
-    router.post('/services/orders/:id/share', authenticateToken, async (req, res) => {
+    router.post('/orders/:id/share', authenticateToken, async (req, res) => {
         const { channel } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
@@ -133,19 +139,17 @@ export default function(logAudit) {
             const contact = contactRes.rows[0];
             const companyRes = await pool.query('SELECT trade_name FROM company_profiles WHERE user_id = $1', [familyId]);
             const companyName = companyRes.rows[0]?.trade_name || req.user.name;
-            if (channel === 'EMAIL') {
-                if (!contact?.email) return res.status(400).json({ error: "O contato selecionado não possui um e-mail cadastrado." });
-                const subject = `Proposta Comercial: ${order.description}`;
+            if (channel === 'EMAIL' && contact?.email) {
                 const amountFormatted = Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                const plainText = `Olá, ${contact.name}! Sua proposta para ${order.description} no valor de ${amountFormatted} está pronta. Acesse em: ${publicUrl}`;
+                const subject = `Proposta Comercial: ${order.description}`;
                 const html = `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; color: #1e293b;"><div style="background-color: #4f46e5; padding: 32px; text-align: center; color: white;"><h1 style="margin: 0; font-size: 24px;">Proposta Comercial</h1><p style="margin-top: 8px; opacity: 0.9;">Enviado por ${companyName}</p></div><div style="padding: 32px;"><h2 style="margin: 0 0 16px 0; font-size: 20px;">Olá, ${contact.name}!</h2><p style="font-size: 16px; line-height: 24px;">Sua proposta referente a <strong>${order.description}</strong> já está disponível para análise.</p><div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;"><span style="display: block; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 4px;">Valor Total</span><span style="font-size: 28px; font-weight: 800; color: #0f172a;">${amountFormatted}</span></div><div style="text-align: center; margin: 32px 0;"><a href="${publicUrl}" style="background-color: #4f46e5; color: white; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; display: inline-block;">Visualizar e Responder Agora</a></div><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" /><p style="font-size: 12px; color: #94a3b8; text-align: center;">Este link de acesso é exclusivo para você. A validade desta proposta é de 7 dias.</p></div></div>`;
-                await sendEmail(contact.email, subject, plainText, html);
+                await sendEmail(contact.email, subject, `Acesse sua proposta: ${publicUrl}`, html);
             }
             res.json({ url: publicUrl, token });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.post('/services/os', authenticateToken, async (req, res) => {
+    router.post('/os', authenticateToken, async (req, res) => {
         const { id, title, description, contactId, status, totalAmount, startDate, endDate, items, type, origin, priority, openedAt } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
@@ -161,7 +165,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.delete('/services/os/:id', authenticateToken, async (req, res) => {
+    router.delete('/os/:id', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE service_orders SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
@@ -170,7 +174,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.post('/services/orders', authenticateToken, async (req, res) => {
+    router.post('/orders', authenticateToken, async (req, res) => {
         const { id, type, description, contactId, amount, grossAmount, discountAmount, taxAmount, items, date, status, transactionId } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
@@ -186,7 +190,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.delete('/services/orders/:id', authenticateToken, async (req, res) => {
+    router.delete('/orders/:id', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE commercial_orders SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
@@ -195,7 +199,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.post('/services/contracts', authenticateToken, async (req, res) => {
+    router.post('/contracts', authenticateToken, async (req, res) => {
         const { id, title, contactId, value, startDate, endDate, status, billingDay } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
@@ -211,7 +215,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.delete('/services/contracts/:id', authenticateToken, async (req, res) => {
+    router.delete('/contracts/:id', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE contracts SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
@@ -220,7 +224,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.post('/services/invoices', authenticateToken, async (req, res) => {
+    router.post('/invoices', authenticateToken, async (req, res) => {
         const { id, number, series, type, amount, issueDate, status, contactId, description, items, fileUrl, orderId, serviceOrderId } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
@@ -238,7 +242,7 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    router.delete('/services/invoices/:id', authenticateToken, async (req, res) => {
+    router.delete('/invoices/:id', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE invoices SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
