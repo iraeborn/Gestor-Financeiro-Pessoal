@@ -117,6 +117,7 @@ export const initDb = async () => {
             status TEXT, 
             contact_id TEXT, 
             description TEXT,
+            items JSONB DEFAULT '[]',
             file_url TEXT, 
             user_id TEXT, 
             family_id TEXT, 
@@ -144,7 +145,8 @@ export const initDb = async () => {
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
             `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`,
             `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`,
-            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`,
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`
         ];
 
         for (const q of dbCleanup) {

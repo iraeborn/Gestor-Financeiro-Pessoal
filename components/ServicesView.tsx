@@ -205,6 +205,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 issue_date: data.issueDate,
                 issueDate: data.issueDate,
                 description: data.description || prev.description,
+                items: data.items || prev.items || [],
                 status: data.status
             }));
             
@@ -289,7 +290,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (currentView === 'SRV_CONTRACTS') {
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
-            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS', description: formData.description }, newContactObj);
+            onSaveInvoice({ ...formData, ...common, amount: Number(formData.amount) || 0, issue_date: formData.issue_date || formData.issueDate || new Date().toISOString().split('T')[0], status: formData.status || 'ISSUED', type: formData.type || 'ISS', description: formData.description, items: pricing.resolvedList }, newContactObj);
         } else if (isCatalog && onSaveCatalogItem) {
             onSaveCatalogItem({ ...formData, id, defaultPrice: pricing.net, costPrice: pricing.cost, type: formData.type || 'SERVICE', defaultDuration: pricing.duration, isComposite: formData.isComposite || false, items: formData.items || [] });
         }

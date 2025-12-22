@@ -45,7 +45,6 @@ export default function(logAudit) {
             const description = extract('xDescServ', xmlContent) || 'Importado via XML';
 
             // 6. Tomador (Destinatário)
-            // Tenta isolar o bloco do tomador para pegar o CNPJ/Nome corretos
             const tomaBlock = xmlContent.match(/<toma[^>]*>([\s\S]*?)<\/toma>/i) || 
                               xmlContent.match(/<dest[^>]*>([\s\S]*?)<\/dest>/i);
             
@@ -56,10 +55,49 @@ export default function(logAudit) {
                 customerName = extract('xNome', tomaBlock[1]) || customerName;
                 customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || '';
             } else {
-                // Fallback: tenta pegar o segundo xNome do arquivo (geralmente o destinatário)
                 const xNomeMatches = xmlContent.match(/<xNome[^>]*>(.*?)<\/xNome>/gi);
                 if (xNomeMatches && xNomeMatches.length >= 2) {
                     customerName = xNomeMatches[1].replace(/<\/?xNome[^>]*>/gi, '').trim();
+                }
+            }
+
+            // 7. Extração de Itens (Composição Técnica)
+            const items = [];
+            const parsedAmount = parseFloat(amountStr || '0');
+
+            // Caso A: Nota de Serviço (NFSe) - Geralmente um item único
+            if (xmlContent.includes('NFSe') || xmlContent.includes('infNFSe')) {
+                const vServ = extract('vServ', xmlContent) || amountStr;
+                items.push({
+                    id: crypto.randomUUID(),
+                    description: description,
+                    quantity: 1,
+                    unitPrice: parseFloat(vServ || '0'),
+                    totalPrice: parseFloat(vServ || '0'),
+                    isBillable: true
+                });
+            } 
+            // Caso B: Nota de Produto (NFe) - Percorre tags <det>
+            else {
+                const detMatches = xmlContent.match(/<det[^>]*>([\s\S]*?)<\/det>/gi);
+                if (detMatches) {
+                    detMatches.forEach(detHtml => {
+                        const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
+                        if (prodMatch) {
+                            const p = prodMatch[1];
+                            const q = parseFloat(extract('qCom', p) || '1');
+                            const v = parseFloat(extract('vUnCom', p) || '0');
+                            items.push({
+                                id: crypto.randomUUID(),
+                                code: extract('cProd', p),
+                                description: extract('xProd', p),
+                                quantity: q,
+                                unitPrice: v,
+                                totalPrice: q * v,
+                                isBillable: true
+                            });
+                        }
+                    });
                 }
             }
             
@@ -70,11 +108,12 @@ export default function(logAudit) {
             res.json({
                 number: number,
                 series: series,
-                amount: parseFloat(amountStr),
+                amount: parsedAmount,
                 issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
                 contactName: customerName,
                 contactDoc: customerDoc,
                 description: description,
+                items: items,
                 status: 'ISSUED'
             });
         } catch (err) { res.status(500).json({ error: err.message }); }
@@ -228,15 +267,15 @@ export default function(logAudit) {
     });
 
     router.post('/services/invoices', authenticateToken, async (req, res) => {
-        const { id, number, series, type, amount, issueDate, status, contactId, description, fileUrl } = req.body;
+        const { id, number, series, type, amount, issueDate, status, contactId, description, items, fileUrl } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const existing = (await pool.query('SELECT id FROM invoices WHERE id=$1', [id])).rows[0];
             await pool.query(
-                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, description, file_url, user_id, family_id) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
-                 ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, description=$9, file_url=$10, deleted_at=NULL`,
-                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), description, fileUrl, req.user.id, familyId]
+                `INSERT INTO invoices (id, number, series, type, amount, issue_date, status, contact_id, description, items, file_url, user_id, family_id) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+                 ON CONFLICT (id) DO UPDATE SET number=$2, series=$3, type=$4, amount=$5, issue_date=$6, status=$7, contact_id=$8, description=$9, items=$10, file_url=$11, deleted_at=NULL`,
+                [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), description, JSON.stringify(items || []), fileUrl, req.user.id, familyId]
             );
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'invoice', id, `NF ${number}`);
             res.json({ success: true });
