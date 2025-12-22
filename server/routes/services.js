@@ -2,10 +2,12 @@
 import express from 'express';
 import pool from '../db.js';
 import crypto from 'crypto';
+import multer from 'multer';
 import { authenticateToken, sanitizeValue } from '../middleware.js';
 import { sendEmail } from '../services/email.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 export default function(logAudit) {
 
@@ -13,6 +15,40 @@ export default function(logAudit) {
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
         return res.rows[0]?.family_id || userId;
     };
+
+    // --- XML IMPORT ---
+    router.post('/services/invoices/import-xml', authenticateToken, upload.single('xml'), async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ error: "Arquivo não enviado." });
+            
+            const xmlContent = req.file.buffer.toString('utf-8');
+            
+            // Parser Simples via Regex (Para ambiente de demonstração sem bibliotecas pesadas)
+            const extract = (tag, content) => {
+                const match = content.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`, 'i'));
+                return match ? match[1] : null;
+            };
+
+            const nNF = extract('nNF', xmlContent);
+            const serie = extract('serie', xmlContent);
+            const vNF = extract('vNF', xmlContent);
+            const dhEmi = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent);
+            const xNome = extract('xNome', xmlContent); // Nome do destinatário
+            
+            if (!nNF || !vNF) {
+                return res.status(422).json({ error: "O arquivo XML não parece ser uma Nota Fiscal Eletrônica válida." });
+            }
+
+            res.json({
+                number: nNF,
+                series: serie,
+                amount: parseFloat(vNF),
+                issueDate: dhEmi ? dhEmi.substring(0, 10) : new Date().toISOString().split('T')[0],
+                contactName: xNome || 'Importado via XML',
+                status: 'ISSUED'
+            });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
 
     // --- PUBLIC ACCESS ROUTES (Área do Cliente) ---
 
@@ -37,9 +73,7 @@ export default function(logAudit) {
             const order = orderRes.rows[0];
             if (typeof order.items === 'string') order.items = JSON.parse(order.items);
             
-            // Garantimos que o workspace_id seja o ID do dono se o family_id do criador for nulo
             order.workspace_id = order.workspace_id || order.user_id;
-            
             res.json(order);
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -48,7 +82,6 @@ export default function(logAudit) {
         const { token } = req.params;
         const { status } = req.body;
         try {
-            // Buscamos quem é o dono do orçamento (criador e seu respectivo workspace)
             const orderRes = await pool.query(`
                 SELECT o.id, o.family_id, o.user_id, o.status, o.description, u.family_id as owner_workspace 
                 FROM commercial_orders o 
@@ -64,28 +97,15 @@ export default function(logAudit) {
             }
 
             await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
-            
-            // CRÍTICO: targetRoom DEVE ser o family_id do dono do ambiente
             const targetRoom = order.owner_workspace || order.family_id || order.user_id;
 
-            // Enviamos metadados no campo 'changes' para o Socket emitir o status novo
-            await logAudit(
-                pool, 
-                'EXTERNAL_CLIENT', 
-                'UPDATE', 
-                'order', 
-                order.id, 
-                `Cliente respondeu online: ${order.description}`, 
-                { status: order.status }, // previousState
-                { status: status }, // changes (O socket enviará isso)
-                targetRoom // familyIdOverride
-            );
+            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${order.description}`, { status: order.status }, { status: status }, targetRoom);
 
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // --- PROTECTED ROUTES (Dashboard do Gestor) ---
+    // --- PROTECTED ROUTES ---
 
     router.post('/services/orders/:id/share', authenticateToken, async (req, res) => {
         const { channel } = req.body;
@@ -108,15 +128,10 @@ export default function(logAudit) {
             const companyName = companyRes.rows[0]?.trade_name || req.user.name;
 
             if (channel === 'EMAIL') {
-                if (!contact?.email) {
-                    return res.status(400).json({ error: "O contato selecionado não possui um e-mail cadastrado." });
-                }
-
+                if (!contact?.email) return res.status(400).json({ error: "O contato selecionado não possui um e-mail cadastrado." });
                 const subject = `Proposta Comercial: ${order.description}`;
                 const amountFormatted = Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                
                 const plainText = `Olá, ${contact.name}! Sua proposta para ${order.description} no valor de ${amountFormatted} está pronta. Acesse em: ${publicUrl}`;
-                
                 const html = `
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; color: #1e293b;">
                     <div style="background-color: #4f46e5; padding: 32px; text-align: center; color: white;">
@@ -126,29 +141,21 @@ export default function(logAudit) {
                     <div style="padding: 32px;">
                         <h2 style="margin: 0 0 16px 0; font-size: 20px;">Olá, ${contact.name}!</h2>
                         <p style="font-size: 16px; line-height: 24px;">Sua proposta referente a <strong>${order.description}</strong> já está disponível para análise.</p>
-                        
                         <div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;">
                             <span style="display: block; font-size: 14px; text-transform: uppercase; color: #64748b; font-weight: bold; margin-bottom: 4px;">Valor Total</span>
                             <span style="font-size: 28px; font-weight: 800; color: #0f172a;">${amountFormatted}</span>
                         </div>
-
                         <div style="text-align: center; margin: 32px 0;">
                             <a href="${publicUrl}" style="background-color: #4f46e5; color: white; padding: 16px 32px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 16px; display: inline-block;">Visualizar e Responder Agora</a>
                         </div>
-
                         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;" />
                         <p style="font-size: 12px; color: #94a3b8; text-align: center;">Este link de acesso é exclusivo para você. A validade desta proposta é de 7 dias.</p>
                     </div>
                 </div>`;
-
                 await sendEmail(contact.email, subject, plainText, html);
             }
-
             res.json({ url: publicUrl, token });
-        } catch (err) { 
-            console.error("Share Error:", err);
-            res.status(500).json({ error: err.message }); 
-        }
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     router.post('/services/os', authenticateToken, async (req, res) => {
@@ -156,14 +163,12 @@ export default function(logAudit) {
         try {
             const familyId = await getFamilyId(req.user.id);
             const existing = (await pool.query('SELECT id FROM service_orders WHERE id=$1', [id])).rows[0];
-
             await pool.query(
                 `INSERT INTO service_orders (id, title, description, contact_id, status, total_amount, start_date, end_date, items, type, origin, priority, opened_at, user_id, family_id) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) 
                  ON CONFLICT (id) DO UPDATE SET title=$2, description=$3, contact_id=$4, status=$5, total_amount=$6, start_date=$7, end_date=$8, items=$9, type=$10, origin=$11, priority=$12, opened_at=$13, deleted_at=NULL`,
                 [id, title, description, sanitizeValue(contactId), status, totalAmount || 0, sanitizeValue(startDate), sanitizeValue(endDate), JSON.stringify(items || []), type, origin, priority, sanitizeValue(openedAt), req.user.id, familyId]
             );
-            
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'os', id, title);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -183,14 +188,12 @@ export default function(logAudit) {
         try {
             const familyId = await getFamilyId(req.user.id);
             const existing = (await pool.query('SELECT id FROM commercial_orders WHERE id=$1', [id])).rows[0];
-
             await pool.query(
                 `INSERT INTO commercial_orders (id, type, description, contact_id, amount, gross_amount, discount_amount, tax_amount, items, date, status, transaction_id, user_id, family_id) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
                  ON CONFLICT (id) DO UPDATE SET type=$2, description=$3, contact_id=$4, amount=$5, gross_amount=$6, discount_amount=$7, tax_amount=$8, items=$9, date=$10, status=$11, transaction_id=$12, deleted_at=NULL`,
                 [id, type, description, sanitizeValue(contactId), amount || 0, grossAmount || 0, discountAmount || 0, taxAmount || 0, JSON.stringify(items || []), date, status, sanitizeValue(transactionId), req.user.id, familyId]
             );
-            
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'order', id, description);
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
@@ -221,6 +224,15 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
+    router.delete('/services/contracts/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`UPDATE contracts SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'contract', req.params.id, 'Contrato removido');
+            res.json({ success: true });
+        } catch(err) { res.status(500).json({ error: err.message }); }
+    });
+
     router.post('/services/invoices', authenticateToken, async (req, res) => {
         const { id, number, series, type, amount, issueDate, status, contactId, fileUrl } = req.body;
         try {
@@ -233,6 +245,15 @@ export default function(logAudit) {
                 [id, number, series, type, amount || 0, issueDate, status, sanitizeValue(contactId), fileUrl, req.user.id, familyId]
             );
             await logAudit(pool, req.user.id, existing ? 'UPDATE' : 'CREATE', 'invoice', id, `NF ${number}`);
+            res.json({ success: true });
+        } catch(err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/services/invoices/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`UPDATE invoices SET deleted_at = NOW() WHERE id=$1 AND family_id=$2`, [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'invoice', req.params.id, 'Nota Fiscal removida');
             res.json({ success: true });
         } catch(err) { res.status(500).json({ error: err.message }); }
     });

@@ -409,5 +409,15 @@ export const api = {
     deleteInvoice: async (id: string) => {
         const res = await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() });
         return await handleResponse(res);
+    },
+    importInvoiceXml: async (file: File) => {
+        const formData = new FormData();
+        formData.append('xml', file);
+        const res = await fetch(`${API_URL}/services/invoices/import-xml`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: formData
+        });
+        return await handleResponse(res);
     }
 };
