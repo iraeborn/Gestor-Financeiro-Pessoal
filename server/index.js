@@ -58,14 +58,18 @@ io.on('connection', (socket) => {
  * logAudit - Centralizador de Logs e Disparador de Reatividade
  */
 const logAudit = async (pool, userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null) => {
+    // 1. Gravação no Banco (Isolada em try/catch para não quebrar o socket)
     try {
-        // 1. Gravação no Banco
         await pool.query(
             `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [userId, action, entity, entityId, details, previousState, changes]
         );
+    } catch (dbErr) {
+        console.error("[REALTIME DB LOG ERROR] Falha ao gravar log no banco, mas prosseguindo com socket:", dbErr.message);
+    }
 
-        // 2. Determinação do Alvo (Target Room)
+    // 2. Determinação do Alvo (Target Room) e Emissão
+    try {
         let targetRoom = null;
         if (familyIdOverride) {
             targetRoom = String(familyIdOverride).trim();
@@ -74,9 +78,8 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
             targetRoom = res.rows[0]?.family_id ? String(res.rows[0].family_id).trim() : String(userId).trim();
         }
 
-        // 3. Emissão do Evento
         if (targetRoom) {
-            console.log(`[REALTIME] >>> BROADCAST para sala [${targetRoom}] | Ação: ${action} | Entidade: ${entity} | Ator: ${userId}`);
+            console.log(`[REALTIME] >>> BROADCAST para sala [${targetRoom}] | Ação: ${action} | Entidade: ${entity}`);
             io.to(targetRoom).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -84,11 +87,9 @@ const logAudit = async (pool, userId, action, entity, entityId, details, previou
                 actorId: userId, 
                 timestamp: new Date() 
             });
-        } else {
-            console.warn(`[REALTIME] Aviso: Não foi possível determinar a sala para o evento ${entity}:${action}`);
         }
     } catch (e) { 
-        console.error("[REALTIME ERROR]", e); 
+        console.error("[REALTIME EMIT ERROR]", e); 
     }
 };
 

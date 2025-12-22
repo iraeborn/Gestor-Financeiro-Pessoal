@@ -130,8 +130,9 @@ export const initDb = async () => {
             await pool.query(q);
         }
 
-        // Migração Incremental
-        const alterQueries = [
+        // Migração para remover a FK que está causando erro no socket do cliente externo
+        const dbCleanup = [
+            `ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS origin TEXT`,
             `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
@@ -144,7 +145,7 @@ export const initDb = async () => {
             `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`
         ];
 
-        for (const q of alterQueries) {
+        for (const q of dbCleanup) {
             try { await pool.query(q); } catch (e) {}
         }
 
