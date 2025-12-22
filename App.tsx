@@ -5,7 +5,7 @@ import {
   Contact, Category, FinancialGoal, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  TransactionStatus, TransactionType, OSItem
+  TransactionStatus, TransactionType, OSItem, AppNotification
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
@@ -34,6 +34,7 @@ import ServiceModule from './components/ServiceModule';
 import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
 import ApprovalModal from './components/ApprovalModal';
+import NotificationPanel from './components/NotificationPanel';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -59,8 +60,12 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
+  
+  // Gestão de Notificações
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
 
-  // Estado para controle de aprovação remota (OS a partir do Socket)
+  // Estado para controle de aprovação remota (OS a partir do Socket ou Notificação)
   const [remoteApprovalOrder, setRemoteApprovalOrder] = useState<CommercialOrder | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
@@ -68,6 +73,27 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       setData(initialData);
+      
+      // Sincroniza notificações baseadas em itens do banco (ex: ordens APPROVED)
+      const pendingOrders = initialData.commercialOrders.filter(o => o.status === 'APPROVED');
+      const orderNotifications: AppNotification[] = pendingOrders.map(o => ({
+          id: `order-${o.id}`,
+          title: "Aprovação Pendente",
+          message: `O cliente ${o.contactName} aprovou: "${o.description}".`,
+          type: 'SUCCESS',
+          entity: 'order',
+          entityId: o.id,
+          timestamp: new Date().toISOString(),
+          isRead: false,
+          data: o
+      }));
+
+      setNotifications(prev => {
+          const existingIds = new Set(prev.map(n => n.id));
+          const newNotifs = orderNotifications.filter(n => !existingIds.has(n.id));
+          return [...prev, ...newNotifs];
+      });
+
       console.log(`[SYNC] Banco de dados sintonizado: ${new Date().toLocaleTimeString()}`);
       return initialData;
     } catch (e) {
@@ -111,27 +137,24 @@ const App: React.FC = () => {
             
             const updatedData = await loadData(true); 
 
-            // Lógica Especial: Se for uma aprovação de orçamento por cliente externo
+            // Se for uma aprovação de orçamento por cliente externo
             if (isExternal && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
                 const approvedOrder = updatedData.commercialOrders.find((o: any) => o.id === payload.entityId);
                 
                 if (approvedOrder) {
-                    const wantToConvert = await showConfirm({
-                        title: "Orçamento Aprovado Online!",
-                        message: (
-                            <div className="space-y-2">
-                                <p>O cliente <strong>{approvedOrder.contactName}</strong> acaba de aprovar a proposta: <em>"{approvedOrder.description}"</em>.</p>
-                                <p>Deseja processar o faturamento e abrir a <strong>Ordem de Serviço (OS)</strong> agora?</p>
-                            </div>
-                        ),
-                        confirmText: "Sim, processar agora",
-                        cancelText: "Depois"
-                    });
-
-                    if (wantToConvert) {
-                        setRemoteApprovalOrder(approvedOrder);
-                        setCurrentView('SRV_SALES'); // O modal de aprovação precisa dos dados de contas carregados na tela certa
-                    }
+                    const newNotif: AppNotification = {
+                        id: `order-live-${approvedOrder.id}-${Date.now()}`,
+                        title: "Orçamento Aprovado!",
+                        message: `${approvedOrder.contactName} aprovou a proposta online.`,
+                        type: 'SUCCESS',
+                        entity: 'order',
+                        entityId: approvedOrder.id,
+                        timestamp: new Date().toISOString(),
+                        isRead: false,
+                        data: approvedOrder
+                    };
+                    setNotifications(prev => [newNotif, ...prev]);
+                    showAlert(`Nova aprovação de ${approvedOrder.contactName}`, "success");
                 }
             } else if (isExternal) {
                 showAlert("Um cliente interagiu com uma proposta online.", "info");
@@ -146,7 +169,7 @@ const App: React.FC = () => {
         }
       };
     }
-  }, [currentUser?.familyId, currentUser?.id, loadData, showAlert, showConfirm]);
+  }, [currentUser?.familyId, currentUser?.id, loadData, showAlert]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -251,6 +274,9 @@ const App: React.FC = () => {
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
 
+          // Remove notificação após processar
+          setNotifications(prev => prev.filter(n => n.entityId !== order.id));
+
           await loadData(true);
           setLoading(false);
 
@@ -263,54 +289,23 @@ const App: React.FC = () => {
 
           if (confirmOS) {
               let totalEstimatedMinutes = 0;
-              
               const osItems: OSItem[] = (order.items || []).map(item => {
                   const catalogItem = data.serviceItems.find(si => si.id === item.serviceItemId);
                   const duration = (catalogItem?.defaultDuration || 0) * item.quantity;
                   totalEstimatedMinutes += duration;
-
-                  return {
-                    id: crypto.randomUUID(),
-                    serviceItemId: item.serviceItemId,
-                    code: catalogItem?.code || '',
-                    description: item.description,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    totalPrice: item.totalPrice,
-                    estimatedDuration: duration,
-                    isBillable: true
-                  };
+                  return { id: crypto.randomUUID(), serviceItemId: item.serviceItemId, code: catalogItem?.code || '', description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.totalPrice, estimatedDuration: duration, isBillable: true };
               });
-
               const startDate = new Date();
               const endDate = new Date(startDate.getTime() + totalEstimatedMinutes * 60000);
-
-              const newOS: ServiceOrder = {
-                  id: crypto.randomUUID(),
-                  title: order.description,
-                  description: `OS gerada automaticamente a partir da venda #${orderRef}.`,
-                  contactId: order.contactId,
-                  contactName: order.contactName,
-                  type: 'MANUTENCAO',
-                  origin: 'VENDA',
-                  priority: 'MEDIA',
-                  status: 'ABERTA',
-                  openedAt: new Date().toISOString(),
-                  startDate: startDate.toISOString().split('T')[0],
-                  endDate: endDate.toISOString().split('T')[0],
-                  items: osItems,
-                  totalAmount: order.amount
-              };
-              
+              const newOS: ServiceOrder = { id: crypto.randomUUID(), title: order.description, description: `OS gerada automaticamente a partir da venda #${orderRef}.`, contactId: order.contactId, contactName: order.contactName, type: 'MANUTENCAO', origin: 'VENDA', priority: 'MEDIA', status: 'ABERTA', openedAt: new Date().toISOString(), startDate: startDate.toISOString().split('T')[0], endDate: endDate.toISOString().split('T')[0], items: osItems, totalAmount: order.amount };
               await api.saveServiceOrder(newOS);
               await loadData(true);
-              showAlert("Venda aprovada e OS criada com sucesso!", "success");
+              showAlert("Venda aprovada e OS criada!", "success");
           } else {
               showAlert("Venda aprovada!", "success");
           }
       } catch (e) {
-          console.error(e);
-          showAlert("Erro no processo de aprovação.", "error");
+          showAlert("Erro no processo.", "error");
           setLoading(false);
       }
   };
@@ -384,23 +379,38 @@ const App: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-gray-800/50" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-xl" onClick={e => e.stopPropagation()}>
-            <Sidebar currentView={currentView} onChangeView={(view) => { setCurrentView(view); setIsMobileMenuOpen(false); }} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} />
+            <Sidebar currentView={currentView} onChangeView={(view) => { setCurrentView(view); setIsMobileMenuOpen(false); }} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} notificationCount={notifications.filter(n => !n.isRead).length} />
           </div>
         </div>
       )}
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
-        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} />
+        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} notificationCount={notifications.filter(n => !n.isRead).length} />
       </div>
-      <main className="flex-1 md:ml-64 h-screen overflow-y-auto">
+      <main className="flex-1 md:ml-64 h-screen overflow-y-auto relative">
         <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-100 sticky top-0 z-20">
             <div className="flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">F</div><span className="font-bold text-gray-800">FinManager</span></div>
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"><Menu className="w-6 h-6" /></button>
         </div>
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
+        
+        {/* Painel de Notificações */}
+        <NotificationPanel 
+            isOpen={isNotifPanelOpen} 
+            onClose={() => setIsNotifPanelOpen(false)} 
+            notifications={notifications} 
+            onMarkAsRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? {...n, isRead: true} : n))}
+            onAction={(notif) => {
+                if (notif.entity === 'order') {
+                    setRemoteApprovalOrder(notif.data);
+                    setIsNotifPanelOpen(false);
+                }
+            }}
+        />
       </main>
+
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
       
-      {/* Modal de Aprovação Remota (Triggered by Socket) */}
+      {/* Modal de Aprovação Remota (Triggered by Socket ou Notificação) */}
       {remoteApprovalOrder && (
           <ApprovalModal 
               isOpen={!!remoteApprovalOrder}

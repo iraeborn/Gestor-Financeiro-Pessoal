@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, PieChart, 
   Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
   ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
-  FileText, FileSignature, UserCog, Check, Building, Package
+  FileText, FileSignature, UserCog, Check, Building, Package, Bell
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -16,9 +16,14 @@ interface SidebarProps {
   currentUser: User;
   onUserUpdate: (u: User) => void;
   onOpenCollab?: () => void;
+  onOpenNotifications?: () => void;
+  notificationCount?: number;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser, onUserUpdate, onOpenCollab }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+    currentView, onChangeView, currentUser, onUserUpdate, 
+    onOpenCollab, onOpenNotifications, notificationCount = 0 
+}) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -40,7 +45,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   }
 
   // 2. Determinar Módulos Ativos (Prioridade: Config da Empresa > Config Pessoal)
-  // Membros devem herdar os módulos ativos do dono do workspace (ownerSettings)
   const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
   const activeModules = workspaceSettings.activeModules || {};
   const hasOdonto = activeModules.odonto;
@@ -63,9 +67,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
       }
   };
 
-  // Função auxiliar para checar permissão individual
   const canView = (permissionId: string) => {
-      if (isAdmin) return true; // Admins veem tudo que está ativo nos módulos
+      if (isAdmin) return true;
       return Array.isArray(userPermissions) && userPermissions.includes(permissionId);
   };
 
@@ -119,9 +122,23 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
   return (
     <>
     <div className="flex flex-col h-full bg-white border-r border-gray-100 shadow-sm">
-        <div className="p-6 flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg">F</div>
-            <span className="font-bold text-xl text-gray-800 tracking-tight">FinManager</span>
+        <div className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg">F</div>
+                <span className="font-bold text-xl text-gray-800 tracking-tight">FinManager</span>
+            </div>
+            
+            <button 
+                onClick={onOpenNotifications}
+                className="relative p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+            >
+                <Bell className="w-5 h-5" />
+                {notificationCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">
+                        {notificationCount}
+                    </span>
+                )}
+            </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-thin">

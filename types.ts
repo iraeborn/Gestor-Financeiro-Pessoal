@@ -367,6 +367,18 @@ export interface Invoice {
   fileUrl?: string;
 }
 
+export interface AppNotification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+    entity: 'order' | 'os' | 'system';
+    entityId: string;
+    timestamp: string;
+    isRead: boolean;
+    data?: any;
+}
+
 /**
  * Collaboration Member interface.
  */
