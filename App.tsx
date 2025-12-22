@@ -1,25 +1,15 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'export interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
-    entity: 'order' | 'os' | 'system';
-    entityId: string;
-    timestamp: string;
-    isRead: boolean;
-    data?: any;
-}
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  User, AuthResponse, AppState, ViewMode, Transaction, Account, 
-  Contact, Category, FinancialGoal, AppSettings, EntityType, 
+  User, AppState, ViewMode, Transaction, Account, 
+  Contact, Category, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
   TransactionStatus, TransactionType, OSItem, AppNotification
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Menu, Wrench } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 import Auth from './components/Auth';
@@ -118,16 +108,20 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentUser?.familyId) {
       if (socketRef.current) socketRef.current.disconnect();
-      // Fix: cast options to any and the result to any to bypass strict type checking for socket.io-client initialization and event methods
+      
       const socket = io({ 
         transports: ['websocket', 'polling'], 
         withCredentials: true, 
         reconnection: true, 
         reconnectionAttempts: 20 
-      } as any) as any;
+      } as any);
+      
       socketRef.current = socket;
-      // Fix: use inferred 'any' type for socket to avoid property 'on' errors
-      socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
+
+      socket.on('connect', () => { 
+        socket.emit('join_family', currentUser.familyId); 
+      });
+
       socket.on('DATA_UPDATED', async (payload: any) => { 
         const isExternal = payload.actorId === 'EXTERNAL_CLIENT';
         const isOtherMember = payload.actorId !== currentUser.id;
@@ -136,7 +130,17 @@ const App: React.FC = () => {
             if (isExternal && payload.entity === 'order' && payload.changes?.status === 'APPROVED') {
                 const approvedOrder = updatedData.commercialOrders.find((o: any) => o.id === payload.entityId);
                 if (approvedOrder) {
-                    const newNotif: AppNotification = { id: `order-live-${approvedOrder.id}-${Date.now()}`, title: "Orçamento Aprovado!", message: `${approvedOrder.contactName} aprovou a proposta online.`, type: 'SUCCESS', entity: 'order', entityId: approvedOrder.id, timestamp: new Date().toISOString(), isRead: false, data: approvedOrder };
+                    const newNotif: AppNotification = { 
+                      id: `order-live-${approvedOrder.id}-${Date.now()}`, 
+                      title: "Orçamento Aprovado!", 
+                      message: `${approvedOrder.contactName} aprovou a proposta online.`, 
+                      type: 'SUCCESS', 
+                      entity: 'order', 
+                      entityId: approvedOrder.id, 
+                      timestamp: new Date().toISOString(), 
+                      isRead: false, 
+                      data: approvedOrder 
+                    };
                     setNotifications(prev => [newNotif, ...prev]);
                     showAlert(`Nova aprovação de ${approvedOrder.contactName}`, "success");
                 }
@@ -231,38 +235,25 @@ const App: React.FC = () => {
           let transactionId = undefined;
           const orderRef = order.id.substring(0, 8).toUpperCase();
           
-          // 1. Gerar Transação Financeira
           if (approvalData.generateTransaction) {
               transactionId = crypto.randomUUID();
               const trans: Transaction = { id: transactionId, description: `Venda: ${order.description} (Ref: #${orderRef})`, amount: order.amount, type: TransactionType.INCOME, category: 'Vendas e Serviços', date: new Date().toISOString().split('T')[0], status: TransactionStatus.PENDING, accountId: approvalData.accountId, contactId: order.contactId, isRecurring: false };
               await api.saveTransaction(trans);
           }
 
-          // 2. Gerar Nota Fiscal com Vínculo
           if (approvalData.generateInvoice) {
               const inv: Invoice = { 
-                id: crypto.randomUUID(), 
-                amount: order.amount, 
-                issue_date: new Date().toISOString().split('T')[0], 
-                status: 'ISSUED', 
-                type: approvalData.invoiceType, 
-                contactId: order.contactId, 
-                number: Math.floor(Math.random() * 10000).toString(), 
-                series: '1',
-                orderId: order.id, // Vínculo Automático!
-                description: `Nota Fiscal referente ao pedido #${orderRef}: ${order.description}`
+                id: crypto.randomUUID(), amount: order.amount, issue_date: new Date().toISOString().split('T')[0], status: 'ISSUED', type: approvalData.invoiceType, contactId: order.contactId, number: Math.floor(Math.random() * 10000).toString(), series: '1', orderId: order.id, description: `Nota Fiscal referente ao pedido #${orderRef}: ${order.description}`
               };
               await api.saveInvoice(inv);
           }
 
-          // 3. Atualizar Status do Pedido
           const updatedOrder = { ...order, status: 'CONFIRMED' as any, transactionId: transactionId || order.transactionId };
           await api.saveCommercialOrder(updatedOrder);
           setNotifications(prev => prev.filter(n => n.entityId !== order.id));
           await loadData(true);
           setLoading(false);
 
-          // 4. Fluxo de OS
           const confirmOS = await showConfirm({ title: "Venda Aprovada!", message: "Deseja criar uma Ordem de Serviço (OS) para este registro agora?", confirmText: "Sim, criar OS", cancelText: "Não, apenas aprovar" });
           if (confirmOS) {
               setLoading(true);
@@ -286,22 +277,15 @@ const App: React.FC = () => {
 
   const wrapSave = async (fn: any, item: any, msg: string, newContact?: Contact) => {
       setLoading(true);
-      try { 
-          if (newContact) await api.saveContact(newContact); 
-          await fn(item); 
-          await loadData(true); 
-          showAlert(msg, "success"); 
-      } catch(e) { showAlert("Erro ao salvar.", "error"); }
+      try { if (newContact) await api.saveContact(newContact); await fn(item); await loadData(true); showAlert(msg, "success"); } 
+      catch(e) { showAlert("Erro ao salvar.", "error"); }
       finally { setLoading(false); }
   };
   
   const wrapDel = async (fn: any, id: string, msg: string) => {
       setLoading(true);
-      try { 
-          await fn(id); 
-          await loadData(true); 
-          showAlert(msg, "success"); 
-      } catch(e) { showAlert("Erro ao excluir.", "error"); }
+      try { await fn(id); await loadData(true); showAlert(msg, "success"); } 
+      catch(e) { showAlert("Erro ao excluir.", "error"); }
       finally { setLoading(false); }
   };
 

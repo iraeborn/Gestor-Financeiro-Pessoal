@@ -21,7 +21,6 @@ const pool = new Pool(poolConfig);
 
 export const initDb = async () => {
     const queries = [
-        // Core Tables
         `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, PRIMARY KEY (user_id, family_id))`,
         `CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance DECIMAL, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, credit_limit DECIMAL, closing_day INTEGER, due_day INTEGER)`,
@@ -34,98 +33,11 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS cost_centers (id TEXT PRIMARY KEY, name TEXT, code TEXT, family_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS departments (id TEXT PRIMARY KEY, name TEXT, family_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, family_id TEXT)`,
-        `CREATE TABLE IF NOT EXISTS module_services (
-            id TEXT PRIMARY KEY, 
-            name TEXT, 
-            code TEXT, 
-            default_price DECIMAL(15,2), 
-            module_tag TEXT, 
-            user_id TEXT, 
-            family_id TEXT, 
-            type TEXT DEFAULT 'SERVICE',
-            cost_price DECIMAL(15,2),
-            unit TEXT,
-            default_duration INTEGER DEFAULT 0,
-            description TEXT,
-            image_url TEXT,
-            brand TEXT,
-            items JSONB DEFAULT '[]',
-            is_composite BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT NOW(), 
-            deleted_at TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS commercial_orders (
-            id TEXT PRIMARY KEY, 
-            type TEXT, 
-            description TEXT, 
-            contact_id TEXT, 
-            amount DECIMAL(15,2), 
-            gross_amount DECIMAL(15,2), 
-            discount_amount DECIMAL(15,2), 
-            tax_amount DECIMAL(15,2), 
-            items JSONB DEFAULT '[]',
-            date DATE, 
-            status TEXT, 
-            transaction_id TEXT, 
-            user_id TEXT, 
-            family_id TEXT, 
-            access_token TEXT,
-            created_at TIMESTAMP DEFAULT NOW(), 
-            deleted_at TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS service_orders (
-            id TEXT PRIMARY KEY, 
-            number SERIAL, 
-            title TEXT, 
-            description TEXT, 
-            contact_id TEXT, 
-            status TEXT, 
-            total_amount DECIMAL(15,2) DEFAULT 0, 
-            start_date DATE, 
-            end_date DATE, 
-            user_id TEXT, 
-            family_id TEXT, 
-            type TEXT,
-            origin TEXT,
-            priority TEXT,
-            opened_at TIMESTAMP DEFAULT NOW(),
-            items JSONB DEFAULT '[]',
-            created_at TIMESTAMP DEFAULT NOW(), 
-            deleted_at TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS contracts (
-            id TEXT PRIMARY KEY, 
-            title TEXT, 
-            contact_id TEXT, 
-            value DECIMAL(15,2), 
-            start_date DATE, 
-            end_date DATE, 
-            status TEXT, 
-            billing_day INTEGER, 
-            user_id TEXT, 
-            family_id TEXT, 
-            created_at TIMESTAMP DEFAULT NOW(), 
-            deleted_at TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS invoices (
-            id TEXT PRIMARY KEY, 
-            number TEXT, 
-            series TEXT, 
-            type TEXT, 
-            amount DECIMAL(15,2), 
-            issue_date DATE, 
-            status TEXT, 
-            contact_id TEXT, 
-            description TEXT,
-            items JSONB DEFAULT '[]',
-            file_url TEXT, 
-            order_id TEXT,
-            service_order_id TEXT,
-            user_id TEXT, 
-            family_id TEXT, 
-            created_at TIMESTAMP DEFAULT NOW(), 
-            deleted_at TIMESTAMP
-        )`,
+        `CREATE TABLE IF NOT EXISTS module_services (id TEXT PRIMARY KEY, name TEXT, code TEXT, default_price DECIMAL(15,2), module_tag TEXT, user_id TEXT, family_id TEXT, type TEXT DEFAULT 'SERVICE', cost_price DECIMAL(15,2), unit TEXT, default_duration INTEGER DEFAULT 0, description TEXT, image_url TEXT, brand TEXT, items JSONB DEFAULT '[]', is_composite BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL(15,2), gross_amount DECIMAL(15,2), discount_amount DECIMAL(15,2), tax_amount DECIMAL(15,2), items JSONB DEFAULT '[]', date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, access_token TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL(15,2) DEFAULT 0, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, type TEXT, origin TEXT, priority TEXT, opened_at TIMESTAMP DEFAULT NOW(), items JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL(15,2), start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL(15,2), issue_date DATE, status TEXT, contact_id TEXT, description TEXT, items JSONB DEFAULT '[]', file_url TEXT, order_id TEXT, service_order_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB)`
     ];
     
@@ -134,30 +46,18 @@ export const initDb = async () => {
             await pool.query(q);
         }
 
-        // Migração para campos novos e correções
-        const dbCleanup = [
-            `ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS origin TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP DEFAULT NOW()`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS default_duration INTEGER DEFAULT 0`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
-            `ALTER TABLE module_services ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS access_token TEXT`,
-            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`,
-            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+        const migrations = [
             `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS order_id TEXT`,
-            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS service_order_id TEXT`
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS service_order_id TEXT`,
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`,
+            `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`
         ];
 
-        for (const q of dbCleanup) {
-            try { await pool.query(q); } catch (e) {}
+        for (const m of migrations) {
+            try { await pool.query(m); } catch (e) {}
         }
 
-        console.log("✅ [DATABASE] Estrutura verificada e sincronizada.");
+        console.log("✅ [DATABASE] Estrutura ERP sincronizada.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }

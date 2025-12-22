@@ -25,37 +25,45 @@ export default function(logAudit) {
             
             // Parser Robusto via Regex para múltiplos padrões (NFe e NFSe)
             const extract = (tag, content) => {
-                const match = content.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`, 'i'));
-                return match ? match[1] : null;
+                const match = content.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+                return match ? match[1].trim() : null;
             };
 
             const sanitizeFloat = (str) => {
                 if (!str) return "0";
-                // Remove R$, espaços e converte vírgula decimal para ponto
-                return str.replace(/[R\$\s]/g, '').replace(',', '.');
+                // Remove R$, espaços, pontos de milhar e converte vírgula decimal para ponto
+                let clean = str.replace(/[R\$\s]/g, '');
+                // Se tem ponto e vírgula, o ponto é milhar (ex: 1.250,50)
+                if (clean.includes(',') && clean.includes('.')) {
+                    clean = clean.replace(/\./g, '');
+                }
+                // Converte vírgula para ponto se for o único separador decimal
+                clean = clean.replace(',', '.');
+                return clean;
             };
 
-            // 1. Número da Nota (nNF para NFe, nNFSe ou Numero para NFSe)
+            // 1. Número da Nota
             const number = extract('nNF', xmlContent) || extract('nNFSe', xmlContent) || extract('Numero', xmlContent);
             
             // 2. Série
             const series = extract('serie', xmlContent) || extract('Serie', xmlContent);
             
-            // 3. Valor (vNF para NFe total, vLiq/vServ para NFSe padrão, ValorServicos/vServicos para outros)
+            // 3. Valor (Busca agressiva)
             const amountStr = extract('vNF', xmlContent) || 
                               extract('vLiq', xmlContent) || 
                               extract('vServ', xmlContent) || 
                               extract('vServicos', xmlContent) || 
                               extract('vLiquido', xmlContent) ||
                               extract('ValorServicos', xmlContent) ||
-                              extract('ValorLiquido', xmlContent);
+                              extract('ValorLiquido', xmlContent) ||
+                              extract('ValorTotal', xmlContent);
             
             const parsedAmount = parseFloat(sanitizeFloat(amountStr));
 
-            // 4. Data de Emissão (dhEmi, dEmi ou dhProc ou DataEmissao)
+            // 4. Data de Emissão
             const dateStr = extract('dhEmi', xmlContent) || extract('dEmi', xmlContent) || extract('dhProc', xmlContent) || extract('DataEmissao', xmlContent);
             
-            // 5. Descrição do Serviço (xDescServ ou Discriminacao)
+            // 5. Descrição
             const description = extract('xDescServ', xmlContent) || extract('Discriminacao', xmlContent) || 'Importado via XML';
 
             // 6. Tomador (Destinatário)
@@ -69,111 +77,41 @@ export default function(logAudit) {
             if (tomaBlock) {
                 customerName = extract('xNome', tomaBlock[1]) || extract('RazaoSocial', tomaBlock[1]) || customerName;
                 customerDoc = extract('CNPJ', tomaBlock[1]) || extract('CPF', tomaBlock[1]) || extract('Cnpj', tomaBlock[1]) || extract('Cpf', tomaBlock[1]) || '';
-            } else {
-                const xNomeMatches = xmlContent.match(/<(?:xNome|RazaoSocial)[^>]*>(.*?)<\/(?:xNome|RazaoSocial)>/gi);
-                if (xNomeMatches && xNomeMatches.length >= 2) {
-                    customerName = xNomeMatches[1].replace(/<\/?(?:xNome|RazaoSocial)[^>]*>/gi, '').trim();
-                }
             }
 
-            // 7. Extração de Itens (Composição Técnica)
             const items = [];
-
-            // Caso A: Nota de Serviço (NFSe) - Geralmente um item único ou bloco de serviços
-            if (xmlContent.includes('NFSe') || xmlContent.includes('infNFSe') || xmlContent.includes('ListaServicos')) {
-                const vServValue = parseFloat(sanitizeFloat(extract('vServ', xmlContent) || extract('vServicos', xmlContent) || extract('ValorServicos', xmlContent) || amountStr));
-                items.push({
-                    id: crypto.randomUUID(),
-                    description: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
-                    quantity: 1,
-                    unitPrice: vServValue,
-                    totalPrice: vServValue,
-                    isBillable: true
+            // Detalhamento de itens se for NFe (Produto)
+            const detMatches = xmlContent.match(/<det[^>]*>([\s\S]*?)<\/det>/gi);
+            if (detMatches) {
+                detMatches.forEach(detHtml => {
+                    const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
+                    if (prodMatch) {
+                        const p = prodMatch[1];
+                        const q = parseFloat(sanitizeFloat(extract('qCom', p) || '1'));
+                        const v = parseFloat(sanitizeFloat(extract('vUnCom', p) || '0'));
+                        items.push({
+                            id: crypto.randomUUID(),
+                            code: extract('cProd', p),
+                            description: extract('xProd', p),
+                            quantity: q,
+                            unitPrice: v,
+                            totalPrice: q * v,
+                            isBillable: true
+                        });
+                    }
                 });
-            } 
-            // Caso B: Nota de Produto (NFe) - Percorre tags <det>
-            else {
-                const detMatches = xmlContent.match(/<det[^>]*>([\s\S]*?)<\/det>/gi);
-                if (detMatches) {
-                    detMatches.forEach(detHtml => {
-                        const prodMatch = detHtml.match(/<prod>([\s\S]*?)<\/prod>/i);
-                        if (prodMatch) {
-                            const p = prodMatch[1];
-                            const q = parseFloat(sanitizeFloat(extract('qCom', p) || '1'));
-                            const v = parseFloat(sanitizeFloat(extract('vUnCom', p) || '0'));
-                            items.push({
-                                id: crypto.randomUUID(),
-                                code: extract('cProd', p),
-                                description: extract('xProd', p),
-                                quantity: q,
-                                unitPrice: v,
-                                totalPrice: q * v,
-                                isBillable: true
-                            });
-                        }
-                    });
-                }
             }
-            
-            if (!number || parsedAmount === 0) {
-                // Log para debug se necessário
-                console.warn(`[XML IMPORT] Falha ao extrair campos críticos. Numero: ${number}, Valor: ${parsedAmount}`);
-                return res.status(422).json({ error: "O arquivo XML não possui os campos básicos (Número/Valor) reconhecidos. Verifique se é uma nota eletrônica válida." });
+
+            if (isNaN(parsedAmount) || parsedAmount === 0) {
+                return res.status(422).json({ error: "Valor não detectado no XML. Verifique se é uma nota eletrônica válida." });
             }
 
             res.json({
-                number: number,
-                series: series,
-                amount: parsedAmount,
+                number, series, amount: parsedAmount,
                 issueDate: dateStr ? dateStr.substring(0, 10) : new Date().toISOString().split('T')[0],
-                contactName: customerName,
-                contactDoc: customerDoc,
-                description: description,
-                items: items,
-                status: 'ISSUED'
+                contactName: customerName, contactDoc: customerDoc,
+                description, items, status: 'ISSUED'
             });
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    // --- PUBLIC ACCESS ROUTES ---
-    router.get('/services/public/order/:token', async (req, res) => {
-        try {
-            const { token } = req.params;
-            const orderRes = await pool.query(`
-                SELECT o.*, c.name as contact_name, u.name as company_name, 
-                       cp.trade_name, cp.phone as company_phone, cp.email as company_email,
-                       u.family_id as workspace_id
-                FROM commercial_orders o
-                LEFT JOIN contacts c ON o.contact_id = c.id
-                JOIN users u ON o.user_id = u.id
-                LEFT JOIN company_profiles cp ON o.family_id = cp.user_id
-                WHERE o.access_token = $1 AND o.deleted_at IS NULL
-            `, [token]);
-            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado ou expirado." });
-            const order = orderRes.rows[0];
-            if (typeof order.items === 'string') order.items = JSON.parse(order.items);
-            order.workspace_id = order.workspace_id || order.user_id;
-            res.json(order);
-        } catch (err) { res.status(500).json({ error: err.message }); }
-    });
-
-    router.post('/services/public/order/:token/status', async (req, res) => {
-        const { token } = req.params;
-        const { status } = req.body;
-        try {
-            const orderRes = await pool.query(`
-                SELECT o.id, o.family_id, o.user_id, o.status, o.description, u.family_id as owner_workspace 
-                FROM commercial_orders o 
-                JOIN users u ON o.user_id = u.id
-                WHERE o.access_token = $1 AND o.deleted_at IS NULL
-            `, [token]);
-            if (orderRes.rows.length === 0) return res.status(404).json({ error: "Orçamento não encontrado." });
-            const order = orderRes.rows[0];
-            if (['CONFIRMED', 'CANCELED'].includes(order.status)) return res.status(400).json({ error: "Esta proposta já foi finalizada." });
-            await pool.query('UPDATE commercial_orders SET status = $1 WHERE id = $2', [status, order.id]);
-            const targetRoom = order.owner_workspace || order.family_id || order.user_id;
-            await logAudit(pool, 'EXTERNAL_CLIENT', 'UPDATE', 'order', order.id, `Cliente respondeu online: ${order.description}`, { status: order.status }, { status: status }, targetRoom);
-            res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
