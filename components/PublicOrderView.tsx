@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getPublicOrder, updatePublicOrderStatus } from '../services/storageService';
-import { ShoppingBag, CheckCircle, XCircle, Clock, Info, User, Package, Calculator, ReceiptText, Smartphone, Mail, Globe, Lock, Loader2 } from 'lucide-react';
+import { ShoppingBag, CheckCircle, XCircle, Clock, Info, User, Package, Calculator, ReceiptText, Smartphone, Mail, Globe, Lock, Loader2, AlertCircle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface PublicOrderViewProps {
@@ -14,6 +14,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [feedback, setFeedback] = useState<{msg: string, type: 'error' | 'success'} | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   const loadOrder = async (silent = false) => {
@@ -32,9 +33,7 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
     loadOrder();
   }, [token]);
 
-  // Sincronização em Tempo Real (Gestor <-> Clientes <-> Clientes)
   useEffect(() => {
-    // IMPORTANTE: workspace_id retornado pela API garante a sala correta
     if (order?.workspace_id || order?.family_id || order?.user_id) {
         const targetRoom = order.workspace_id || order.family_id || order.user_id;
         
@@ -47,16 +46,12 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            console.log(`[SOCKET CLIENT] Sintonizado na sala de negociação: ${targetRoom}`);
             socket.emit('join_family', targetRoom);
         });
 
         socket.on('DATA_UPDATED', (payload) => {
-            // Sincroniza se a alteração for neste orçamento específico
             if (payload.entity === 'order' && payload.entityId === order.id) {
-                // Evita recarregar se eu for o ator da ação (para não piscar a tela)
                 if (!actionLoading) {
-                    console.log("[SOCKET CLIENT] Atualização externa detectada. Sincronizando...");
                     loadOrder(true);
                 }
             }
@@ -69,14 +64,14 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
   const handleAction = async (status: string) => {
     if (actionLoading) return;
     setActionLoading(true);
+    setFeedback(null);
     try {
       await updatePublicOrderStatus(token, status);
       setSuccess(`Proposta atualizada! O status agora é: ${status === 'APPROVED' ? 'Aprovado' : status === 'REJECTED' ? 'Recusado' : 'Em Análise'}.`);
       setOrder({ ...order, status });
     } catch (e: any) {
-      alert("Erro ao processar sua resposta: " + e.message);
+      setFeedback({ msg: "Não foi possível enviar sua resposta: " + e.message, type: 'error' });
     } finally {
-      // Pequeno delay para evitar que o sinal de volta do socket limpe o estado de sucesso
       setTimeout(() => setActionLoading(false), 1500);
     }
   };
@@ -142,6 +137,13 @@ const PublicOrderView: React.FC<PublicOrderViewProps> = ({ token }) => {
         </header>
 
         <main className="max-w-4xl mx-auto mt-8 px-4 space-y-6">
+            {feedback && (
+                <div className={`p-4 rounded-2xl flex items-center gap-3 animate-slide-in-top ${feedback.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                    {feedback.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                    <p className="text-sm font-bold">{feedback.msg}</p>
+                </div>
+            )}
+
             <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden border border-gray-100">
                 <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-10 text-white relative">
                     <ShoppingBag className="absolute right-10 top-10 w-32 h-32 opacity-10" />

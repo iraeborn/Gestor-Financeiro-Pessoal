@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api } from '../services/storageService';
@@ -55,6 +55,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [taxPercent, setTaxPercent] = useState<number>(0);
     const [sharing, setSharing] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [modalImporting, setModalImporting] = useState(false);
 
     const [isApprovalOpen, setIsApprovalOpen] = useState(false);
     const [selectedOrderForApproval, setSelectedOrderForApproval] = useState<CommercialOrder | null>(null);
@@ -63,6 +64,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const modalFileInputRef = useRef<HTMLInputElement>(null);
 
     const isCatalog = currentView === 'SRV_CATALOG';
     const isOS = currentView === 'SRV_OS';
@@ -188,6 +190,36 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
     };
 
+    const handleUpdateInvoiceViaXml = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setModalImporting(true);
+        try {
+            const data = await api.importInvoiceXml(file);
+            // Atualiza o formulário mantendo o ID original se houver
+            setFormData((prev: any) => ({
+                ...prev,
+                number: data.number,
+                series: data.series,
+                amount: data.amount,
+                issue_date: data.issueDate,
+                issueDate: data.issueDate,
+                status: data.status
+            }));
+            
+            if (data.contactName) {
+                setContactSearch(data.contactName);
+            }
+
+            showAlert("Dados da Nota Fiscal atualizados via XML!", "success");
+        } catch (e: any) {
+            showAlert(e.message || "Erro ao ler arquivo XML.", "error");
+        } finally {
+            setModalImporting(false);
+            if (modalFileInputRef.current) modalFileInputRef.current.value = '';
+        }
+    };
+
     const handleOpenModal = (item?: any) => {
         if (item) {
             if (item.contactId) {
@@ -273,6 +305,23 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         setSelectedOrderForApproval(null);
     };
 
+    const handleDeleteRecord = async (type: string, id: string, title?: string) => {
+        const confirm = await showConfirm({
+            title: "Excluir Registro",
+            message: `Tem certeza que deseja remover "${title || 'este registro'}"? Esta operação não pode ser desfeita.`,
+            variant: "danger",
+            confirmText: "Sim, Excluir"
+        });
+
+        if (confirm) {
+            if (type === 'OS') onDeleteOS(id);
+            else if (type === 'SALE' || type === 'PURCHASE') onDeleteOrder(id);
+            else if (type === 'CONTRACT') onDeleteContract(id);
+            else if (type === 'INVOICE') onDeleteInvoice(id);
+            else if (type === 'CATALOG' && onDeleteCatalogItem) onDeleteCatalogItem(id);
+        }
+    };
+
     const getOSStatusColor = (status: string) => {
         switch(status) {
             case 'ABERTA': case 'DRAFT': return 'bg-amber-100 text-amber-700';
@@ -337,7 +386,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     <div className="text-sm font-black text-gray-900">{formatCurrency(getResolvedPrice(os))}</div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => handleOpenModal(os)} className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg"><Wrench className="w-4 h-4"/></button>
-                                        <button onClick={() => { if(window.confirm('Excluir?')) onDeleteOS(os.id); }} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                        <button onClick={() => handleDeleteRecord('OS', os.id, os.title)} className="p-2 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                             </div>
@@ -382,7 +431,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             {nf.fileUrl && <a href={nf.fileUrl} target="_blank" className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Download className="w-4 h-4"/></a>}
                                             <button onClick={() => handleOpenModal(nf)} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"><Wrench className="w-4 h-4"/></button>
-                                            <button onClick={() => { if(window.confirm('Excluir esta Nota Fiscal?')) onDeleteInvoice(nf.id); }} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                            <button onClick={() => handleDeleteRecord('INVOICE', nf.id, `NF ${nf.number}`)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -398,11 +447,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 {filtered.map(item => {
                     const isDraft = item.status === 'DRAFT';
                     const isSale = currentView === 'SRV_SALES';
+                    const itemTitle = item.description || item.title || item.name;
                     return (
                         <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all group">
                              <div className="flex justify-between items-start mb-4">
                                 <div className="flex flex-col overflow-hidden">
-                                    <div className="flex items-center gap-2"><span className="font-bold text-gray-800 truncate">{item.description || item.title || item.name}</span>{item.isComposite && <span title="Item Composto / Kit"><Layers className="w-3 h-3 text-indigo-500" /></span>}</div>
+                                    <div className="flex items-center gap-2"><span className="font-bold text-gray-800 truncate">{itemTitle}</span>{item.isComposite && <span title="Item Composto / Kit"><Layers className="w-3 h-3 text-indigo-500" /></span>}</div>
                                     <span className="text-xs text-gray-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.contactName || (isCatalog ? 'Item de Catálogo' : 'Venda')}</span>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
@@ -414,7 +464,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {isSale && isDraft && <button onClick={() => { setSelectedOrderForApproval(item); setIsApprovalOpen(true); }} className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg"><CheckCircle className="w-4 h-4"/></button>}
                                     <button onClick={() => handleOpenModal(item)} className="p-1.5 text-indigo-400 hover:text-indigo-600"><Wrench className="w-4 h-4"/></button>
-                                    <button onClick={() => { if(window.confirm('Excluir?')) { if (isSale || currentView === 'SRV_PURCHASES') onDeleteOrder(item.id); else if (currentView === 'SRV_CONTRACTS') onDeleteContract(item.id); } }} className="p-1.5 text-gray-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+                                    <button onClick={() => handleDeleteRecord(isCatalog ? 'CATALOG' : (isSale ? 'SALE' : (currentView === 'SRV_PURCHASES' ? 'PURCHASE' : 'CONTRACT')), item.id, itemTitle)} className="p-1.5 text-gray-400 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
                                  </div>
                             </div>
                         </div>
@@ -488,11 +538,70 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         )}
                                     </div>
 
+                                    {isCatalog && !formData.isComposite && (
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 p-6 rounded-2xl border border-gray-100 animate-fade-in">
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black uppercase text-indigo-400 mb-1 ml-1">Preço Venda (R$)</label>
+                                                <div className="relative">
+                                                    <DollarSign className="w-4 h-4 text-indigo-300 absolute left-3 top-2.5" />
+                                                    <input type="number" step="0.01" className="w-full pl-9 rounded-xl border border-indigo-100 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-black text-indigo-700" value={formData.defaultPrice || 0} onChange={e => setFormData({...formData, defaultPrice: Number(e.target.value)})} />
+                                                </div>
+                                            </div>
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Preço Custo (R$)</label>
+                                                <div className="relative">
+                                                    <Tag className="w-4 h-4 text-gray-300 absolute left-3 top-2.5" />
+                                                    <input type="number" step="0.01" className="w-full pl-9 rounded-xl border border-gray-200 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.costPrice || 0} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} />
+                                                </div>
+                                            </div>
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Unidade</label>
+                                                <div className="relative">
+                                                    <Box className="w-4 h-4 text-gray-300 absolute left-3 top-2.5" />
+                                                    <select className="w-full pl-9 rounded-xl border border-gray-200 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none bg-white" value={formData.unit || 'UN'} onChange={e => setFormData({...formData, unit: e.target.value})}>
+                                                        {SERVICE_UNITS.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="md:col-span-1">
+                                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Duração (min)</label>
+                                                <div className="relative">
+                                                    <Timer className="w-4 h-4 text-gray-300 absolute left-3 top-2.5" />
+                                                    <input type="number" className="w-full pl-9 rounded-xl border border-gray-200 p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.defaultDuration || 0} onChange={e => setFormData({...formData, defaultDuration: Number(e.target.value)})} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {isNF && (
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                            <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Número da Nota</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.number || ''} onChange={e => setFormData({...formData, number: e.target.value})} /></div>
-                                            <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Série</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.series || ''} onChange={e => setFormData({...formData, series: e.target.value})} /></div>
-                                            <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Data de Emissão</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.issue_date || formData.issueDate || ''} onChange={e => setFormData({...formData, issueDate: e.target.value})} /></div>
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Número da Nota</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.number || ''} onChange={e => setFormData({...formData, number: e.target.value})} /></div>
+                                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Série</label><input type="text" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.series || ''} onChange={e => setFormData({...formData, series: e.target.value})} /></div>
+                                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Data de Emissão</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.issue_date || formData.issueDate || ''} onChange={e => setFormData({...formData, issueDate: e.target.value})} /></div>
+                                            </div>
+                                            
+                                            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 shadow-sm">
+                                                        <FileSearch className="w-6 h-6" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-black text-emerald-800 uppercase tracking-widest leading-none mb-1">Preencher via XML</p>
+                                                        <p className="text-[10px] text-emerald-600 font-bold uppercase opacity-70">O sistema extrai os dados automaticamente</p>
+                                                    </div>
+                                                </div>
+                                                <input type="file" ref={modalFileInputRef} onChange={handleUpdateInvoiceViaXml} accept=".xml" className="hidden" />
+                                                <button 
+                                                    type="button" 
+                                                    disabled={modalImporting}
+                                                    onClick={() => modalFileInputRef.current?.click()}
+                                                    className="bg-white text-emerald-700 px-5 py-2.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all border border-emerald-100 shadow-sm whitespace-nowrap"
+                                                >
+                                                    {modalImporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileUp className="w-4 h-4" />}
+                                                    Importar XML da Nota
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
 
@@ -500,7 +609,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
                                     {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') && (<div className="space-y-4"><div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Aplicado (R$)</label><div className="relative"><Percent className="w-4 h-4 text-gray-400 absolute left-3 top-3" /><input type="number" step="0.01" className="w-full pl-9 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold bg-white" value={formData.discountAmount || ''} onChange={e => setFormData({...formData, discountAmount: e.target.value})} placeholder="0,00"/></div></div><div className="p-4 bg-white rounded-2xl border border-gray-100 text-xs space-y-2 shadow-sm"><div className="flex justify-between items-center text-gray-500 font-medium"><span>Subtotal Bruto</span><span>{formatCurrency(pricing.gross)}</span></div><div className="flex justify-between items-center text-rose-500 font-black"><span className="flex items-center gap-1"><Tag className="w-3 h-3"/> Desconto</span><span>- {formatCurrency(pricing.disc)}</span></div></div></div>)}
-                                    {!isCatalog && (<div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Situação Atual</label><select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="ABERTA">Aberta</option><option value="APROVADA">Aprovada</option><option value="CONFIRMED">Confirmada</option><option value="ON_HOLD">Em Espera</option><option value="REJECTED">Recusada</option><option value="CANCELADA">Cancelada</option></select></div>)}
+                                    {!isCatalog && (<div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Situação Atual</label><select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="ABERTA">Aberta</option><option value="APROVADA">Aprovada</option><option value="CONFIRMED">Confirmada</option><option value="ON_HOLD">Em Espera</option><option value="REJECTED">Recusada</option><option value="CANCELADA">Cancelada</option><option value="ISSUED">Emitida</option></select></div>)}
                                     <div className="pt-4 border-t border-gray-200"><div className="flex justify-between items-center mb-1"><span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : (currentView === 'SRV_SALES' && isRecordDraft ? 'Valor Orçado' : 'Valor Líquido')}</span>{(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}</div><p className="text-3xl font-black text-gray-900">{formatCurrency(pricing.net)}</p></div>
                                     <div className="space-y-3"><button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" /> Salvar Alterações</button><button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button></div>
                                 </div>
