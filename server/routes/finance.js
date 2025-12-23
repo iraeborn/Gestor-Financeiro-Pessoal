@@ -12,6 +12,29 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
+// Campos que devem ser tratados como números
+const numericFields = [
+    'balance', 'amount', 'target_amount', 'current_amount', 
+    'total_amount', 'gross_amount', 'discount_amount', 'tax_amount',
+    'value', 'unit_price', 'total_price', 'cost_price', 'credit_limit'
+];
+
+const castNumericFields = (row) => {
+    if (!row) return row;
+    const newRow = { ...row };
+    for (const key in newRow) {
+        if (numericFields.includes(key)) {
+            newRow[key] = newRow[key] === null ? 0 : Number(newRow[key]);
+        }
+        // Converter snake_case para camelCase para o frontend (compatibilidade)
+        if (key === 'target_amount') newRow.targetAmount = newRow[key];
+        if (key === 'current_amount') newRow.currentAmount = newRow[key];
+        if (key === 'total_amount') newRow.totalAmount = newRow[key];
+        if (key === 'issue_date') newRow.issueDate = newRow[key];
+    }
+    return newRow;
+};
+
 export default function(logAudit) {
 
     const getFamilyId = async (userId) => {
@@ -53,11 +76,12 @@ export default function(logAudit) {
             settledResults.forEach((result, idx) => {
                 const key = keys[idx];
                 if (key === 'companyProfile') {
-                    results[key] = result.rows[0] || null;
+                    results[key] = castNumericFields(result.rows[0]) || null;
                 } else {
                     results[key] = result.rows.map(r => {
-                        if (r.created_by_name) r.createdByName = r.created_by_name;
-                        return r;
+                        const casted = castNumericFields(r);
+                        if (casted.created_by_name) casted.createdByName = casted.created_by_name;
+                        return casted;
                     });
                 }
             });
@@ -66,10 +90,7 @@ export default function(logAudit) {
             res.json(results);
         } catch (err) {
             console.error("❌ [API ERROR] Erro fatal em initial-data:", err);
-            res.status(500).json({ 
-                error: "Erro de sincronização: " + err.message,
-                details: "O servidor não conseguiu consolidar seus dados. Verifique a estrutura do banco." 
-            });
+            res.status(500).json({ error: "Erro de sincronização: " + err.message });
         }
     });
     

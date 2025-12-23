@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
@@ -10,8 +11,11 @@ interface StatCardProps {
 }
 
 const StatCard: React.FC<StatCardProps> = ({ title, amount, type, subtitle, icon }) => {
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatCurrency = (val: number) => {
+    // Fallback para NaN ou valores nulos
+    const safeValue = isNaN(val) || val === null || val === undefined ? 0 : val;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeValue);
+  };
 
   let colorClass = '';
   let IconComp = Minus;

@@ -71,10 +71,37 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       if (initialData) {
-          setData(prev => ({
-              ...prev,
-              ...initialData
-          }));
+          // Sanitização preventiva: Garante que campos numéricos sejam números
+          const sanitize = (list: any[], numKeys: string[]) => {
+              if (!Array.isArray(list)) return [];
+              return list.map(item => {
+                  const newItem = { ...item };
+                  numKeys.forEach(k => {
+                      newItem[k] = newItem[k] === null || newItem[k] === undefined ? 0 : Number(newItem[k]);
+                  });
+                  return newItem;
+              });
+          };
+
+          setData({
+              accounts: sanitize(initialData.accounts, ['balance', 'creditLimit']),
+              transactions: sanitize(initialData.transactions, ['amount']),
+              goals: sanitize(initialData.goals, ['targetAmount', 'currentAmount']),
+              contacts: initialData.contacts || [],
+              categories: initialData.categories || [],
+              branches: initialData.branches || [],
+              costCenters: initialData.costCenters || [],
+              departments: initialData.departments || [],
+              projects: initialData.projects || [],
+              serviceClients: initialData.serviceClients || [],
+              serviceItems: sanitize(initialData.serviceItems, ['defaultPrice', 'costPrice']),
+              serviceAppointments: initialData.serviceAppointments || [],
+              serviceOrders: sanitize(initialData.serviceOrders, ['totalAmount']),
+              commercialOrders: sanitize(initialData.commercialOrders, ['amount', 'grossAmount', 'discountAmount', 'taxAmount']),
+              contracts: sanitize(initialData.contracts, ['value']),
+              invoices: sanitize(initialData.invoices, ['amount']),
+              companyProfile: initialData.companyProfile || null
+          });
           
           const pendingOrders = (initialData.commercialOrders || []).filter(o => o.status === 'APPROVED');
           const orderNotifications: AppNotification[] = pendingOrders.map(o => ({
@@ -98,7 +125,6 @@ const App: React.FC = () => {
       return initialData;
     } catch (e) {
       console.error("Erro na sincronização de dados:", e);
-      // Não limpa o estado se falhar para evitar crashes na UI
       return null;
     } finally {
       if (!silent) setLoading(false);
@@ -111,12 +137,13 @@ const App: React.FC = () => {
     if (currentUser?.familyId) {
       if (socketRef.current) socketRef.current.disconnect();
       
+      // Fix: Cast io result to any to resolve property 'on' not found on Socket type error
       const socket = io({ 
         transports: ['websocket', 'polling'], 
         withCredentials: true, 
         reconnection: true, 
         reconnectionAttempts: 20 
-      } as any);
+      } as any) as any;
       
       socketRef.current = socket;
 

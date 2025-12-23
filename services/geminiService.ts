@@ -8,7 +8,7 @@ const formatCurrency = (val: number) =>
 export const getManagerDiagnostic = async (state: AppState): Promise<string> => {
   // Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
   // Assume process.env.API_KEY is pre-configured, valid, and accessible.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const balance = state.accounts.reduce((acc, a) => acc + a.balance, 0);
   const overdueCount = state.transactions.filter(t => t.status === TransactionStatus.OVERDUE).length;
@@ -53,7 +53,7 @@ export const getManagerDiagnostic = async (state: AppState): Promise<string> => 
 
 export const analyzeFinances = async (state: AppState, userPrompt?: string): Promise<string> => {
   // Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const context = `
     Contexto Financeiro Atual:
