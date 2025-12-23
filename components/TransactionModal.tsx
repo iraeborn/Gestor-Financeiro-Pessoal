@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Eye, Download, Trash2, Paperclip } from 'lucide-react';
+// Fix: Added Briefcase icon import
+import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Repeat, CalendarDays, Briefcase } from 'lucide-react';
+// Fix: Added missing type imports
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, TransactionClassification, Branch, CostCenter, Department, Project } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
@@ -15,6 +17,7 @@ interface TransactionModalProps {
   categories?: Category[];
   initialData?: Partial<Transaction> | null;
   userEntity?: EntityType;
+  // Fix: Added missing props used in TransactionsView.tsx
   branches?: Branch[];
   costCenters?: CostCenter[];
   departments?: Department[];
@@ -23,7 +26,12 @@ interface TransactionModalProps {
 
 const TransactionModal: React.FC<TransactionModalProps> = ({ 
     isOpen, onClose, onSave, accounts, contacts, categories = [], initialData, 
-    userEntity = EntityType.PERSONAL, branches = [], costCenters = [], departments = [], projects = []
+    userEntity = EntityType.PERSONAL,
+    // Fix: Destructuring added props with default empty arrays
+    branches = [],
+    costCenters = [],
+    departments = [],
+    projects = []
 }) => {
   const { showAlert } = useAlert();
   
@@ -38,13 +46,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     destinationAccountId: '',
     isRecurring: false,
     recurrenceFrequency: RecurrenceFrequency.MONTHLY,
+    recurrenceEndDate: '',
     contactId: '',
+    receiptUrls: [] as string[],
+    // Fix: Adding PJ fields to form state
     branchId: '',
     costCenterId: '',
     departmentId: '',
     projectId: '',
-    classification: TransactionClassification.STANDARD,
-    receiptUrls: [] as string[]
+    classification: TransactionClassification.STANDARD
   });
 
   const [categorySearch, setCategorySearch] = useState('');
@@ -60,7 +70,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Inicialização Robusta do Formulário
+  // Inicialização Robusta
   useEffect(() => {
     if (!isOpen) return;
 
@@ -68,7 +78,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     const defaultDestAccId = accounts.length > 1 ? accounts[1].id : (accounts.length > 0 ? accounts[0].id : '');
 
     if (initialData) {
-      // Verifica se o ID da conta vindo do registro ainda existe na lista de contas
       const validAccId = accounts.some(a => a.id === initialData.accountId) 
         ? initialData.accountId! 
         : defaultAccId;
@@ -84,20 +93,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         destinationAccountId: initialData.destinationAccountId || defaultDestAccId,
         isRecurring: !!initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || RecurrenceFrequency.MONTHLY,
+        recurrenceEndDate: initialData.recurrenceEndDate || '',
         contactId: initialData.contactId || '',
+        receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : [],
+        // Fix: Mapping initial PJ fields
         branchId: initialData.branchId || '',
         costCenterId: initialData.costCenterId || '',
         departmentId: initialData.departmentId || '',
         projectId: initialData.projectId || '',
-        classification: initialData.classification || TransactionClassification.STANDARD,
-        receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : []
+        classification: initialData.classification || TransactionClassification.STANDARD
       });
       setCategorySearch(initialData.category || '');
       
       const contact = contacts.find(c => c.id === initialData.contactId);
       setContactSearch(contact ? contact.name : '');
     } else {
-      // Novo Registro
       setFormData({
         description: '',
         amount: '',
@@ -110,19 +120,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         contactId: '',
         isRecurring: false,
         recurrenceFrequency: RecurrenceFrequency.MONTHLY,
+        recurrenceEndDate: '',
+        receiptUrls: [],
+        // Fix: Resetting PJ fields
         branchId: '',
         costCenterId: '',
         departmentId: '',
         projectId: '',
-        classification: TransactionClassification.STANDARD,
-        receiptUrls: []
+        classification: TransactionClassification.STANDARD
       });
       setCategorySearch('');
       setContactSearch('');
     }
-  }, [initialData, isOpen, accounts.length]); // Depende apenas da abertura, troca de alvo ou mudança no número de contas
+  }, [initialData, isOpen, accounts.length]);
 
-  // Click outside listener for dropdowns
+  // Click outside listener
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
@@ -232,11 +244,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         if (existingContact) {
             finalContactId = existingContact.id;
         } else {
-            newContactObj = { id: crypto.randomUUID(), name: contactSearch, type: 'PF' }; // Default PF
+            newContactObj = { id: crypto.randomUUID(), name: contactSearch, type: 'PF' };
             finalContactId = newContactObj.id;
         }
-    } else {
-        finalContactId = '';
     }
 
     onSave({
@@ -256,12 +266,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       [TransactionType.INCOME]: 'text-emerald-600',
       [TransactionType.TRANSFER]: 'text-blue-600'
   };
-
-  const statusOptions = [
-      { id: TransactionStatus.PAID, label: 'Pago', icon: Check, color: 'bg-emerald-50 text-emerald-700' },
-      { id: TransactionStatus.PENDING, label: 'Pendente', icon: Clock, color: 'bg-amber-50 text-amber-700' },
-      { id: TransactionStatus.OVERDUE, label: 'Atrasado', icon: AlertCircle, color: 'bg-rose-50 text-rose-700' }
-  ];
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -398,7 +402,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
                         required
                     >
-                        {accounts.length === 0 && <option value="">Nenhuma conta ativa</option>}
                         {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                     </select>
                   </div>
@@ -446,11 +449,115 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
           </div>
 
+          {/* Fix: Added PJ Fields for Business entities */}
+          {userEntity === EntityType.BUSINESS && (
+              <div className="pt-6 border-t border-slate-100 space-y-4 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-2">
+                      <Briefcase className="w-4 h-4 text-indigo-500" />
+                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Informações PJ</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Filial</label>
+                          <select 
+                            value={formData.branchId} 
+                            onChange={e => setFormData({...formData, branchId: e.target.value})}
+                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                          >
+                              <option value="">Selecione...</option>
+                              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Centro de Custo</label>
+                          <select 
+                            value={formData.costCenterId} 
+                            onChange={e => setFormData({...formData, costCenterId: e.target.value})}
+                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                          >
+                              <option value="">Selecione...</option>
+                              {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Departamento</label>
+                          <select 
+                            value={formData.departmentId} 
+                            onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                          >
+                              <option value="">Selecione...</option>
+                              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Projeto</label>
+                          <select 
+                            value={formData.projectId} 
+                            onChange={e => setFormData({...formData, projectId: e.target.value})}
+                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                          >
+                              <option value="">Selecione...</option>
+                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* Seção Recorrência */}
+          <div className="pt-6 border-t border-slate-100 space-y-4">
+              <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                      <Repeat className="w-4 h-4 text-indigo-500" />
+                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Repetir Lançamento</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+              </div>
+
+              {formData.isRecurring && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Frequência</label>
+                          <select 
+                            value={formData.recurrenceFrequency} 
+                            onChange={e => setFormData({...formData, recurrenceFrequency: e.target.value as any})}
+                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                          >
+                              <option value="WEEKLY">Semanal</option>
+                              <option value="MONTHLY">Mensal</option>
+                              <option value="YEARLY">Anual</option>
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Término (Opcional)</label>
+                          <div className="relative">
+                            <CalendarDays className="w-4 h-4 text-slate-300 absolute left-3 top-2" />
+                            <input 
+                                type="date" 
+                                value={formData.recurrenceEndDate} 
+                                onChange={e => setFormData({...formData, recurrenceEndDate: e.target.value})}
+                                className="w-full pl-9 py-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
+                            />
+                          </div>
+                      </div>
+                  </div>
+              )}
+          </div>
+
           <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação</label>
                   <div className="flex gap-1.5 mt-1">
-                      {statusOptions.map(opt => (
+                      {[
+                          { id: TransactionStatus.PAID, label: 'Pago', icon: Check, color: 'bg-emerald-50 text-emerald-700' },
+                          { id: TransactionStatus.PENDING, label: 'Pendente', icon: Clock, color: 'bg-amber-50 text-amber-700' },
+                          { id: TransactionStatus.OVERDUE, label: 'Atrasado', icon: AlertCircle, color: 'bg-rose-50 text-rose-700' }
+                      ].map(opt => (
                           <button
                             key={opt.id}
                             type="button"
@@ -480,7 +587,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       >
                         <div className="flex items-center gap-2">
                             {isProcessingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : (formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />)}
-                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivos (Nuvem)` : 'Anexar Comprovantes'}</span>
+                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivos` : 'Anexar Comprovantes'}</span>
                         </div>
                         <Plus className="w-3 h-3" />
                       </button>
