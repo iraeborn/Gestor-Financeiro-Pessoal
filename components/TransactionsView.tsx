@@ -14,9 +14,8 @@ interface TransactionsViewProps {
   contacts: Contact[];
   categories: Category[]; 
   settings?: AppSettings;
-  // User/PJ Context
   userEntity?: EntityType;
-  pjData?: any; // Shortcut for simplicity, ideally typed fully
+  pjData?: any; 
   onDelete: (id: string) => void;
   onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
@@ -45,73 +44,34 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [accountFilter, setAccountFilter] = useState<string>('ALL');
   const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  
-  // Payment Modal
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [transactionToPay, setTransactionToPay] = useState<Transaction | null>(null);
 
   const includeCards = settings?.includeCreditCardsInTotal ?? true;
 
-  // --- Calculations for StatCards ---
-  const currentRealBalance = accounts.reduce((acc, curr) => {
-    if (!includeCards && curr.type === AccountType.CARD) return acc;
-    return acc + curr.balance;
-  }, 0);
-
-  const pendingIncome = transactions
-    .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const pendingExpenses = transactions
-    .filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID)
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
-
-  const currentDate = new Date();
-  const currentMonth = currentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
-
-  const incomeMonth = transactions
-    .filter(t => {
-        const d = new Date(t.date);
-        return t.type === TransactionType.INCOME && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const expenseMonth = transactions
-    .filter(t => {
-        const d = new Date(t.date);
-        return t.type === TransactionType.EXPENSE && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  // --- Filtering Logic ---
+  // --- Lógica de Filtragem ---
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      // Filter by Month
+      // Filtro por Mês
       if (!t.date.startsWith(monthFilter)) return false;
 
-      // Filter by Search Term
+      // Filtro por Termo de Busca
       if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase()) && !t.category.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
 
-      // Filter by Type
+      // Filtro por Tipo
       if (typeFilter !== 'ALL' && t.type !== typeFilter) return false;
 
-      // Filter by Status
+      // Filtro por Status
       if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
 
-      // Filter by Account
+      // Filtro por Conta
       if (accountFilter !== 'ALL') {
         const matchesSource = t.accountId === accountFilter;
-        // Para transferências, queremos ver se a conta selecionada é a origem OU o destino
         const matchesDest = t.type === TransactionType.TRANSFER && t.destinationAccountId === accountFilter;
-        
         if (!matchesSource && !matchesDest) return false;
       }
 
@@ -119,18 +79,49 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
     });
   }, [transactions, searchTerm, typeFilter, statusFilter, accountFilter, monthFilter]);
 
-  const totalFiltered = filteredTransactions.reduce((acc, t) => {
-    // Se estivermos filtrando por uma conta específica e for uma transferência:
-    if (accountFilter !== 'ALL' && t.type === TransactionType.TRANSFER) {
-        // Se a conta selecionada for a de origem, é uma saída (subtrai)
-        if (t.accountId === accountFilter) return acc - t.amount;
-        // Se a conta selecionada for a de destino, é uma entrada (soma)
-        if (t.destinationAccountId === accountFilter) return acc + t.amount;
+  // --- Cálculos Reativos (cards acompanham os filtros) ---
+  
+  // 1. Saldo de Referência (Saldo atual das contas filtradas ou total)
+  const currentContextBalance = useMemo(() => {
+    if (accountFilter !== 'ALL') {
+      const acc = accounts.find(a => a.id === accountFilter);
+      return acc ? acc.balance : 0;
     }
+    return accounts.reduce((acc, curr) => {
+      if (!includeCards && curr.type === AccountType.CARD) return acc;
+      return acc + curr.balance;
+    }, 0);
+  }, [accounts, accountFilter, includeCards]);
 
-    // Lógica padrão
-    return t.type === TransactionType.INCOME ? acc + t.amount : acc - t.amount;
-  }, 0);
+  // 2. Receitas Filtradas
+  const filteredIncome = useMemo(() => {
+    return filteredTransactions
+      .filter(t => t.type === TransactionType.INCOME)
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  // 3. Despesas Filtradas
+  const filteredExpense = useMemo(() => {
+    return filteredTransactions
+      .filter(t => t.type === TransactionType.EXPENSE)
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  // 4. Pendências Filtradas (Apenas o que ainda não foi pago na seleção atual)
+  const filteredPendingIncome = useMemo(() => {
+    return filteredTransactions
+      .filter(t => t.type === TransactionType.INCOME && t.status !== TransactionStatus.PAID)
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const filteredPendingExpense = useMemo(() => {
+    return filteredTransactions
+      .filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID)
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  // 5. Saldo Projetado na Seleção (Saldo de referência + pendências filtradas)
+  const projectedInContext = currentContextBalance + filteredPendingIncome - filteredPendingExpense;
 
   const handleOpenEdit = (t: Transaction) => {
     setEditingTransaction(t);
@@ -161,11 +152,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   const handleConfirmPayment = (t: Transaction, finalAmount: number) => {
-     const updatedTransaction = {
-         ...t,
-         status: TransactionStatus.PAID,
-         amount: finalAmount
-     };
+     const updatedTransaction = { ...t, status: TransactionStatus.PAID, amount: finalAmount };
      onEdit(updatedTransaction);
   };
 
@@ -189,40 +176,40 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </button>
       </div>
 
-      {/* Stats Cards Row */}
+      {/* Stats Cards Row - Agora Reativos aos Filtros */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
-          title="Saldo Real" 
-          amount={currentRealBalance} 
+          title={accountFilter === 'ALL' ? "Saldo Total" : "Saldo da Conta"} 
+          amount={currentContextBalance} 
           type="neutral" 
           icon={<Wallet className="w-5 h-5 text-indigo-600"/>}
-          subtitle={includeCards ? "Disponível agora" : "Sem Cartões de Crédito"}
+          subtitle={accountFilter === 'ALL' ? (includeCards ? "Disponível agora" : "Sem Cartões") : "Saldo atual em conta"}
         />
         <StatCard 
-          title="Saldo Projetado" 
-          amount={projectedBalance} 
-          type={projectedBalance >= 0 ? 'info' : 'negative'} 
+          title="Projeção na Seleção" 
+          amount={projectedInContext} 
+          type={projectedInContext >= 0 ? 'info' : 'negative'} 
           icon={<CalendarClock className="w-5 h-5 text-blue-600"/>}
-          subtitle="Após pendências"
+          subtitle="Saldo após pendências filtradas"
         />
         <StatCard 
-          title="Receitas (Mês)" 
-          amount={incomeMonth} 
+          title="Receitas (Filtro)" 
+          amount={filteredIncome} 
           type="positive" 
           icon={<TrendingUp className="w-5 h-5 text-emerald-600"/>}
+          subtitle={`${filteredTransactions.filter(t => t.type === TransactionType.INCOME).length} lançamentos`}
         />
         <StatCard 
-          title="Despesas (Mês)" 
-          amount={expenseMonth} 
+          title="Despesas (Filtro)" 
+          amount={filteredExpense} 
           type="negative" 
           icon={<TrendingDown className="w-5 h-5 text-rose-600"/>}
+          subtitle={`${filteredTransactions.filter(t => t.type === TransactionType.EXPENSE).length} lançamentos`}
         />
       </div>
 
       {/* Toolbar de Filtros */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4 md:space-y-0 md:flex md:items-center md:gap-4">
-        
-        {/* Busca */}
         <div className="flex-1 relative">
           <Search className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
           <input
@@ -234,7 +221,6 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           />
         </div>
 
-        {/* Filtros Dropdown */}
         <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
           <input 
             type="month"
@@ -278,12 +264,8 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
-      {/* Resumo Rápido da Seleção */}
       <div className="flex items-center justify-between text-sm text-gray-500 px-2">
-        <span>Exibindo {filteredTransactions.length} registros</span>
-        <span className={totalFiltered >= 0 ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
-          Saldo da Seleção: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalFiltered)}
-        </span>
+        <span>Exibindo {filteredTransactions.length} registros no período selecionado</span>
       </div>
 
       <TransactionList 
