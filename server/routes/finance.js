@@ -20,10 +20,10 @@ export default function(logAudit) {
     };
 
     router.get('/initial-data', authenticateToken, async (req, res) => {
+        console.log(`[API] Carregando initial-data para o usuário ${req.user.id}`);
         try {
             const familyId = await getFamilyId(req.user.id);
             
-            // Definição de queries com filtros de segurança
             const queryDefs = {
                 accounts: ['SELECT * FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
@@ -47,7 +47,6 @@ export default function(logAudit) {
             const results = {};
             const keys = Object.keys(queryDefs);
             
-            // Executa todas as queries em paralelo
             const promises = keys.map(key => pool.query(queryDefs[key][0], queryDefs[key][1]));
             const settledResults = await Promise.all(promises);
 
@@ -63,10 +62,14 @@ export default function(logAudit) {
                 }
             });
 
+            console.log(`[API] Initial-data carregado com sucesso para ${familyId}`);
             res.json(results);
         } catch (err) {
-            console.error("❌ [API] Erro crítico initial-data:", err.message);
-            res.status(500).json({ error: "O servidor encontrou um problema ao sincronizar seus dados. Tente atualizar a página." });
+            console.error("❌ [API ERROR] Erro fatal em initial-data:", err);
+            res.status(500).json({ 
+                error: "Erro de sincronização: " + err.message,
+                details: "O servidor não conseguiu consolidar seus dados. Verifique a estrutura do banco." 
+            });
         }
     });
     

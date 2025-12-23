@@ -14,9 +14,9 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
   const connectionString = process.env.DATABASE_URL || 'postgres://admin:password123@localhost:5432/financer';
   poolConfig = {
     connectionString: connectionString,
-    max: 20, // Aumentado para suportar as queries paralelas do initial-data
+    max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000, // Aumentado para 5s para evitar quedas prematuras
   };
 }
 
@@ -39,6 +39,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS module_services (id TEXT PRIMARY KEY, name TEXT, code TEXT, default_price DECIMAL(15,2), module_tag TEXT, user_id TEXT, family_id TEXT, type TEXT DEFAULT 'SERVICE', cost_price DECIMAL(15,2), unit TEXT, default_duration INTEGER DEFAULT 0, description TEXT, image_url TEXT, brand TEXT, items JSONB DEFAULT '[]', is_composite BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL(15,2), gross_amount DECIMAL(15,2), discount_amount DECIMAL(15,2), tax_amount DECIMAL(15,2), items JSONB DEFAULT '[]', date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, access_token TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL(15,2) DEFAULT 0, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, type TEXT, origin TEXT, priority TEXT, opened_at TIMESTAMP DEFAULT NOW(), items JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT, contact_name TEXT, contact_email TEXT, contact_phone TEXT, notes TEXT, birth_date TEXT, insurance TEXT, allergies TEXT, medications TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_appointments (id TEXT PRIMARY KEY, client_id TEXT, service_id TEXT, date TEXT, status TEXT, notes TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL(15,2), start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL(15,2), issue_date DATE, status TEXT, contact_id TEXT, description TEXT, items JSONB DEFAULT '[]', file_url TEXT, order_id TEXT, service_order_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
@@ -51,6 +52,7 @@ export const initDb = async () => {
         }
 
         const migrations = [
+            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
             `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
             `ALTER TABLE branches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
             `ALTER TABLE cost_centers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
