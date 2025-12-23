@@ -123,6 +123,99 @@ export default function(logAudit) {
         } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
     });
 
+    router.delete('/transactions/:id', authenticateToken, async (req, res) => {
+        const userId = req.user.id;
+        const client = await pool.connect();
+        try {
+            const familyId = await getFamilyId(userId);
+            await client.query('BEGIN');
+            
+            const tRes = await client.query('SELECT * FROM transactions WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            if (tRes.rows.length === 0) return res.status(404).json({ error: 'Transação não encontrada' });
+            
+            const t = tRes.rows[0];
+            
+            if (t.status === 'PAID') {
+                await updateAccountBalance(client, t.account_id, t.amount, t.type, true);
+                if (t.type === 'TRANSFER' && t.destination_account_id) {
+                    await updateAccountBalance(client, t.destination_account_id, t.amount, 'INCOME', true);
+                }
+            }
+
+            await client.query('UPDATE transactions SET deleted_at = NOW() WHERE id = $1', [req.params.id]);
+            await client.query('COMMIT');
+            await logAudit(pool, userId, 'DELETE', 'transaction', req.params.id, t.description);
+            res.json({ success: true });
+        } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
+    });
+
+    router.post('/accounts', authenticateToken, async (req, res) => {
+        const a = req.body;
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(
+                `INSERT INTO accounts (id, name, type, balance, credit_limit, closing_day, due_day, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$5, closing_day=$6, due_day=$7, deleted_at=NULL`,
+                [a.id || crypto.randomUUID(), a.name, a.type, a.balance, a.creditLimit, a.closingDay, a.dueDay, req.user.id, familyId]
+            );
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/accounts/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query('UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'account', req.params.id, 'Conta removida');
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.post('/categories', authenticateToken, async (req, res) => {
+        const c = req.body;
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(
+                `INSERT INTO categories (id, name, type, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, deleted_at=NULL`,
+                [c.id || crypto.randomUUID(), c.name, c.type, req.user.id, familyId]
+            );
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/categories/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query('UPDATE categories SET deleted_at = NOW() WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.post('/goals', authenticateToken, async (req, res) => {
+        const g = req.body;
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(
+                `INSERT INTO goals (id, name, target_amount, current_amount, deadline, user_id, family_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (id) DO UPDATE SET name=$2, target_amount=$3, current_amount=$4, deadline=$5, deleted_at=NULL`,
+                [g.id || crypto.randomUUID(), g.name, g.targetAmount, g.currentAmount, g.deadline, req.user.id, familyId]
+            );
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/goals/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query('UPDATE goals SET deleted_at = NOW() WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
     router.post('/upload', authenticateToken, upload.array('files'), async (req, res) => {
         try {
             const urls = await uploadFiles(req.files, req.user.id);
