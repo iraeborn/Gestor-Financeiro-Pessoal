@@ -5,7 +5,7 @@ import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
 import StatCard from './StatCard';
-import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Scale } from 'lucide-react';
+import { Search, Filter, Download, Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Scale, ArrowRight } from 'lucide-react';
 import { useConfirm } from './AlertSystem';
 
 interface TransactionsViewProps {
@@ -41,7 +41,16 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [typeFilter, setTypeFilter] = useState<'ALL' | TransactionType>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TransactionStatus>('ALL');
   const [accountFilter, setAccountFilter] = useState<string>('ALL');
-  const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  
+  // Novos estados para filtro de data por período
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+  });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -51,8 +60,9 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
   // --- Lógica de Filtragem ---
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      // Filtro por Mês
-      if (!t.date.startsWith(monthFilter)) return false;
+      // Filtro por Período (Intervalo de Datas)
+      const tDate = t.date;
+      if (tDate < startDate || tDate > endDate) return false;
 
       // Filtro por Termo de Busca
       if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase()) && !t.category.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -74,7 +84,7 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       return true;
     });
-  }, [transactions, searchTerm, typeFilter, statusFilter, accountFilter, monthFilter]);
+  }, [transactions, searchTerm, typeFilter, statusFilter, accountFilter, startDate, endDate]);
 
   // --- Cálculos Estritamente Baseados no Filtro ---
   
@@ -200,13 +210,25 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-          <input 
-            type="month"
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
+        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 items-center">
+          {/* Seletor de Intervalo de Datas */}
+          <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+            <input 
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-2 py-1.5 rounded-lg border-none bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+              title="Data Inicial"
+            />
+            <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+            <input 
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-2 py-1.5 rounded-lg border-none bg-white text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+              title="Data Final"
+            />
+          </div>
 
           <select
             value={accountFilter}
