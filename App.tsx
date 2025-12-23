@@ -24,6 +24,7 @@ import Reports from './components/Reports';
 import CategoriesView from './components/CategoriesView';
 import ContactsView from './components/ContactsView';
 import SmartAdvisor from './components/SmartAdvisor';
+import DiagnosticView from './components/DiagnosticView';
 import AccessView from './components/AccessView';
 import LogsView from './components/LogsView';
 import SettingsView from './components/SettingsView';
@@ -337,6 +338,8 @@ const App: React.FC = () => {
         return <ContactsView contacts={data.contacts} serviceClients={data.serviceClients} title={currentView === 'SRV_CLIENTS' ? "Clientes de Serviços" : "Pessoas & Empresas"} onAddContact={async (c) => wrapSave(api.saveContact, c, "Contato salvo")} onEditContact={async (c) => wrapSave(api.saveContact, c, "Contato atualizado")} onDeleteContact={async (id) => wrapDel(api.deleteContact, id, "Contato excluído")} />;
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={data} />;
+      case 'DIAG_HUB':
+        return <DiagnosticView state={data} />;
       case 'SYS_SETTINGS':
         return <SettingsView user={currentUser} pjData={{companyProfile: data.companyProfile, branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onUpdateSettings={async (s) => { setLoading(true); try { await updateSettings(s); setCurrentUser({...currentUser, settings: s}); showAlert("Configurações salvas", "success"); } finally { setLoading(false); } }} onOpenCollab={() => setIsCollabModalOpen(true)} onSavePJEntity={async (type, d) => { if(type==='company') await api.saveCompanyProfile(d); if(type==='branch') await api.saveBranch(d); if(type==='costCenter') await api.saveCostCenter(d); if(type==='department') await api.saveDepartment(d); if(type==='project') await api.saveProject(d); await loadData(true); showAlert("Item salvo", "success"); }} onDeletePJEntity={async (type, id) => { if(type==='branch') await api.deleteBranch(id); if(type==='costCenter') await api.deleteCostCenter(id); if(type==='department') await api.deleteDepartment(id); if(type==='project') await api.deleteProject(id); await loadData(true); showAlert("Item excluído", "success"); }} />;
       case 'SYS_ACCESS':

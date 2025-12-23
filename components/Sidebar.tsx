@@ -5,7 +5,8 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, PieChart, 
   Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
   ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
-  FileText, FileSignature, UserCog, Check, Building, Package, Bell
+  FileText, FileSignature, UserCog, Check, Building, Package, Bell,
+  Sparkles, ShieldAlert, HeartPulse
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -28,23 +29,19 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  // 1. Determinar contexto e permissões
   const currentWorkspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
   const isOwner = currentUser.id === currentUser.familyId;
   const isAdmin = isOwner || currentWorkspace?.role === 'ADMIN'; 
   
-  // Defensiva: Garante que userPermissions é sempre array
   let userPermissions = currentWorkspace?.permissions || [];
   if (typeof userPermissions === 'string') {
       try {
           userPermissions = JSON.parse(userPermissions);
       } catch (e) {
-          console.error("Erro ao processar permissões:", e);
           userPermissions = [];
       }
   }
 
-  // 2. Determinar Módulos Ativos (Prioridade: Config da Empresa > Config Pessoal)
   const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
   const activeModules = workspaceSettings.activeModules || {};
   const hasOdonto = activeModules.odonto;
@@ -62,7 +59,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           await switchContext(wsId);
           window.location.reload();
       } catch (e) {
-          console.error(e);
           setSwitching(false);
       }
   };
@@ -83,10 +79,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
         { id: 'FIN_GOALS', label: 'Metas', icon: PieChart },
         { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
-        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit, highlight: true },
         { id: 'FIN_CATEGORIES', label: 'Categorias', icon: Tag },
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
       ].filter(i => canView(i.id)) 
+    },
+    {
+      section: 'Inteligência',
+      items: [
+        { id: 'DIAG_HUB', label: 'Gestor de Elite', icon: BrainCircuit, highlight: true },
+        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: Sparkles },
+      ].filter(i => canView('FIN_ADVISOR'))
     },
     ...(hasServices ? [{ 
       section: 'Serviços & Vendas', 
@@ -189,7 +191,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                   {isWorkspaceDropdownOpen && (
                       <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-scale-up z-50 max-h-[300px] overflow-y-auto">
                           <div className="p-1">
-                              {/* Workspace Switcher */}
                               {currentUser.workspaces && currentUser.workspaces.length > 0 && (
                                   <>
                                       <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">

@@ -31,7 +31,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     const fetchDiag = async () => {
-      // Verificação defensiva de estado
       if (state && state.transactions && state.transactions.length > 0) {
         setLoadingDiag(true);
         try {
@@ -44,7 +43,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     fetchDiag();
   }, [state?.transactions?.length, state?.accounts?.length]);
 
-  // Fallback para estado nulo durante transição de carregamento
   if (!state) return null;
 
   const accounts = state.accounts || [];
@@ -98,39 +96,40 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-indigo-400" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Diagnóstico do Gestor de Elite</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Resumo do Gestor de Elite</span>
                 </div>
-                {diagnostic && !loadingDiag && (
-                    <div className="bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-500/30 flex items-center gap-2 text-xs font-bold text-indigo-300">
-                        <Award className="w-4 h-4" /> Relatório Atualizado
-                    </div>
-                )}
+                <button 
+                    onClick={() => onChangeView('DIAG_HUB')}
+                    className="bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-500/30 flex items-center gap-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/40 transition-all"
+                >
+                    Acessar Módulo IA <ArrowRight className="w-3 h-3" />
+                </button>
               </div>
               
               {loadingDiag ? (
                 <div className="flex items-center gap-3 py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-                  <span className="text-sm text-indigo-100 font-medium italic">Analisando fluxo de caixa...</span>
+                  <span className="text-sm text-indigo-100 font-medium italic">Sincronizando diagnóstico...</span>
                 </div>
               ) : diagnostic ? (
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="lg:col-span-3 prose prose-invert prose-sm max-w-none">
+                    <div className="lg:col-span-3 prose prose-invert prose-sm max-w-none line-clamp-4">
                         <ReactMarkdown>{diagnostic}</ReactMarkdown>
                     </div>
                     <div className="flex flex-col justify-center items-center lg:items-end border-t lg:border-t-0 lg:border-l border-white/10 pt-4 lg:pt-0 lg:pl-6">
-                        <p className="text-[10px] text-indigo-300 uppercase font-bold mb-2">Plano detalhado?</p>
+                        <p className="text-[10px] text-indigo-300 uppercase font-bold mb-2">Diagnóstico Completo?</p>
                         <button 
-                            onClick={() => onChangeView('FIN_ADVISOR')}
+                            onClick={() => onChangeView('DIAG_HUB')}
                             className="w-full lg:w-auto bg-white text-indigo-900 px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
                         >
-                            Consultoria <ArrowRight className="w-3 h-3" />
+                            Ver Tudo <ArrowRight className="w-3 h-3" />
                         </button>
                     </div>
                 </div>
               ) : (
                 <div className="py-6 text-indigo-200/60 flex items-center gap-3">
                     <div className="p-3 bg-white/5 rounded-2xl border border-white/10"><TrendingUp className="w-6 h-6"/></div>
-                    <p className="text-sm">Lance movimentações para diagnóstico IA.</p>
+                    <p className="text-sm">Lance movimentações para ver o diagnóstico rápido.</p>
                 </div>
               )}
           </div>
