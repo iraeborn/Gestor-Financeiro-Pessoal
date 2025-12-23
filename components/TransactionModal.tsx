@@ -47,8 +47,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     receiptUrls: [] as string[]
   });
 
-  const [contactSearch, setContactSearch] = useState('');
-  const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -56,12 +54,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const [loadingQR, setLoadingQR] = useState(false);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
 
-  const contactDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (initialData) {
-      const contact = contacts.find(c => c.id === initialData.contactId);
       setFormData({
         description: initialData.description || '',
         amount: initialData.amount !== undefined ? initialData.amount.toString() : '',
@@ -81,7 +77,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         classification: initialData.classification || TransactionClassification.STANDARD,
         receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : []
       });
-      setContactSearch(contact ? contact.name : '');
       setCategorySearch(initialData.category || '');
     } else {
       setFormData(prev => ({
@@ -97,10 +92,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         isRecurring: false,
         receiptUrls: []
       }));
-      setContactSearch('');
       setCategorySearch('');
     }
-  }, [initialData, isOpen, accounts, contacts]);
+  }, [initialData, isOpen, accounts]);
 
   const handleAddFiles = async (files: FileList) => {
       setIsProcessingFiles(true);
@@ -176,19 +170,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     if (!formData.accountId) return showAlert("Selecione uma conta.", "warning");
     
-    let finalContactId = formData.contactId;
-    let newContactObj: Contact | undefined;
-    if (contactSearch && formData.type !== TransactionType.TRANSFER) {
-         const existing = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
-         if (existing) {
-             finalContactId = existing.id;
-         } else {
-             const newId = crypto.randomUUID();
-             newContactObj = { id: newId, name: contactSearch, type: 'PF' };
-             finalContactId = newId;
-         }
-    }
-
     let finalCategory = categorySearch;
     let newCategoryObj: Category | undefined;
     if (categorySearch && formData.type !== TransactionType.TRANSFER) {
@@ -202,9 +183,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       ...formData,
       amount: parseFloat(formData.amount),
       category: formData.type === TransactionType.TRANSFER ? 'Transferência' : finalCategory,
-      contactId: finalContactId || undefined,
+      contactId: formData.contactId || undefined,
       destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
-    }, newContactObj, newCategoryObj);
+    }, undefined, newCategoryObj);
     onClose();
   };
 
@@ -290,7 +271,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-              <div className="space-y-1">
+              <div className="md:col-span-2 space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Descrição</label>
                   <input
                     type="text"
@@ -307,6 +288,23 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <div className="relative">
                       <Calendar className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                       <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent" />
+                  </div>
+              </div>
+
+              <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Pessoa / Empresa</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
+                    <select 
+                        value={formData.contactId} 
+                        onChange={(e) => setFormData({ ...formData, contactId: e.target.value })} 
+                        className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
+                    >
+                        <option value="">Nenhum Contato</option>
+                        {contacts.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
                   </div>
               </div>
 
