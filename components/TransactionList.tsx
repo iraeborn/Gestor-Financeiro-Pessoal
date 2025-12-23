@@ -31,8 +31,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const formatDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}`;
+    if (!dateStr) return '--/--';
+    // Remove a parte do tempo caso venha como ISO completo
+    const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    const parts = dateOnly.split('-');
+    if (parts.length < 3) return dateOnly;
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year.slice(-2)}`;
   };
 
   const getAccountName = (id: string) => {
@@ -74,7 +79,6 @@ const TransactionList: React.FC<TransactionListProps> = ({
           
           const updatedUrls = [...(t.receiptUrls || []), ...urls];
           onUpdateAttachments(t, updatedUrls);
-          // Atualiza a referência local caso o modal esteja aberto
           setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
       } finally {
           setIsProcessing(false);
