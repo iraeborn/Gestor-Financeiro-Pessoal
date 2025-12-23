@@ -59,7 +59,9 @@ const renderIndex = (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
         let content = fs.readFileSync(indexPath, 'utf8');
+        // Injeção dinâmica de variáveis de ambiente do servidor para o cliente
         content = content.replace("__GOOGLE_CLIENT_ID__", process.env.GOOGLE_CLIENT_ID || "");
+        content = content.replace("__API_KEY__", process.env.API_KEY || "");
         res.send(content);
     } else {
         res.status(404).send('Aguardando build do frontend...');

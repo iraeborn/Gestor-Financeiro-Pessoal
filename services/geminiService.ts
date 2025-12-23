@@ -6,9 +6,15 @@ const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 export const getManagerDiagnostic = async (state: AppState): Promise<string> => {
-  // Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
-  // Assume process.env.API_KEY is pre-configured, valid, and accessible.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // A API Key agora é resolvida via window.API_KEY em produção ou .env em dev, 
+  // conforme mapeado no vite.config.ts
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey || apiKey === "__API_KEY__") {
+      return "Configuração de IA pendente. Verifique a API Key no servidor.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const balance = state.accounts.reduce((acc, a) => acc + a.balance, 0);
   const overdueCount = state.transactions.filter(t => t.status === TransactionStatus.OVERDUE).length;
@@ -43,7 +49,6 @@ export const getManagerDiagnostic = async (state: AppState): Promise<string> => 
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    // Uso direto da propriedade .text conforme as regras da SDK
     return response.text || "O Gestor está processando os dados...";
   } catch (e) {
     console.error("Gemini Error:", e);
@@ -52,8 +57,13 @@ export const getManagerDiagnostic = async (state: AppState): Promise<string> => 
 };
 
 export const analyzeFinances = async (state: AppState, userPrompt?: string): Promise<string> => {
-  // Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey || apiKey === "__API_KEY__") {
+      return "IA não configurada.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const context = `
     Contexto Financeiro Atual:
@@ -74,7 +84,6 @@ export const analyzeFinances = async (state: AppState, userPrompt?: string): Pro
         systemInstruction: "Você é o SmartAdvisor, consultor financeiro integrado ao FinManager. Seu objetivo é ajudar o usuário a alcançar a independência financeira através de dados reais.",
       }
     });
-    // Uso direto da propriedade .text conforme as regras da SDK
     return response.text || "Estou pronto para analisar suas contas.";
   } catch (e) {
       console.error("Gemini Advisor Error:", e);
