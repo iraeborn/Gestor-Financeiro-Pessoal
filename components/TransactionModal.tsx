@@ -49,12 +49,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [contactSearch, setContactSearch] = useState('');
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  
   const [showScanner, setShowScanner] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [loadingQR, setLoadingQR] = useState(false);
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
 
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const contactDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -78,6 +82,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : []
       });
       setCategorySearch(initialData.category || '');
+      
+      const contact = contacts.find(c => c.id === initialData.contactId);
+      setContactSearch(contact ? contact.name : '');
     } else {
       setFormData(prev => ({
         ...prev,
@@ -93,8 +100,23 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         receiptUrls: []
       }));
       setCategorySearch('');
+      setContactSearch('');
     }
-  }, [initialData, isOpen, accounts]);
+  }, [initialData, isOpen, accounts, contacts]);
+
+  // Click outside listener for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setShowCategoryDropdown(false);
+      }
+      if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+        setShowContactDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleAddFiles = async (files: FileList) => {
       setIsProcessingFiles(true);
@@ -170,6 +192,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     if (!formData.accountId) return showAlert("Selecione uma conta.", "warning");
     
+    // Process Category
     let finalCategory = categorySearch;
     let newCategoryObj: Category | undefined;
     if (categorySearch && formData.type !== TransactionType.TRANSFER) {
@@ -179,13 +202,28 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         }
     }
 
+    // Process Contact
+    let finalContactId = formData.contactId;
+    let newContactObj: Contact | undefined;
+    if (contactSearch) {
+        const existingContact = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
+        if (existingContact) {
+            finalContactId = existingContact.id;
+        } else {
+            newContactObj = { id: crypto.randomUUID(), name: contactSearch, type: 'PF' }; // Default PF
+            finalContactId = newContactObj.id;
+        }
+    } else {
+        finalContactId = '';
+    }
+
     onSave({
       ...formData,
       amount: parseFloat(formData.amount),
       category: formData.type === TransactionType.TRANSFER ? 'Transferência' : finalCategory,
-      contactId: formData.contactId || undefined,
+      contactId: finalContactId || undefined,
       destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
-    }, undefined, newCategoryObj);
+    }, newContactObj, newCategoryObj);
     onClose();
   };
 
@@ -291,21 +329,42 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 relative" ref={contactDropdownRef}>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Pessoa / Empresa</label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
-                    <select 
-                        value={formData.contactId} 
-                        onChange={(e) => setFormData({ ...formData, contactId: e.target.value })} 
-                        className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
-                    >
-                        <option value="">Nenhum Contato</option>
-                        {contacts.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
+                    <input 
+                        type="text"
+                        value={contactSearch}
+                        onFocus={() => setShowContactDropdown(true)}
+                        onChange={(e) => {
+                            setContactSearch(e.target.value);
+                            setShowContactDropdown(true);
+                            // Reset contactId if search text doesn't match selected contact exactly
+                            setFormData(prev => ({ ...prev, contactId: '' }));
+                        }}
+                        className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent"
+                        placeholder="Buscar ou Criar..."
+                    />
                   </div>
+                  {showContactDropdown && (
+                      <div className="absolute z-50 w-full bg-white border border-slate-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                          {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
+                              <button key={c.id} type="button" onClick={() => {setContactSearch(c.name); setFormData(prev => ({ ...prev, contactId: c.id })); setShowContactDropdown(false);}} className="w-full text-left px-4 py-2 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-600 transition-colors flex items-center justify-between">
+                                  {c.name}
+                                  {formData.contactId === c.id && <Check className="w-3 h-3 text-indigo-600" />}
+                              </button>
+                          ))}
+                          {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
+                              <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
+                                  <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
+                              </button>
+                          )}
+                          {contacts.length === 0 && !contactSearch && (
+                              <div className="px-4 py-4 text-center text-xs text-slate-400 font-medium">Nenhum contato cadastrado</div>
+                          )}
+                      </div>
+                  )}
               </div>
 
               <div className="space-y-1">
