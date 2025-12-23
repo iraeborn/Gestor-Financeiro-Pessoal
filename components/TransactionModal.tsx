@@ -60,8 +60,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Inicialização Robusta do Formulário
   useEffect(() => {
+    if (!isOpen) return;
+
+    const defaultAccId = accounts.length > 0 ? accounts[0].id : '';
+    const defaultDestAccId = accounts.length > 1 ? accounts[1].id : (accounts.length > 0 ? accounts[0].id : '');
+
     if (initialData) {
+      // Verifica se o ID da conta vindo do registro ainda existe na lista de contas
+      const validAccId = accounts.some(a => a.id === initialData.accountId) 
+        ? initialData.accountId! 
+        : defaultAccId;
+
       setFormData({
         description: initialData.description || '',
         amount: initialData.amount !== undefined ? initialData.amount.toString() : '',
@@ -69,8 +80,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         category: initialData.category || '',
         date: initialData.date || new Date().toISOString().split('T')[0],
         status: initialData.status || TransactionStatus.PAID,
-        accountId: initialData.accountId || '',
-        destinationAccountId: initialData.destinationAccountId || '',
+        accountId: validAccId,
+        destinationAccountId: initialData.destinationAccountId || defaultDestAccId,
         isRecurring: !!initialData.isRecurring,
         recurrenceFrequency: initialData.recurrenceFrequency || RecurrenceFrequency.MONTHLY,
         contactId: initialData.contactId || '',
@@ -86,23 +97,30 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       const contact = contacts.find(c => c.id === initialData.contactId);
       setContactSearch(contact ? contact.name : '');
     } else {
-      setFormData(prev => ({
-        ...prev,
+      // Novo Registro
+      setFormData({
         description: '',
         amount: '',
         type: TransactionType.EXPENSE,
+        category: '',
         date: new Date().toISOString().split('T')[0],
         status: TransactionStatus.PAID,
-        accountId: accounts.length > 0 ? accounts[0].id : '',
-        destinationAccountId: accounts.length > 1 ? accounts[1].id : '',
+        accountId: defaultAccId,
+        destinationAccountId: defaultDestAccId,
         contactId: '',
         isRecurring: false,
+        recurrenceFrequency: RecurrenceFrequency.MONTHLY,
+        branchId: '',
+        costCenterId: '',
+        departmentId: '',
+        projectId: '',
+        classification: TransactionClassification.STANDARD,
         receiptUrls: []
-      }));
+      });
       setCategorySearch('');
       setContactSearch('');
     }
-  }, [initialData, isOpen, accounts, contacts]);
+  }, [initialData, isOpen, accounts.length]); // Depende apenas da abertura, troca de alvo ou mudança no número de contas
 
   // Click outside listener for dropdowns
   useEffect(() => {
@@ -190,8 +208,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.accountId) return showAlert("Selecione uma conta.", "warning");
+    if (!formData.accountId) return showAlert("Selecione uma conta válida.", "warning");
     
+    if (formData.type === TransactionType.TRANSFER && formData.accountId === formData.destinationAccountId) {
+        return showAlert("A conta de destino deve ser diferente da conta de origem.", "warning");
+    }
+
     // Process Category
     let finalCategory = categorySearch;
     let newCategoryObj: Category | undefined;
@@ -340,7 +362,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         onChange={(e) => {
                             setContactSearch(e.target.value);
                             setShowContactDropdown(true);
-                            // Reset contactId if search text doesn't match selected contact exactly
                             setFormData(prev => ({ ...prev, contactId: '' }));
                         }}
                         className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent"
@@ -371,7 +392,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Conta</label>
                   <div className="relative">
                     <CreditCard className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
-                    <select value={formData.accountId} onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer">
+                    <select 
+                        value={formData.accountId} 
+                        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} 
+                        className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
+                        required
+                    >
+                        {accounts.length === 0 && <option value="">Nenhuma conta ativa</option>}
                         {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                     </select>
                   </div>
@@ -382,8 +409,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Conta Destino</label>
                       <div className="relative">
                         <ArrowRightLeft className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
-                        <select value={formData.destinationAccountId} onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer">
-                            {accounts.filter(a => a.id !== formData.accountId).map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                        <select 
+                            value={formData.destinationAccountId} 
+                            onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })} 
+                            className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
+                            required
+                        >
+                            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                         </select>
                       </div>
                   </div>
