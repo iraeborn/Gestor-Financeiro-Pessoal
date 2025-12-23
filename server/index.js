@@ -71,7 +71,13 @@ app.use(express.static(distPath));
 app.get('*', renderIndex);
 
 const PORT = process.env.PORT || 8080;
-httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
-    initDb();
+
+// Inicializa banco ANTES de subir o servidor para evitar 503 por falta de tabelas
+initDb().then(() => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
+    });
+}).catch(err => {
+    console.error("❌ [SERVER] Falha ao iniciar banco de dados:", err);
+    process.exit(1);
 });
