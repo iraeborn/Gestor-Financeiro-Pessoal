@@ -71,22 +71,10 @@ const App: React.FC = () => {
     try {
       const initialData = await loadInitialData();
       if (initialData) {
-          // Sanitização preventiva: Garante que campos numéricos sejam números
-          const sanitize = (list: any[], numKeys: string[]) => {
-              if (!Array.isArray(list)) return [];
-              return list.map(item => {
-                  const newItem = { ...item };
-                  numKeys.forEach(k => {
-                      newItem[k] = newItem[k] === null || newItem[k] === undefined ? 0 : Number(newItem[k]);
-                  });
-                  return newItem;
-              });
-          };
-
           setData({
-              accounts: sanitize(initialData.accounts, ['balance', 'creditLimit']),
-              transactions: sanitize(initialData.transactions, ['amount']),
-              goals: sanitize(initialData.goals, ['targetAmount', 'currentAmount']),
+              accounts: initialData.accounts || [],
+              transactions: initialData.transactions || [],
+              goals: initialData.goals || [],
               contacts: initialData.contacts || [],
               categories: initialData.categories || [],
               branches: initialData.branches || [],
@@ -94,12 +82,12 @@ const App: React.FC = () => {
               departments: initialData.departments || [],
               projects: initialData.projects || [],
               serviceClients: initialData.serviceClients || [],
-              serviceItems: sanitize(initialData.serviceItems, ['defaultPrice', 'costPrice']),
+              serviceItems: initialData.serviceItems || [],
               serviceAppointments: initialData.serviceAppointments || [],
-              serviceOrders: sanitize(initialData.serviceOrders, ['totalAmount']),
-              commercialOrders: sanitize(initialData.commercialOrders, ['amount', 'grossAmount', 'discountAmount', 'taxAmount']),
-              contracts: sanitize(initialData.contracts, ['value']),
-              invoices: sanitize(initialData.invoices, ['amount']),
+              serviceOrders: initialData.serviceOrders || [],
+              commercialOrders: initialData.commercialOrders || [],
+              contracts: initialData.contracts || [],
+              invoices: initialData.invoices || [],
               companyProfile: initialData.companyProfile || null
           });
           
@@ -137,7 +125,6 @@ const App: React.FC = () => {
     if (currentUser?.familyId) {
       if (socketRef.current) socketRef.current.disconnect();
       
-      // Fix: Cast io result to any to resolve property 'on' not found on Socket type error
       const socket = io({ 
         transports: ['websocket', 'polling'], 
         withCredentials: true, 

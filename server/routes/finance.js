@@ -16,21 +16,37 @@ const upload = multer({
 const numericFields = [
     'balance', 'amount', 'target_amount', 'current_amount', 
     'total_amount', 'gross_amount', 'discount_amount', 'tax_amount',
-    'value', 'unit_price', 'total_price', 'cost_price', 'credit_limit'
+    'value', 'unit_price', 'total_price', 'cost_price', 'credit_limit',
+    'interest_rate'
 ];
 
-const castNumericFields = (row) => {
+/**
+ * Converte um objeto com chaves snake_case para camelCase
+ * e garante que campos decimais sejam números.
+ */
+const mapToFrontend = (row) => {
     if (!row) return row;
-    const newRow = { ...row };
-    for (const key in newRow) {
+    const newRow = {};
+    
+    for (const key in row) {
+        // Converte snake_case para camelCase
+        const camelKey = key.replace(/([-_][a-z])/ig, ($1) => {
+            return $1.toUpperCase().replace('-', '').replace('_', '');
+        });
+
+        let value = row[key];
+
+        // Trata campos numéricos (DECIMAL no PG vem como string)
         if (numericFields.includes(key)) {
-            newRow[key] = newRow[key] === null ? 0 : Number(newRow[key]);
+            value = value === null ? 0 : Number(value);
         }
-        // Converter snake_case para camelCase para o frontend (compatibilidade)
-        if (key === 'target_amount') newRow.targetAmount = newRow[key];
-        if (key === 'current_amount') newRow.currentAmount = newRow[key];
-        if (key === 'total_amount') newRow.totalAmount = newRow[key];
-        if (key === 'issue_date') newRow.issueDate = newRow[key];
+
+        // Trata datas para string limpa YYYY-MM-DD se necessário
+        if (value instanceof Date) {
+            value = value.toISOString().split('T')[0];
+        }
+
+        newRow[camelKey] = value;
     }
     return newRow;
 };
@@ -76,17 +92,13 @@ export default function(logAudit) {
             settledResults.forEach((result, idx) => {
                 const key = keys[idx];
                 if (key === 'companyProfile') {
-                    results[key] = castNumericFields(result.rows[0]) || null;
+                    results[key] = mapToFrontend(result.rows[0]) || null;
                 } else {
-                    results[key] = result.rows.map(r => {
-                        const casted = castNumericFields(r);
-                        if (casted.created_by_name) casted.createdByName = casted.created_by_name;
-                        return casted;
-                    });
+                    results[key] = result.rows.map(r => mapToFrontend(r));
                 }
             });
 
-            console.log(`[API] Initial-data carregado com sucesso para ${familyId}`);
+            console.log(`[API] Initial-data mapeado e enviado com sucesso.`);
             res.json(results);
         } catch (err) {
             console.error("❌ [API ERROR] Erro fatal em initial-data:", err);
@@ -106,10 +118,19 @@ export default function(logAudit) {
             const isUpdate = existingRes.rows.length > 0;
 
             await client.query(
-                `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, goal_id, user_id, family_id, is_recurring, receipt_urls)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10, goal_id=$11, family_id=$13, receipt_urls=$15`,
-                [id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, sanitizeValue(t.destinationAccountId), sanitizeValue(t.contactId), sanitizeValue(t.goalId), userId, familyId, t.isRecurring || false, JSON.stringify(t.receiptUrls || [])]
+                `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, goal_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date, receipt_urls)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                 ON CONFLICT (id) DO UPDATE SET 
+                    description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, 
+                    account_id=$8, destination_account_id=$9, contact_id=$10, goal_id=$11, 
+                    family_id=$13, is_recurring=$14, recurrence_frequency=$15, recurrence_end_date=$16, receipt_urls=$17`,
+                [
+                    id, t.description, t.amount, t.type, t.category, t.date, t.status, 
+                    t.accountId, sanitizeValue(t.destinationAccountId), sanitizeValue(t.contactId), 
+                    sanitizeValue(t.goalId), userId, familyId, t.isRecurring || false,
+                    sanitizeValue(t.recurrenceFrequency), sanitizeValue(t.recurrenceEndDate),
+                    JSON.stringify(t.receiptUrls || [])
+                ]
             );
 
             if (t.status === 'PAID') {
