@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, AppSettings, EntityType, 
@@ -66,6 +66,29 @@ const App: React.FC = () => {
   
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
+  // Configurações efetivas baseadas no workspace atual
+  const effectiveSettings = useMemo(() => {
+    if (!currentUser) return undefined;
+    const familyId = currentUser.familyId || (currentUser as any).family_id;
+    const ws = currentUser.workspaces?.find(w => w.id === familyId);
+    return ws?.ownerSettings || currentUser.settings;
+  }, [currentUser]);
+
+  // Permissões efetivas do usuário no workspace atual
+  const userPermissions = useMemo(() => {
+    if (!currentUser) return [];
+    const familyId = currentUser.familyId || (currentUser as any).family_id;
+    const ws = currentUser.workspaces?.find(w => w.id === familyId);
+    
+    if (currentUser.id === familyId || ws?.role === 'ADMIN') return 'ALL';
+    
+    let perms = ws?.permissions || [];
+    if (typeof perms === 'string') {
+        try { perms = JSON.parse(perms); } catch (e) { perms = []; }
+    }
+    return Array.isArray(perms) ? perms : [];
+  }, [currentUser]);
+
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -103,7 +126,8 @@ const App: React.FC = () => {
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
   useEffect(() => {
-    if (currentUser?.familyId) {
+    const familyId = currentUser?.familyId || (currentUser as any)?.family_id;
+    if (familyId) {
       if (socketRef.current) socketRef.current.disconnect();
       const socket = io({ 
         transports: ['websocket', 'polling'], 
@@ -112,11 +136,11 @@ const App: React.FC = () => {
         reconnectionAttempts: 20 
       } as any) as any;
       socketRef.current = socket;
-      socket.on('connect', () => { socket.emit('join_family', currentUser.familyId); });
+      socket.on('connect', () => { socket.emit('join_family', familyId); });
       socket.on('DATA_UPDATED', async () => { await loadData(true); });
       return () => { if (socketRef.current) socketRef.current.disconnect(); };
     }
-  }, [currentUser?.familyId, loadData]);
+  }, [currentUser, loadData]);
 
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
@@ -182,9 +206,9 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} userPermissions={userPermissions} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
       case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={currentUser.settings} userEntity={currentUser.entityType} onDelete={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} />;
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser.entityType} onDelete={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEdit={handleEditTransaction} onToggleStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onAdd={handleAddTransaction} />;
       case 'FIN_CALENDAR':
         return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleAddTransaction} onEdit={handleEditTransaction} />;
       case 'FIN_ACCOUNTS':
@@ -196,20 +220,16 @@ const App: React.FC = () => {
       case 'FIN_REPORTS':
         return <Reports transactions={data.transactions} />;
       case 'FIN_CATEGORIES':
-        // Fix: Added deleteCategory implementation
         return <CategoriesView categories={data.categories} onSaveCategory={async (c) => { await api.saveCategory(c); await loadData(true); }} onDeleteCategory={async (id) => { await api.deleteCategory(id); await loadData(true); }} />;
       case 'FIN_CONTACTS':
       case 'SYS_CONTACTS':
-        // Fix: Added deleteContact implementation
         return <ContactsView contacts={data.contacts} onAddContact={async (c) => { await api.saveContact(c); await loadData(true); }} onEditContact={async (c) => { await api.saveContact(c); await loadData(true); }} onDeleteContact={async (id) => { await api.deleteContact(id); await loadData(true); }} />;
       
-      // Módulo Inteligência
       case 'DIAG_HUB':
         return <DiagnosticView state={data} />;
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={data} />;
       
-      // Módulos Corporativos / Serviços
       case 'SRV_OS':
       case 'SRV_SALES':
       case 'SRV_PURCHASES':
@@ -217,7 +237,6 @@ const App: React.FC = () => {
       case 'SRV_CONTRACTS':
       case 'SRV_NF':
       case 'SRV_CLIENTS':
-        // Fix: Added missing api methods for services (saveOS, deleteOS, saveOrder, deleteOrder, etc.) and catalog items
         return <ServicesView 
           currentView={currentView} 
           serviceOrders={data.serviceOrders} 
@@ -240,7 +259,6 @@ const App: React.FC = () => {
           onDeleteCatalogItem={async (id) => { await api.deleteCatalogItem(id); await loadData(true); }}
         />;
       
-      // Sistema
       case 'SYS_ACCESS':
         return <AccessView currentUser={currentUser} />;
       case 'SYS_LOGS':
@@ -249,7 +267,7 @@ const App: React.FC = () => {
         return <SettingsView user={currentUser} pjData={{companyProfile: data.companyProfile, branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects}} onUpdateSettings={async (s) => { await updateSettings(s); setCurrentUser({...currentUser, settings: s}); }} onOpenCollab={() => setIsCollabModalOpen(true)} onSavePJEntity={async (type, d) => { if(type==='company') await api.saveCompanyProfile(d); if(type==='branch') await api.saveBranch(d); await loadData(true); }} onDeletePJEntity={async (type, id) => { if(type==='branch') await api.deleteBranch(id); await loadData(true); }} />;
       
       default:
-        return <Dashboard state={data} settings={currentUser.settings} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} userPermissions={userPermissions} userEntity={currentUser.entityType} onAddTransaction={handleAddTransaction} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={handleEditTransaction} onUpdateStatus={(t) => handleEditTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID})} onChangeView={setCurrentView} />;
     }
   };
 
@@ -257,7 +275,6 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
       <LoadingOverlay isVisible={loading} />
       
-      {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-2xl animate-slide-in-left" onClick={e => e.stopPropagation()}>
@@ -266,13 +283,11 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
         <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} />
       </div>
 
       <main className="flex-1 md:ml-64 h-screen overflow-y-auto relative">
-        {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-100 sticky top-0 z-20">
             <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">F</div>

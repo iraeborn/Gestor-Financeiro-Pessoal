@@ -95,6 +95,12 @@ export interface User {
   workspaces?: Workspace[];
 }
 
+// Fix: Added missing AuthResponse interface used in storageService
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -102,11 +108,6 @@ export interface Workspace {
   entityType: EntityType;
   permissions: string[];
   ownerSettings?: AppSettings;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: User;
 }
 
 export interface Account {
@@ -166,7 +167,6 @@ export interface Transaction {
   contactId?: string;
   goalId?: string;
   receiptUrls?: string[];
-  // PJ fields
   branchId?: string;
   destinationBranchId?: string;
   costCenterId?: string;
@@ -184,7 +184,6 @@ export interface FinancialGoal {
   deadline: string;
 }
 
-// PJ Entities
 export interface CompanyProfile {
   id: string;
   tradeName: string;
@@ -227,7 +226,6 @@ export interface Project {
   name: string;
 }
 
-// Modules
 export interface ServiceClient {
   id: string;
   contactId?: string;
@@ -239,24 +237,24 @@ export interface ServiceClient {
   insurance?: string;
   allergies?: string;
   medications?: string;
-  moduleTag: string; // 'ODONTO', 'GENERAL', etc
+  moduleTag: string;
 }
 
 export interface ServiceItem {
     id: string;
     name: string; 
-    code?: string; // SKU or Internal Code
-    type: 'SERVICE' | 'PRODUCT'; // Default SERVICE
-    isComposite?: boolean; // NEW: If true, price is sum of items
-    defaultPrice: number; // Selling Price
-    costPrice?: number;   // Cost Price (For Margin)
-    unit?: string;        // UN, KG, L, HOUR, SESSION
-    defaultDuration?: number; // In minutes
+    code?: string;
+    type: 'SERVICE' | 'PRODUCT';
+    isComposite?: boolean;
+    defaultPrice: number;
+    costPrice?: number;
+    unit?: string;
+    defaultDuration?: number;
     description?: string;
     moduleTag: string;
     imageUrl?: string;
     brand?: string;
-    items?: OSItem[]; // Composição
+    items?: OSItem[];
 }
 
 export interface ServiceAppointment {
@@ -265,14 +263,13 @@ export interface ServiceAppointment {
   clientName?: string;
   serviceId?: string;
   serviceName?: string;
-  date: string; // ISO datetime
+  date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
   transactionId?: string;
   moduleTag: string;
 }
 
-// Service & Sales Module
 export type OSStatus = 
     | 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' 
     | 'PAUSADA' | 'AGUARDANDO_CLIENTE' | 'AGUARDANDO_MATERIAL' 
@@ -291,8 +288,8 @@ export interface OSItem {
     unitPrice: number;
     totalPrice: number;
     technician?: string;
-    estimatedDuration?: number; // minutes
-    realDuration?: number; // minutes
+    estimatedDuration?: number;
+    realDuration?: number;
     isBillable: boolean;
 }
 
@@ -303,28 +300,15 @@ export interface ServiceOrder {
   description?: string;
   contactId?: string;
   contactName?: string;
-  
   type: OSType;
   origin: OSOrigin;
   priority: OSPriority;
   status: OSStatus;
-  
-  openedAt: string; // ISO DateTime
+  openedAt: string;
   startDate?: string;
   endDate?: string;
-  
   items: OSItem[];
   totalAmount: number;
-}
-
-export interface OrderItem {
-    id: string;
-    serviceItemId?: string;
-    description: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    costPrice?: number;
 }
 
 export interface CommercialOrder {
@@ -337,7 +321,8 @@ export interface CommercialOrder {
   grossAmount?: number;
   discountAmount?: number;
   taxAmount?: number;
-  items?: OrderItem[];
+  // Fix: Changed OrderItem (undefined) to OSItem
+  items?: OSItem[];
   date: string;
   status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED' | 'ON_HOLD' | 'REJECTED';
   transactionId?: string;
@@ -362,15 +347,15 @@ export interface Invoice {
   series?: string;
   type: 'ISS' | 'ICMS';
   amount: number;
-  issue_date: string; // compatibility with db
+  issue_date: string;
   status: 'ISSUED' | 'CANCELED';
   contactId?: string;
   contactName?: string;
   description?: string;
   items?: OSItem[];
   fileUrl?: string;
-  orderId?: string; // Vínculo com Pedido de Venda
-  serviceOrderId?: string; // Vínculo com OS
+  orderId?: string;
+  serviceOrderId?: string;
 }
 
 export interface AppNotification {
@@ -385,9 +370,6 @@ export interface AppNotification {
     data?: any;
 }
 
-/**
- * Collaboration Member interface.
- */
 export interface Member {
   id: string;
   name: string;
@@ -397,9 +379,6 @@ export interface Member {
   permissions: string[];
 }
 
-/**
- * Audit Log entry interface.
- */
 export interface AuditLog {
   id: number;
   userId: string;
@@ -414,9 +393,6 @@ export interface AuditLog {
   isDeleted?: boolean;
 }
 
-/**
- * Notification Log entry interface.
- */
 export interface NotificationLog {
   id: number;
   userId: string;
@@ -460,13 +436,13 @@ export const ROLE_DEFINITIONS = [
         id: 'MEMBER',
         label: 'Membro Padrão',
         description: 'Acesso às finanças do dia a dia, mas sem configurações críticas.',
-        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS']
+        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'DIAG_HUB', 'FIN_ADVISOR']
     },
     {
         id: 'ACCOUNTANT',
         label: 'Contador / Auditor',
         description: 'Visualização de relatórios, extratos e logs para contabilidade.',
-        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR']
+        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR', 'DIAG_HUB']
     },
     {
         id: 'DENTIST',
@@ -487,5 +463,12 @@ export const ROLE_DEFINITIONS = [
         label: 'Operador Financeiro',
         description: 'Lançamentos de contas a pagar/receber e ordens de serviço.',
         defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
+    },
+    {
+        id: 'INTELLIGENCE_SPECIALIST',
+        label: 'Especialista em Dados',
+        description: 'Focado em diagnósticos IA e projeções avançadas.',
+        requiredModule: 'intelligence',
+        defaultPermissions: ['FIN_DASHBOARD', 'DIAG_HUB', 'FIN_ADVISOR', 'FIN_REPORTS']
     }
 ];

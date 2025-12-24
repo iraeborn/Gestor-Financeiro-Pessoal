@@ -12,6 +12,7 @@ import ReactMarkdown from 'react-markdown';
 interface DashboardProps {
   state: AppState;
   settings?: AppSettings;
+  userPermissions?: string[] | 'ALL';
   userEntity?: EntityType;
   onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
   onDeleteTransaction: (id: string) => void;
@@ -21,18 +22,21 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
+  state, settings, userPermissions = 'ALL', userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [diagnostic, setDiagnostic] = useState<string>('');
   const [loadingDiag, setLoadingDiag] = useState(false);
 
-  const hasIntelligence = settings?.activeModules?.intelligence === true;
+  // Verificação combinada: Módulo Ativo + Permissão de Usuário
+  const hasIntelligencePermission = userPermissions === 'ALL' || userPermissions.includes('DIAG_HUB');
+  const hasIntelligenceModule = settings?.activeModules?.intelligence === true;
+  const showIntelligenceCard = hasIntelligenceModule && hasIntelligencePermission;
 
   useEffect(() => {
     const fetchDiag = async () => {
-      if (hasIntelligence && state && state.transactions && state.transactions.length > 0) {
+      if (showIntelligenceCard && state && state.transactions && state.transactions.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
@@ -42,7 +46,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length, hasIntelligence]);
+  }, [state?.transactions?.length, showIntelligenceCard]);
 
   if (!state) return null;
 
@@ -55,7 +59,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pendingExpenses = transactions.filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
-  // Patrimônio em Metas: Valor Inicial + Aportes Liquidados
   const totalInGoals = goals.reduce((acc, goal) => {
       const contributions = transactions
         .filter(t => t.goalId === goal.id && t.status === TransactionStatus.PAID)
@@ -78,7 +81,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </button>
       </div>
 
-      {hasIntelligence && (
+      {showIntelligenceCard && (
         <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
                 <BrainCircuit className="w-48 h-48" />
