@@ -28,9 +28,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [diagnostic, setDiagnostic] = useState<string>('');
   const [loadingDiag, setLoadingDiag] = useState(false);
 
+  const hasIntelligence = settings?.activeModules?.intelligence === true;
+
   useEffect(() => {
     const fetchDiag = async () => {
-      if (state && state.transactions && state.transactions.length > 0) {
+      if (hasIntelligence && state && state.transactions && state.transactions.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
@@ -40,7 +42,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length]);
+  }, [state?.transactions?.length, hasIntelligence]);
 
   if (!state) return null;
 
@@ -76,27 +78,29 @@ const Dashboard: React.FC<DashboardProps> = ({
         </button>
       </div>
 
-      <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
-              <BrainCircuit className="w-48 h-48" />
-          </div>
-          <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="w-5 h-5 text-indigo-400" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Resumo do Gestor de Elite</span>
-              </div>
-              {loadingDiag ? (
-                <div className="flex items-center gap-3 py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
-                  <span className="text-sm text-indigo-100 italic">Sincronizando diagnóstico...</span>
+      {hasIntelligence && (
+        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+                <BrainCircuit className="w-48 h-48" />
+            </div>
+            <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                    <Sparkles className="w-5 h-5 text-indigo-400" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Resumo do Gestor de Elite</span>
                 </div>
-              ) : diagnostic ? (
-                <div className="prose prose-invert prose-sm max-w-none line-clamp-3">
-                    <ReactMarkdown>{diagnostic}</ReactMarkdown>
-                </div>
-              ) : <p className="text-sm text-indigo-200/60">Lance movimentações para ver o diagnóstico.</p>}
-          </div>
-      </div>
+                {loadingDiag ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                    <span className="text-sm text-indigo-100 italic">Sincronizando diagnóstico...</span>
+                  </div>
+                ) : diagnostic ? (
+                  <div className="prose prose-invert prose-sm max-w-none line-clamp-3">
+                      <ReactMarkdown>{diagnostic}</ReactMarkdown>
+                  </div>
+                ) : <p className="text-sm text-indigo-200/60">Lance movimentações para ver o diagnóstico.</p>}
+            </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Saldo em Caixa" amount={currentRealBalance} type="neutral" icon={<Wallet className="w-6 h-6 text-indigo-600"/>} />
