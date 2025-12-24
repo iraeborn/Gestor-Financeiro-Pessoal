@@ -30,7 +30,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [loadingDiag, setLoadingDiag] = useState(false);
 
   // Verificação combinada: Módulo Ativo + Permissão de Usuário
-  const hasIntelligencePermission = userPermissions === 'ALL' || userPermissions.includes('DIAG_HUB');
+  const hasIntelligencePermission = userPermissions === 'ALL' || (Array.isArray(userPermissions) && userPermissions.includes('DIAG_HUB'));
   const hasIntelligenceModule = settings?.activeModules?.intelligence === true;
   const showIntelligenceCard = hasIntelligenceModule && hasIntelligencePermission;
 

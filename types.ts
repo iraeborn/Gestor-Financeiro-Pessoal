@@ -95,7 +95,6 @@ export interface User {
   workspaces?: Workspace[];
 }
 
-// Fix: Added missing AuthResponse interface used in storageService
 export interface AuthResponse {
   token: string;
   user: User;
@@ -321,7 +320,6 @@ export interface CommercialOrder {
   grossAmount?: number;
   discountAmount?: number;
   taxAmount?: number;
-  // Fix: Changed OrderItem (undefined) to OSItem
   items?: OSItem[];
   date: string;
   status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED' | 'ON_HOLD' | 'REJECTED';

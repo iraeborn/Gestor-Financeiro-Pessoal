@@ -22,11 +22,19 @@ const PERMISSION_GROUPS = [
             { id: 'FIN_REPORTS', label: 'Relatórios' },
             { id: 'FIN_CATEGORIES', label: 'Categorias' },
             { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos' },
-            { id: 'FIN_ADVISOR', label: 'Consultor IA' },
+        ]
+    },
+    {
+        name: 'Inteligência (IA Gemini)',
+        requiredModule: 'intelligence',
+        items: [
+            { id: 'DIAG_HUB', label: 'Gestor de Elite (Diagnósticos)' },
+            { id: 'FIN_ADVISOR', label: 'Consultor IA (Chat)' },
         ]
     },
     {
         name: 'Odontologia',
+        requiredModule: 'odonto',
         items: [
             { id: 'ODONTO_AGENDA', label: 'Agenda' },
             { id: 'ODONTO_PATIENTS', label: 'Pacientes' },
@@ -35,6 +43,7 @@ const PERMISSION_GROUPS = [
     },
     {
         name: 'Serviços & Vendas',
+        requiredModule: 'services',
         items: [
             { id: 'SRV_OS', label: 'Ordens de Serviço' },
             { id: 'SRV_SALES', label: 'Vendas' },
@@ -143,7 +152,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         }
     };
 
-    // Helper: Deep compare permissions arrays to find matching profile
     const findMatchingProfile = (perms: string[]) => {
         if (!perms) return 'CUSTOM';
         const sortedPerms = [...perms].sort();
@@ -158,7 +166,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         return match ? match.id : 'CUSTOM';
     };
 
-    // Filter available roles based on Active Modules
     const availableRoles = ROLE_DEFINITIONS.filter(r => {
         if (r.id === 'ADMIN') return false; 
         if (r.requiredModule) {
@@ -170,12 +177,9 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
 
     const openEditModal = (member: Member) => {
         setEditingMember(member);
-        // Fix: Explicitly cast the role to the expected union type
         setEditRole(member.role as 'ADMIN' | 'MEMBER');
         const perms = member.permissions || [];
         setEditPermissions(perms);
-        
-        // Attempt to auto-select profile
         setSelectedProfileId(findMatchingProfile(perms));
     };
 
@@ -209,8 +213,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             newPerms = [...editPermissions, perm];
         }
         setEditPermissions(newPerms);
-        
-        // If user manually touches permissions, switch dropdown to Custom unless it matches exactly another profile
         const match = findMatchingProfile(newPerms);
         setSelectedProfileId(match);
     };
@@ -219,6 +221,12 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         if (!perms) return 0;
         return perms.length;
     };
+
+    const filteredPermissionGroups = PERMISSION_GROUPS.filter(group => {
+        if (!group.requiredModule) return true;
+        const activeModules = currentUser.settings?.activeModules as any;
+        return activeModules?.[group.requiredModule] === true;
+    });
 
     return (
         <div className="space-y-8 animate-fade-in max-w-6xl pb-10">
@@ -235,7 +243,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Invite Generation Section (Admin Only) */}
                 {isAdmin && (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
                         <div className="p-6 border-b border-gray-50 bg-gray-50/50">
@@ -285,7 +292,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                     </div>
                 )}
 
-                {/* Join Team Section */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-full">
                     <div className="p-6 border-b border-gray-50 bg-gray-50/50">
                         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -319,7 +325,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                 </div>
             </div>
 
-            {/* Members List */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
                     <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -368,7 +373,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                                 <div className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden">
                                                     <div 
                                                         className="h-full bg-indigo-500 rounded-full" 
-                                                        style={{ width: `${Math.min(100, (countPermissions(member.permissions) / 10) * 100)}%` }}
+                                                        style={{ width: `${Math.min(100, (countPermissions(member.permissions) / 15) * 100)}%` }}
                                                     ></div>
                                                 </div>
                                                 <span className="text-xs font-medium text-gray-700">
@@ -451,7 +456,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
 
                             {editRole === 'MEMBER' && (
                                 <div className="space-y-6">
-                                    {/* Profile Selector */}
                                     <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                                         <label className="block text-xs font-bold text-indigo-700 uppercase mb-2">Perfil de Acesso (Template)</label>
                                         <select 
@@ -464,15 +468,12 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                                 <option key={role.id} value={role.id}>{role.label}</option>
                                             ))}
                                         </select>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Selecione um perfil para aplicar permissões padrão automaticamente.
-                                        </p>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-3">Páginas Permitidas</label>
                                         <div className="space-y-4">
-                                            {PERMISSION_GROUPS.map((group) => (
+                                            {filteredPermissionGroups.map((group) => (
                                                 <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
                                                     <div className="bg-gray-50 px-4 py-2 border-b border-gray-100">
                                                         <span className="text-xs font-bold text-gray-500 uppercase">{group.name}</span>
