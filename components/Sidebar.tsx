@@ -22,15 +22,20 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
-    currentView, onChangeView, currentUser, onUserUpdate, 
-    onOpenCollab, onOpenNotifications, notificationCount = 0 
+    currentView, onChangeView, currentUser, 
+    onOpenCollab, onOpenNotifications, notificationCount = 0, onUserUpdate
 }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  const currentWorkspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
-  const isOwner = currentUser.id === currentUser.familyId;
+  // Normalização para garantir detecção do contexto independente do mapeamento snake/camel
+  const userId = currentUser.id;
+  const familyId = currentUser.familyId || (currentUser as any).family_id;
+  const workspaces = currentUser.workspaces || [];
+
+  const currentWorkspace = workspaces.find(w => w.id === familyId);
+  const isOwner = userId === familyId;
   const isAdmin = isOwner || currentWorkspace?.role === 'ADMIN'; 
   
   let userPermissions = currentWorkspace?.permissions || [];
@@ -42,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       }
   }
 
+  // Fallback de configurações
   const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
   const activeModules = workspaceSettings.activeModules || {};
   const hasOdonto = activeModules.odonto;
@@ -53,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleSwitchWorkspace = async (wsId: string) => {
-      if (wsId === currentUser.familyId) return;
+      if (wsId === familyId) return;
       setSwitching(true);
       try {
           await switchContext(wsId);
@@ -64,7 +70,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const canView = (permissionId: string) => {
+      // Donos e Admins vêem tudo por padrão
       if (isAdmin) return true;
+      // Membros dependem do array de permissões. Se o array estiver vazio mas o usuário logou, permitimos o Dashboard
+      if (permissionId === 'FIN_DASHBOARD') return true;
       return Array.isArray(userPermissions) && userPermissions.includes(permissionId);
   };
 
@@ -123,8 +132,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-    <div className="flex flex-col h-full bg-white border-r border-gray-100 shadow-sm">
-        <div className="p-6 flex items-center justify-between">
+    <div className="flex flex-col h-full bg-white border-r border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg">F</div>
                 <span className="font-bold text-xl text-gray-800 tracking-tight">FinManager</span>
@@ -169,7 +178,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             ))}
         </div>
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex-shrink-0">
              <div className="relative">
                   <button 
                     onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
@@ -177,12 +186,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                     className="flex items-center gap-3 w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left hover:shadow-sm"
                   >
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-                          {currentUser.name.charAt(0).toUpperCase()}
+                          {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
                       </div>
                       <div className="flex-1 overflow-hidden">
-                          <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name}</p>
+                          <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name || 'Usuário'}</p>
                           <p className="text-xs text-gray-500 truncate">
-                              {switching ? 'Trocando...' : (currentWorkspace?.role === 'ADMIN' ? 'Administrador' : 'Membro')}
+                              {switching ? 'Trocando...' : (isAdmin ? 'Administrador' : 'Membro')}
                           </p>
                       </div>
                       <Settings className="w-4 h-4 text-gray-400" />
@@ -191,22 +200,22 @@ const Sidebar: React.FC<SidebarProps> = ({
                   {isWorkspaceDropdownOpen && (
                       <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-scale-up z-50 max-h-[300px] overflow-y-auto">
                           <div className="p-1">
-                              {currentUser.workspaces && currentUser.workspaces.length > 0 && (
+                              {workspaces.length > 0 && (
                                   <>
                                       <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">
                                           Meus Ambientes
                                       </div>
-                                      {currentUser.workspaces.map(ws => (
+                                      {workspaces.map(ws => (
                                           <button
                                               key={ws.id}
                                               onClick={() => handleSwitchWorkspace(ws.id)}
-                                              className={`w-full text-left px-4 py-2.5 text-xs font-medium flex items-center justify-between gap-2 rounded-lg transition-colors ${ws.id === currentUser.familyId ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                                              className={`w-full text-left px-4 py-2.5 text-xs font-medium flex items-center justify-between gap-2 rounded-lg transition-colors ${ws.id === familyId ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}
                                           >
                                               <div className="flex items-center gap-2 overflow-hidden">
                                                   {ws.entityType === 'PJ' ? <Briefcase className="w-3 h-3 flex-shrink-0" /> : <Building className="w-3 h-3 flex-shrink-0" />}
                                                   <span className="truncate">{ws.name}</span>
                                               </div>
-                                              {ws.id === currentUser.familyId && <Check className="w-3 h-3 text-indigo-600" />}
+                                              {ws.id === familyId && <Check className="w-3 h-3 text-indigo-600" />}
                                           </button>
                                       ))}
                                       <div className="h-px bg-gray-100 my-1"></div>
