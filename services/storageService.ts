@@ -96,7 +96,7 @@ export const updateSettings = async (settings: AppSettings): Promise<User> => {
 };
 
 export const switchContext = async (workspaceId: string) => {
-    const res = await fetch(`${API_URL}/switch-context`, {
+    const res = await fetch(`${API_URL}/auth/switch-context`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ targetFamilyId: workspaceId }) 
@@ -124,7 +124,7 @@ export const consultCnpj = async (cnpj: string) => {
 
 // Collaboration
 export const createInvite = async (roleTemplate?: string): Promise<{ code: string }> => {
-    const res = await fetch(`${API_URL}/invites`, { 
+    const res = await fetch(`${API_URL}/auth/invites`, { 
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ roleTemplate })
@@ -133,7 +133,7 @@ export const createInvite = async (roleTemplate?: string): Promise<{ code: strin
 };
 
 export const joinFamily = async (code: string): Promise<User> => {
-    const res = await fetch(`${API_URL}/invite/join`, {
+    const res = await fetch(`${API_URL}/auth/invite/join`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ code })
@@ -148,12 +148,12 @@ export const joinFamily = async (code: string): Promise<User> => {
 };
 
 export const getFamilyMembers = async (): Promise<Member[]> => {
-    const res = await fetch(`${API_URL}/family/members`, { headers: getHeaders() });
+    const res = await fetch(`${API_URL}/auth/family/members`, { headers: getHeaders() });
     return await handleResponse(res);
 };
 
 export const removeMember = async (memberId: string) => {
-    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
+    const res = await fetch(`${API_URL}/auth/family/members/${memberId}`, {
         method: 'DELETE',
         headers: getHeaders()
     });
@@ -161,7 +161,7 @@ export const removeMember = async (memberId: string) => {
 };
 
 export const updateMemberRole = async (memberId: string, role: string, permissions: string[]) => {
-    const res = await fetch(`${API_URL}/family/members/${memberId}`, {
+    const res = await fetch(`${API_URL}/auth/family/members/${memberId}`, {
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify({ role, permissions })
