@@ -43,6 +43,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       enabled: false,
       email: user.email,
       notifyDueToday: true,
+      notifyDueTomorrow: true,
+      notifyOverdue: true,
       notifyWeeklyReport: true
   });
   const [testingEmail, setTestingEmail] = useState(false);
@@ -409,13 +411,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="p-6 border-b border-gray-50 bg-gray-50/50">
                     <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                         <Mail className="w-5 h-5 text-blue-600" />
-                        Email
+                        E-mail
                     </h2>
                 </div>
                 <div className="p-6 space-y-6 flex-1 flex flex-col">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-gray-400" /> Endereço de Email
+                            <Mail className="w-4 h-4 text-gray-400" /> Endereço de Recebimento
                         </label>
                         <div className="flex gap-2">
                             <input 
@@ -438,20 +440,31 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="bg-blue-50/50 p-4 rounded-xl space-y-3 border border-blue-100/50 flex-1">
                         <p className="text-xs font-bold text-blue-800 uppercase mb-2">Alertas Automáticos</p>
                         <label className="flex items-center justify-between cursor-pointer">
-                            <span className="text-sm text-gray-700">Ativar Notificações</span>
+                            <span className="text-sm text-gray-700 font-bold">Ativar Notificações por E-mail</span>
                             <input type="checkbox" checked={emailConfig.enabled} onChange={e => setEmailConfig({ ...emailConfig, enabled: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
                         </label>
+                        
+                        <div className="h-px bg-blue-100 my-2"></div>
+
                         <label className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700">Contas Vencendo Hoje</span>
                             <input type="checkbox" checked={emailConfig.notifyDueToday} onChange={e => setEmailConfig({ ...emailConfig, notifyDueToday: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
                         </label>
                         <label className="flex items-center justify-between cursor-pointer">
-                            <span className="text-sm text-gray-700">Relatório Semanal</span>
+                            <span className="text-sm text-gray-700">Contas Vencendo Amanhã</span>
+                            <input type="checkbox" checked={emailConfig.notifyDueTomorrow} onChange={e => setEmailConfig({ ...emailConfig, notifyDueTomorrow: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Contas em Atraso (Vencidas)</span>
+                            <input type="checkbox" checked={emailConfig.notifyOverdue} onChange={e => setEmailConfig({ ...emailConfig, notifyOverdue: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-sm text-gray-700">Relatório Semanal de Fluxo</span>
                             <input type="checkbox" checked={emailConfig.notifyWeeklyReport} onChange={e => setEmailConfig({ ...emailConfig, notifyWeeklyReport: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"/>
                         </label>
                     </div>
 
-                    <button onClick={handleSaveEmail} className="w-full bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 transition-colors">Salvar Email</button>
+                    <button onClick={handleSaveEmail} className="w-full bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 transition-colors">Salvar Configurações de E-mail</button>
                 </div>
             </div>
         </div>

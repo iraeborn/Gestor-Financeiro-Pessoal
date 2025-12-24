@@ -76,6 +76,8 @@ export interface AppSettings {
     enabled: boolean;
     email: string;
     notifyDueToday: boolean;
+    notifyDueTomorrow: boolean;
+    notifyOverdue: boolean;
     notifyWeeklyReport: boolean;
   };
 }
