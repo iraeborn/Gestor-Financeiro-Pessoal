@@ -62,6 +62,7 @@ export interface AppSettings {
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
+    intelligence?: boolean;
     [key: string]: boolean | undefined;
   };
   whatsapp?: {

@@ -190,10 +190,26 @@ export const api = {
     saveGoal: async (g: FinancialGoal) => handleResponse(await fetch(`${API_URL}/goals`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(g) })),
     deleteGoal: async (id: string) => handleResponse(await fetch(`${API_URL}/goals/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveContact: async (c: Contact) => handleResponse(await fetch(`${API_URL}/contacts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
+    // Fix: Added missing deleteContact method to api object
+    deleteContact: async (id: string) => handleResponse(await fetch(`${API_URL}/contacts/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveCategory: async (c: Category) => handleResponse(await fetch(`${API_URL}/categories`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
+    // Fix: Added missing deleteCategory method to api object
+    deleteCategory: async (id: string) => handleResponse(await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveBranch: async (d: any) => handleResponse(await fetch(`${API_URL}/branches`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
     deleteBranch: async (id: string) => handleResponse(await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveCompanyProfile: async (d: any) => handleResponse(await fetch(`${API_URL}/company`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
+    // Fix: Added missing Service and Sales related methods to api object
+    saveOS: async (os: any) => handleResponse(await fetch(`${API_URL}/services/os`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(os) })),
+    deleteOS: async (id: string) => handleResponse(await fetch(`${API_URL}/services/os/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    saveOrder: async (o: any) => handleResponse(await fetch(`${API_URL}/services/orders`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(o) })),
+    deleteOrder: async (id: string) => handleResponse(await fetch(`${API_URL}/services/orders/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    saveContract: async (c: any) => handleResponse(await fetch(`${API_URL}/services/contracts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
+    deleteContract: async (id: string) => handleResponse(await fetch(`${API_URL}/services/contracts/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    saveInvoice: async (i: any) => handleResponse(await fetch(`${API_URL}/services/invoices`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
+    deleteInvoice: async (id: string) => handleResponse(await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    // Fix: Added missing Catalog Item methods to api object
+    saveCatalogItem: async (i: any) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
+    deleteCatalogItem: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() })),
     // Fix: Added missing shareOrder method to api object
     shareOrder: async (orderId: string, channel: string) => handleResponse(await fetch(`${API_URL}/services/orders/${orderId}/share`, {
         method: 'POST',

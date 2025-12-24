@@ -52,6 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const activeModules = workspaceSettings.activeModules || {};
   const hasOdonto = activeModules.odonto;
   const hasServices = activeModules.services;
+  const hasIntelligence = activeModules.intelligence;
 
   const handleLogout = () => {
     logout();
@@ -92,13 +93,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
       ].filter(i => canView(i.id)) 
     },
-    {
+    ...(hasIntelligence ? [{
       section: 'Inteligência',
       items: [
         { id: 'DIAG_HUB', label: 'Gestor de Elite', icon: BrainCircuit, highlight: true },
         { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: Sparkles },
       ].filter(i => canView('FIN_ADVISOR'))
-    },
+    }] : []),
     ...(hasServices ? [{ 
       section: 'Serviços & Vendas', 
       items: [

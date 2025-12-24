@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -70,7 +70,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleToggleModule = async (moduleKey: 'odonto' | 'services') => {
+  const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence') => {
       const currentActive = settings.activeModules?.[moduleKey] || false;
       const newSettings = { 
           ...settings, 
@@ -79,7 +79,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          if (!currentActive) showAlert(`Módulo ${moduleKey === 'odonto' ? 'Odonto' : 'Serviços'} ativado!`, "success");
+          let label = moduleKey === 'odonto' ? 'Odonto' : moduleKey === 'services' ? 'Serviços' : 'Inteligência';
+          if (!currentActive) showAlert(`Módulo ${label} ativado!`, "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
       }
@@ -281,6 +282,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </h2>
             </div>
             <div className="p-6 space-y-6">
+                {/* Módulo Inteligência */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                            <BrainCircuit className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-gray-900">Módulo Inteligência (IA Gemini)</h3>
+                            <p className="text-sm text-gray-500 max-w-md mt-1">
+                                Ativa o Consultor IA e o Gestor de Elite para diagnósticos avançados e conversa em tempo real sobre suas finanças.
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleModule('intelligence')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.intelligence ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {settings.activeModules?.intelligence ? <><CheckCircle className="w-4 h-4" /> Ativado</> : "Ativar"}
+                    </button>
+                </div>
+
+                <div className="border-t border-gray-100"></div>
+
                 {/* Módulo Serviços & Vendas */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-start gap-4">
@@ -546,7 +570,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     <input 
                                         type="text"
                                         value={companyForm.state}
-                                        onChange={e => setCompanyForm({...companyForm, state: e.target.value})}
+                                        onChange={e => setCompanyForm({...companyForm, state: e.target.value.toUpperCase()})}
                                         placeholder="UF"
                                         className="w-16 rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                     />
