@@ -12,6 +12,29 @@ const router = express.Router();
 
 export default function(logAudit) {
 
+    // --- CONFIGURAÇÕES DO SISTEMA ---
+
+    router.post('/settings', authenticateToken, async (req, res) => {
+        const { settings } = req.body;
+        const userId = req.user.id;
+        try {
+            // Salva as configurações no registro do usuário (Dono ou Membro)
+            // No nosso sistema, as configurações do Dono definem o comportamento do Workspace
+            await pool.query(
+                'UPDATE users SET settings = $1 WHERE id = $2',
+                [JSON.stringify(settings), userId]
+            );
+
+            await logAudit(pool, userId, 'UPDATE', 'settings', userId, 'Configurações de sistema atualizadas');
+            res.json({ success: true });
+        } catch (err) {
+            console.error("[SETTINGS ERROR]", err);
+            res.status(500).json({ error: 'Erro ao salvar configurações: ' + err.message });
+        }
+    });
+
+    // --- TESTES DE NOTIFICAÇÃO ---
+
     router.post('/test-whatsapp', authenticateToken, async (req, res) => {
         const { phone } = req.body;
         try {
@@ -25,45 +48,78 @@ export default function(logAudit) {
     router.post('/test-email', authenticateToken, async (req, res) => {
         const { email } = req.body;
         try {
-            await sendEmail(email, "Teste de Notificação", "FinManager está operacional.", "<h1>Sucesso!</h1>");
+            await sendEmail(email, "Teste de Notificação", "FinManager está operacional.", "<h1>Sucesso!</h1><p>Sua integração de e-mail está funcionando corretamente.</p>");
             res.json({ success: true });
         } catch (e) { 
             res.status(500).json({ error: e.message }); 
         }
     });
 
+    // --- PERFIL DO USUÁRIO ---
+
     router.put('/profile', authenticateToken, async (req, res) => {
         const { name, email, currentPassword, newPassword } = req.body;
         const userId = req.user.id;
         try {
             const user = (await pool.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
+            if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
             let passwordHash = user.password_hash;
             if (newPassword) {
                 if (!user.google_id) {
-                    if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password_hash))) return res.status(400).json({ error: 'Senha atual incorreta.' });
+                    if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+                        return res.status(400).json({ error: 'Senha atual incorreta.' });
+                    }
                 }
                 passwordHash = await bcrypt.hash(newPassword, 10);
             }
-            await pool.query(`UPDATE users SET name = $1, email = $2, password_hash = $3 WHERE id = $4`, [name, email, passwordHash, userId]);
+            
+            await pool.query(
+                `UPDATE users SET name = $1, email = $2, password_hash = $3 WHERE id = $4`,
+                [name, email, passwordHash, userId]
+            );
             
             const workspaces = await getUserWorkspaces(userId);
-            res.json({ user: { id: userId, name, email, settings: user.settings, workspaces }});
-            await logAudit(pool, userId, 'UPDATE', 'user', userId, 'Perfil atualizado');
-        } catch (err) { res.status(500).json({ error: 'Erro ao atualizar perfil.' }); }
+            res.json({ 
+                user: { 
+                    id: userId, 
+                    name, 
+                    email, 
+                    settings: user.settings, 
+                    familyId: user.family_id,
+                    workspaces 
+                }
+            });
+            
+            await logAudit(pool, userId, 'UPDATE', 'user', userId, 'Perfil de usuário atualizado');
+        } catch (err) { 
+            res.status(500).json({ error: 'Erro ao atualizar perfil: ' + err.message }); 
+        }
     });
+
+    // --- AUDITORIA ---
 
     router.get('/audit-logs', authenticateToken, async (req, res) => {
         try {
-            const familyId = (await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id])).rows[0]?.family_id || req.user.id;
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
+            const familyId = userRes.rows[0]?.family_id || req.user.id;
+            
             const logs = await pool.query(`
                 SELECT al.*, u.name as user_name 
                 FROM audit_logs al 
                 JOIN users u ON al.user_id = u.id 
                 WHERE u.family_id = $1 
-                ORDER BY al.timestamp DESC LIMIT 100
+                ORDER BY al.timestamp DESC LIMIT 150
             `, [familyId]);
-            res.json(logs.rows.map(r => ({ ...r, userName: r.user_name, entityId: r.entity_id })));
-        } catch(err) { res.status(500).json({ error: err.message }); }
+            
+            res.json(logs.rows.map(r => ({ 
+                ...r, 
+                userName: r.user_name, 
+                entityId: r.entity_id 
+            })));
+        } catch(err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     // --- GESTÃO DE MEMBROS ---
@@ -78,6 +134,7 @@ export default function(logAudit) {
                 FROM users u
                 JOIN memberships m ON u.id = m.user_id
                 WHERE m.family_id = $1
+                ORDER BY u.name ASC
             `, [familyId]);
 
             res.json(members.rows.map(m => {
@@ -87,48 +144,77 @@ export default function(logAudit) {
                 }
                 return { ...m, permissions: Array.isArray(perms) ? perms : [] };
             }));
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     router.put('/members/:memberId', authenticateToken, async (req, res) => {
         const { role, permissions } = req.body;
         const { memberId } = req.params;
+        const userId = req.user.id;
+        
         try {
-            const adminCheck = await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $1)', [req.user.id]);
-            if (adminCheck.rows[0]?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas administradores podem alterar permissões.' });
-
-            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const familyId = userRes.rows[0]?.family_id;
+
+            // Valida se quem está tentando editar é ADMIN do workspace
+            const adminCheck = await pool.query(
+                'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', 
+                [userId, familyId]
+            );
+
+            if (adminCheck.rows[0]?.role !== 'ADMIN') {
+                return res.status(403).json({ error: 'Apenas administradores podem gerenciar a equipe.' });
+            }
 
             await pool.query(
                 'UPDATE memberships SET role = $1, permissions = $2 WHERE user_id = $3 AND family_id = $4',
                 [role, JSON.stringify(permissions || []), memberId, familyId]
             );
 
-            await logAudit(pool, req.user.id, 'UPDATE', 'membership', memberId, `Permissões de membro alteradas: ${role}`);
+            await logAudit(pool, userId, 'UPDATE', 'membership', memberId, `Permissões de ${role} atualizadas`);
             res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     router.delete('/members/:memberId', authenticateToken, async (req, res) => {
         const { memberId } = req.params;
+        const userId = req.user.id;
+        
         try {
-            const adminCheck = await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND family_id = (SELECT family_id FROM users WHERE id = $1)', [req.user.id]);
-            if (adminCheck.rows[0]?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas administradores podem remover membros.' });
-
-            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const familyId = userRes.rows[0]?.family_id;
 
-            if (memberId === familyId) return res.status(400).json({ error: 'O dono do ambiente não pode ser removido.' });
+            const adminCheck = await pool.query(
+                'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', 
+                [userId, familyId]
+            );
 
-            await pool.query('DELETE FROM memberships WHERE user_id = $1 AND family_id = $2', [memberId, familyId]);
+            if (adminCheck.rows[0]?.role !== 'ADMIN') {
+                return res.status(403).json({ error: 'Apenas administradores podem remover membros.' });
+            }
+
+            // Impede de remover a si próprio se for o único admin (opcional, mas recomendado)
+            if (memberId === familyId) {
+                return res.status(400).json({ error: 'O proprietário do ambiente não pode ser removido.' });
+            }
+
+            await pool.query(
+                'DELETE FROM memberships WHERE user_id = $1 AND family_id = $2', 
+                [memberId, familyId]
+            );
             
-            // Se o usuário removido estava visualizando este family_id, volta para o dele próprio
-            await pool.query('UPDATE users SET family_id = id WHERE id = $1 AND family_id = $2', [memberId, familyId]);
+            // Retorna o usuário removido para o contexto dele mesmo
+            await pool.query('UPDATE users SET family_id = id WHERE id = $1', [memberId]);
 
-            await logAudit(pool, req.user.id, 'DELETE', 'membership', memberId, 'Membro removido do workspace');
+            await logAudit(pool, userId, 'DELETE', 'membership', memberId, 'Membro removido do workspace');
             res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     // --- CONVITES ---
@@ -139,7 +225,7 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
             const familyId = userRes.rows[0]?.family_id;
 
-            const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 chars
+            const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // Código de 6 caracteres
             const expiresAt = new Date();
             expiresAt.setHours(expiresAt.getHours() + 24);
 
@@ -149,7 +235,9 @@ export default function(logAudit) {
             );
 
             res.json({ code });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     router.post('/invites/join', authenticateToken, async (req, res) => {
@@ -160,29 +248,39 @@ export default function(logAudit) {
                 [code]
             );
 
-            if (inviteRes.rows.length === 0) return res.status(400).json({ error: 'Código inválido ou expirado.' });
+            if (inviteRes.rows.length === 0) {
+                return res.status(400).json({ error: 'Código inválido ou expirado.' });
+            }
 
             const invite = inviteRes.rows[0];
             const userId = req.user.id;
 
-            // Cria o vínculo (Membership)
+            // Cria o vínculo no banco
             await pool.query(
                 `INSERT INTO memberships (user_id, family_id, role, permissions) 
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (user_id, family_id) DO NOTHING`,
-                [userId, invite.family_id, 'MEMBER', '[]']
+                [userId, invite.family_id, invite.role_template || 'MEMBER', '[]']
             );
 
-            // Muda o contexto atual do usuário para o novo family_id
+            // Troca o contexto ativo do usuário
             await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
 
             const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
             const workspaces = await getUserWorkspaces(userId);
             
-            await logAudit(pool, userId, 'JOIN', 'family', invite.family_id, 'Usuário entrou via convite');
+            await logAudit(pool, userId, 'JOIN', 'family', invite.family_id, 'Usuário ingressou via código de convite');
             
-            res.json({ user: { ...userRes.rows[0], workspaces } });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+            res.json({ 
+                user: { 
+                    ...userRes.rows[0], 
+                    familyId: invite.family_id,
+                    workspaces 
+                } 
+            });
+        } catch (err) { 
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     return router;
