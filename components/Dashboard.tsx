@@ -5,7 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Award } from 'lucide-react';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2 } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 
@@ -18,11 +18,10 @@ interface DashboardProps {
   onEditTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onUpdateStatus: (t: Transaction) => void;
   onChangeView: (view: ViewMode) => void;
-  onUpdateAttachments?: (t: Transaction, urls: string[]) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView, onUpdateAttachments
+  state, settings, userEntity, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
 }) => {
   const [isTransModalOpen, setTransModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -41,7 +40,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length, state?.accounts?.length]);
+  }, [state?.transactions?.length]);
 
   if (!state) return null;
 
@@ -54,24 +53,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pendingExpenses = transactions.filter(t => t.type === TransactionType.EXPENSE && t.status !== TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0);
   const projectedBalance = currentRealBalance + pendingIncome - pendingExpenses;
 
-  const handleEditClick = (t: Transaction) => {
-      setEditingTransaction({ ...t });
-      setTransModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-      setTransModalOpen(false);
-      setEditingTransaction(null);
-  };
-
-  const handleSave = (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => {
-      if (editingTransaction) {
-          onEditTransaction({ ...t, id: editingTransaction.id }, newContact, newCategory);
-      } else {
-          onAddTransaction(t, newContact, newCategory);
-      }
-      handleCloseModal();
-  };
+  // Patrimônio em Metas: Valor Inicial + Aportes Liquidados
+  const totalInGoals = goals.reduce((acc, goal) => {
+      const contributions = transactions
+        .filter(t => t.goalId === goal.id && t.status === TransactionStatus.PAID)
+        .reduce((sum, t) => sum + t.amount, 0);
+      return acc + (goal.currentAmount || 0) + contributions;
+  }, 0);
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -93,66 +81,37 @@ const Dashboard: React.FC<DashboardProps> = ({
               <BrainCircuit className="w-48 h-48" />
           </div>
           <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-400" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Resumo do Gestor de Elite</span>
-                </div>
-                <button 
-                    onClick={() => onChangeView('DIAG_HUB')}
-                    className="bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-500/30 flex items-center gap-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/40 transition-all"
-                >
-                    Acessar Módulo IA <ArrowRight className="w-3 h-3" />
-                </button>
+              <div className="flex items-center gap-2 mb-4">
+                  <Sparkles className="w-5 h-5 text-indigo-400" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-indigo-200">Resumo do Gestor de Elite</span>
               </div>
-              
               {loadingDiag ? (
-                <div className="flex items-center gap-3 py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-                  <span className="text-sm text-indigo-100 font-medium italic">Sincronizando diagnóstico...</span>
+                <div className="flex items-center gap-3 py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                  <span className="text-sm text-indigo-100 italic">Sincronizando diagnóstico...</span>
                 </div>
               ) : diagnostic ? (
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="lg:col-span-3 prose prose-invert prose-sm max-w-none line-clamp-4">
-                        <ReactMarkdown>{diagnostic}</ReactMarkdown>
-                    </div>
-                    <div className="flex flex-col justify-center items-center lg:items-end border-t lg:border-t-0 lg:border-l border-white/10 pt-4 lg:pt-0 lg:pl-6">
-                        <p className="text-[10px] text-indigo-300 uppercase font-bold mb-2">Diagnóstico Completo?</p>
-                        <button 
-                            onClick={() => onChangeView('DIAG_HUB')}
-                            className="w-full lg:w-auto bg-white text-indigo-900 px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
-                        >
-                            Ver Tudo <ArrowRight className="w-3 h-3" />
-                        </button>
-                    </div>
+                <div className="prose prose-invert prose-sm max-w-none line-clamp-3">
+                    <ReactMarkdown>{diagnostic}</ReactMarkdown>
                 </div>
-              ) : (
-                <div className="py-6 text-indigo-200/60 flex items-center gap-3">
-                    <div className="p-3 bg-white/5 rounded-2xl border border-white/10"><TrendingUp className="w-6 h-6"/></div>
-                    <p className="text-sm">Lance movimentações para ver o diagnóstico rápido.</p>
-                </div>
-              )}
+              ) : <p className="text-sm text-indigo-200/60">Lance movimentações para ver o diagnóstico.</p>}
           </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Saldo em Caixa" amount={currentRealBalance} type="neutral" icon={<Wallet className="w-6 h-6 text-indigo-600"/>} />
         <StatCard title="Saldo Projetado" amount={projectedBalance} type={projectedBalance >= 0 ? 'info' : 'negative'} icon={<CalendarClock className="w-6 h-6 text-blue-600"/>} subtitle="Até final do mês" />
-        <StatCard title="Patrimônio em Metas" amount={goals.reduce((acc,g)=>acc+g.currentAmount, 0)} type="positive" icon={<Target className="w-6 h-6 text-emerald-600"/>} />
+        <StatCard title="Patrimônio em Metas" amount={totalInGoals} type="positive" icon={<Target className="w-6 h-6 text-emerald-600"/>} />
         <StatCard title="Contas Pendentes" amount={pendingExpenses} type="negative" icon={<TrendingDown className="w-6 h-6 text-rose-600"/>} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 lg:col-span-2">
-          <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500"/> Fluxo de Caixa Mensal
-          </h3>
+          <h3 className="text-lg font-bold text-gray-800 mb-6">Fluxo de Caixa Mensal</h3>
           <CashFlowChart transactions={transactions} />
         </div>
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-rose-500"/> Categorias
-          </h3>
+          <h3 className="text-lg font-bold text-gray-800 mb-6">Categorias</h3>
           <ExpensesByCategory transactions={transactions} />
         </div>
       </div>
@@ -160,25 +119,22 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-gray-50 flex justify-between items-center">
             <h3 className="text-lg font-bold text-gray-800">Últimos Lançamentos</h3>
-            <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-sm font-bold flex items-center gap-1">
-                Ver Tudo <ArrowRight className="w-4 h-4" />
-            </button>
+            <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-sm font-bold flex items-center gap-1">Ver Tudo <ArrowRight className="w-4 h-4" /></button>
         </div>
         <TransactionList 
             transactions={transactions.slice(0, 10)} 
             accounts={accounts} 
             contacts={state.contacts || []} 
             onDelete={onDeleteTransaction}
-            onEdit={handleEditClick}
+            onEdit={(t) => { setEditingTransaction(t); setTransModalOpen(true); }}
             onToggleStatus={onUpdateStatus}
-            onUpdateAttachments={onUpdateAttachments}
         />
       </div>
 
       <TransactionModal 
         isOpen={isTransModalOpen} 
-        onClose={handleCloseModal} 
-        onSave={handleSave}
+        onClose={() => setTransModalOpen(false)} 
+        onSave={(t, nc, ncat) => { if(editingTransaction) onEditTransaction({...t, id: editingTransaction.id}, nc, ncat); else onAddTransaction(t, nc, ncat); setTransModalOpen(false); }}
         accounts={accounts}
         contacts={state.contacts || []}
         categories={state.categories || []}
