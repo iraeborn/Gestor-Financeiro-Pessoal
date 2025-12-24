@@ -9,7 +9,7 @@ import {
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Menu } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 import Auth from './components/Auth';
@@ -62,10 +62,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
+  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
   
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
-  const [remoteApprovalOrder, setRemoteApprovalOrder] = useState<CommercialOrder | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -174,7 +173,7 @@ const App: React.FC = () => {
   };
 
   if (publicToken) return <PublicOrderView token={publicToken} />;
-  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium">Sincronizando ambiente...</div>;
+  if (!authChecked) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-medium tracking-tight">Sincronizando ambiente...</div>;
   if (!currentUser) {
     if (showLanding) return <LandingPage onLogin={() => setShowLanding(false)} onGetStarted={(type, plan) => { setLandingInitType(type); setLandingInitPlan(plan); setShowLanding(false); }} />;
     return <Auth onLoginSuccess={handleLoginSuccess} initialMode={showLanding ? 'LOGIN' : 'REGISTER'} initialEntityType={landingInitType} initialPlan={landingInitPlan} />;
@@ -202,13 +201,38 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
       <LoadingOverlay isVisible={loading} />
+      
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="w-64 h-full bg-white shadow-2xl animate-slide-in-left" onClick={e => e.stopPropagation()}>
+             <Sidebar currentView={currentView} onChangeView={(v) => { setCurrentView(v); setIsMobileMenuOpen(false); }} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
         <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} />
       </div>
+
       <main className="flex-1 md:ml-64 h-screen overflow-y-auto relative">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-100 sticky top-0 z-20">
+            <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">F</div>
+                <span className="font-bold text-gray-800">FinManager</span>
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
+                <Menu className="w-6 h-6" />
+            </button>
+        </div>
+
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
       </main>
+
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
+      <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} notifications={notifications} onMarkAsRead={(id) => {}} onAction={() => {}} />
     </div>
   );
 };

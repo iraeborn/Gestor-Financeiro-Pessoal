@@ -17,6 +17,7 @@ export default function(logAudit) {
         const userId = req.user.id;
         try {
             const userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
+            if (!userRow) return res.status(404).json({ error: 'Usuário não encontrado' });
             const workspaces = await getUserWorkspaces(userId);
             const ownerRes = await pool.query('SELECT entity_type FROM users WHERE id = $1', [userRow.family_id]);
             res.json({ user: { ...userRow, entityType: ownerRes.rows[0]?.entity_type || userRow.entity_type, workspaces } });
@@ -59,6 +60,33 @@ export default function(logAudit) {
         const token = jwt.sign(userRow, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { ...userRow, workspaces } });
       } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.post('/google', async (req, res) => {
+      const { credential } = req.body;
+      try {
+        const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
+        const { sub: googleId, email, name } = ticket.getPayload();
+        
+        let userRow = (await pool.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
+        
+        if (!userRow) {
+           const id = crypto.randomUUID();
+           await pool.query(`INSERT INTO users (id, name, email, google_id, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, 'PF', 'TRIAL', 'TRIALING')`, [id, name, email, googleId]);
+           await pool.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
+           userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
+           await logAudit(pool, id, 'CREATE', 'user', id, `Novo usuário Google: ${name}`);
+        } else if (!userRow.google_id) {
+           await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, userRow.id]);
+           userRow.google_id = googleId;
+        }
+
+        const workspaces = await getUserWorkspaces(userRow.id);
+        const token = jwt.sign(userRow, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { ...userRow, workspaces } });
+      } catch (err) { 
+        res.status(400).json({ error: 'Google Auth Error: ' + err.message }); 
+      }
     });
 
     return router;
