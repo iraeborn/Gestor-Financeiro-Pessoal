@@ -31,11 +31,14 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
 
   const handleSaveGoal = (e: React.FormEvent) => {
       e.preventDefault();
+      // Fix: Ensuring both camelCase and snake_case current amount fields are provided to satisfy interface
+      const currentAmountNum = parseFloat(formData.currentAmount);
       onSaveGoal({
           id: formData.id || crypto.randomUUID(),
           name: formData.name,
           targetAmount: parseFloat(formData.targetAmount),
-          currentAmount: parseFloat(formData.currentAmount),
+          currentAmount: currentAmountNum,
+          current_amount: currentAmountNum,
           deadline: formData.deadline
       });
       setIsModalOpen(false);

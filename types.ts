@@ -181,7 +181,8 @@ export interface FinancialGoal {
   id: string;
   name: string;
   targetAmount: number;
-  currentAmount: number;
+  current_amount: number; // Snake case adjustment from DB
+  currentAmount?: number; // Camel case for frontend
   deadline: string;
 }
 
@@ -316,6 +317,7 @@ export interface CommercialOrder {
   id: string;
   type: 'SALE' | 'PURCHASE';
   description: string;
+  contact_id?: string; // DB Mapping
   contactId?: string;
   contactName?: string;
   amount: number;
@@ -425,50 +427,78 @@ export interface AppState {
   invoices: Invoice[];
 }
 
-export const ROLE_DEFINITIONS = [
+// Kanban Component Props
+export interface KanbanItem {
+    id: string;
+    title: string;
+    subtitle?: string;
+    status: string;
+    priority?: OSPriority;
+    amount?: number;
+    date?: string;
+    tags?: string[];
+    raw?: any; // Objeto original
+}
+
+export interface KanbanColumnConfig {
+    id: string;
+    label: string;
+    color: string; // Tailwind class
+    borderColor: string;
+}
+
+/**
+ * Interface for pre-configured roles used in invite and access management
+ */
+export interface RoleDefinition {
+    id: string;
+    label: string;
+    description: string;
+    defaultPermissions: string[];
+    requiredModule?: string;
+}
+
+/**
+ * Pre-defined role templates for quick setup of new members
+ */
+export const ROLE_DEFINITIONS: RoleDefinition[] = [
     {
         id: 'ADMIN',
         label: 'Administrador',
-        description: 'Acesso total a todas as funcionalidades e configurações.',
-        defaultPermissions: []
+        description: 'Acesso total ao sistema e gestão de equipe.',
+        defaultPermissions: [] // Admins usually get everything logic-wise
     },
     {
         id: 'MEMBER',
         label: 'Membro Padrão',
-        description: 'Acesso às finanças do dia a dia, mas sem configurações críticas.',
-        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'DIAG_HUB', 'FIN_ADVISOR']
+        description: 'Acesso às funções financeiras básicas.',
+        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR']
     },
     {
         id: 'ACCOUNTANT',
-        label: 'Contador / Auditor',
-        description: 'Visualização de relatórios, extratos e logs para contabilidade.',
-        defaultPermissions: ['FIN_REPORTS', 'FIN_TRANSACTIONS', 'SYS_LOGS', 'FIN_DASHBOARD', 'FIN_ADVISOR', 'DIAG_HUB']
-    },
-    {
-        id: 'DENTIST',
-        label: 'Dentista / Profissional',
-        description: 'Acesso focado na agenda e pacientes (Requer Módulo Odonto).',
-        requiredModule: 'odonto',
-        defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'FIN_CONTACTS']
+        label: 'Contador',
+        description: 'Foco em relatórios, lançamentos e notas fiscais.',
+        defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_REPORTS', 'SRV_NF']
     },
     {
         id: 'SALES',
         label: 'Vendedor',
-        description: 'Acesso a vendas, clientes e emissão de notas (Requer Módulo Serviços).',
-        requiredModule: 'services',
-        defaultPermissions: ['SRV_SALES', 'SRV_CLIENTS', 'SRV_OS', 'SRV_NF', 'FIN_CONTACTS']
+        description: 'Gestão de vendas, orçamentos e clientes.',
+        defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CLIENTS', 'SRV_CATALOG'],
+        requiredModule: 'services'
     },
     {
-        id: 'OPERATOR',
-        label: 'Operador Financeiro',
-        description: 'Lançamentos de contas a pagar/receber e ordens de serviço.',
-        defaultPermissions: ['FIN_TRANSACTIONS', 'SRV_OS', 'FIN_CALENDAR', 'SRV_PURCHASES']
+        id: 'OPERATIONAL',
+        label: 'Operacional',
+        description: 'Gestão de ordens de serviço e execução.',
+        defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'SRV_CLIENTS'],
+        requiredModule: 'services'
     },
     {
-        id: 'INTELLIGENCE_SPECIALIST',
-        label: 'Especialista em Dados',
-        description: 'Focado em diagnósticos IA e projeções avançadas.',
-        requiredModule: 'intelligence',
-        defaultPermissions: ['FIN_DASHBOARD', 'DIAG_HUB', 'FIN_ADVISOR', 'FIN_REPORTS']
+        id: 'DENTIST',
+        label: 'Dentista / Profissional',
+        description: 'Agenda clínica e procedimentos.',
+        defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES'],
+        requiredModule: 'odonto'
     }
 ];

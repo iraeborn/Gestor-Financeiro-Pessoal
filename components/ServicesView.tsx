@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2 } from 'lucide-react';
+import { ServiceOrder, CommercialOrder, Contract, Invoice, Contact, ViewMode, TransactionType, TransactionStatus, ServiceItem, OSItem, Category, Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, OSPriority, KanbanItem, KanbanColumnConfig } from '../types';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api } from '../services/storageService';
+import KanbanBoard from './KanbanBoard';
 
 const SERVICE_UNITS = [
     { id: 'UN', label: 'Unidade (UN)' },
@@ -14,6 +15,15 @@ const SERVICE_UNITS = [
     { id: 'MT', label: 'Metro (MT)' },
     { id: 'KG', label: 'Quilo (KG)' },
     { id: 'SERV', label: 'Serviço (SERV)' },
+];
+
+const OS_KANBAN_COLUMNS: KanbanColumnConfig[] = [
+    { id: 'ABERTA', label: 'Backlog', color: 'bg-amber-400', borderColor: 'border-amber-200' },
+    { id: 'APROVADA', label: 'Aprovado', color: 'bg-blue-400', borderColor: 'border-blue-200' },
+    { id: 'AGENDADA', label: 'Agendado', color: 'bg-indigo-400', borderColor: 'border-indigo-200' },
+    { id: 'EM_EXECUCAO', label: 'Em Execução', color: 'bg-emerald-500', borderColor: 'border-emerald-200' },
+    { id: 'PAUSADA', label: 'Pausado', color: 'bg-rose-400', borderColor: 'border-rose-200' },
+    { id: 'FINALIZADA', label: 'Finalizado', color: 'bg-slate-400', borderColor: 'border-slate-200' }
 ];
 
 interface ServicesViewProps {
@@ -45,11 +55,18 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, accounts, companyProfile, serviceItems = [],
     onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem, onApproveOrder
 }) => {
+    // Fix: Moved constant declarations above useState to avoid "used before declaration" hoisting error
+    const isCatalog = currentView === 'SRV_CATALOG';
+    const isOS = currentView === 'SRV_OS';
+    const isSales = currentView === 'SRV_SALES';
+    const isNF = currentView === 'SRV_NF';
+
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
+    const [viewType, setViewType] = useState<'GRID' | 'LIST' | 'KANBAN'>(isOS ? 'KANBAN' : 'GRID');
     const [compositionFilter, setCompositionFilter] = useState<'ALL' | 'SIMPLE' | 'COMPOSITE'>('ALL');
     const [formData, setFormData] = useState<any>({}); 
     const [taxPercent, setTaxPercent] = useState<number>(0);
@@ -65,11 +82,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const contactDropdownRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const modalFileInputRef = useRef<HTMLInputElement>(null);
-
-    const isCatalog = currentView === 'SRV_CATALOG';
-    const isOS = currentView === 'SRV_OS';
-    const isSales = currentView === 'SRV_SALES';
-    const isNF = currentView === 'SRV_NF';
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -135,7 +147,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         } else if (isOS) {
             netValue = items.length > 0 ? itemsSum : (Number(formData.totalAmount) || 0);
         } else if (isNF) {
-            // Se houver soma nos itens, usa ela. Caso contrário, prioriza o valor direto (importado ou digitado)
             netValue = itemsSum > 0 ? itemsSum : (Number(formData.amount || 0));
         } else {
             netValue = items.length > 0 ? itemsSum : (Number(formData.amount || formData.value || 0));
@@ -206,7 +217,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         setModalImporting(true);
         try {
             const data = await api.importInvoiceXml(file);
-            // Atualiza o formulário mantendo o ID original se houver
             setFormData((prev: any) => ({
                 ...prev,
                 number: data.number,
@@ -219,10 +229,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 status: data.status
             }));
             
-            if (data.contactName) {
-                setContactSearch(data.contactName);
-            }
-
+            if (data.contactName) setContactSearch(data.contactName);
             showAlert("Dados da Nota Fiscal atualizados via XML!", "success");
         } catch (e: any) {
             showAlert(e.message || "Erro ao ler arquivo XML.", "error");
@@ -374,7 +381,22 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         
         if (filtered.length === 0) return <div className="bg-white rounded-3xl p-12 text-center border border-gray-100 shadow-sm"><Box className="w-16 h-16 text-gray-200 mx-auto mb-4" /><h3 className="text-lg font-bold text-gray-800">Nenhum registro encontrado</h3><p className="text-gray-500 max-w-sm mx-auto">Tente ajustar sua busca ou adicione um novo item.</p></div>;
         
-        if (isOS) {
+        if (isOS && viewType === 'KANBAN') {
+            const kanbanItems: KanbanItem[] = filtered.map(os => ({
+                id: os.id,
+                title: os.title,
+                subtitle: os.contactName || 'Sem cliente',
+                status: os.status,
+                priority: os.priority,
+                amount: os.totalAmount,
+                date: os.openedAt,
+                tags: [os.type, os.origin],
+                raw: os
+            }));
+            return <KanbanBoard items={kanbanItems} columns={OS_KANBAN_COLUMNS} onItemClick={handleOpenModal} />;
+        }
+
+        if (isOS && viewType === 'GRID') {
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filtered.map(os => (
@@ -526,13 +548,27 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                     <button onClick={() => handleOpenModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"><Plus className="w-4 h-4" /> Novo {header.label}</button>
                 </div>
             </div>
-            {isCatalog && (
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">{[{id:'ALL',label:'Categorias'},{id:'PRODUCT',label:'Produtos'},{id:'SERVICE',label:'Serviços'}].map(t=>(<button key={t.id} onClick={()=>setCatalogTab(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab===t.id?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}>{t.label}</button>))}</div>
-                    <div className="flex bg-indigo-50/50 p-1 rounded-xl w-fit border border-indigo-100 shadow-sm">{[{id:'ALL',label:'Todos',icon:ListChecks},{id:'SIMPLE',label:'Simples',icon:Box},{id:'COMPOSITE',label:'Compostos',icon:Layers}].map(t=>(<button key={t.id} onClick={()=>setCompositionFilter(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${compositionFilter===t.id?'bg-white text-indigo-600 shadow-sm':'text-indigo-400'}`}><t.icon className="w-3.5 h-3.5"/> {t.label}</button>))}</div>
+
+            <div className="flex flex-col sm:flex-row justify-between gap-4">
+                <div className="flex gap-3">
+                    {isCatalog && (
+                        <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">{[{id:'ALL',label:'Categorias'},{id:'PRODUCT',label:'Produtos'},{id:'SERVICE',label:'Serviços'}].map(t=>(<button key={t.id} onClick={()=>setCatalogTab(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab===t.id?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}>{t.label}</button>))}</div>
+                    )}
+                    {isOS && (
+                        <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">
+                            <button onClick={()=>setViewType('KANBAN')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewType==='KANBAN'?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}><Trello className="w-3.5 h-3.5" /> Kanban</button>
+                            <button onClick={()=>setViewType('GRID')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewType==='GRID'?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}><LayoutGrid className="w-3.5 h-3.5" /> Cards</button>
+                        </div>
+                    )}
                 </div>
-            )}
+
+                {isCatalog && (
+                    <div className="flex bg-indigo-50/50 p-1 rounded-xl w-fit border border-indigo-100 shadow-sm">{[{id:'ALL',label:'Todos',icon:ListChecks},{id:'SIMPLE',label:'Simples',icon:Box},{id:'COMPOSITE',label:'Compostos',icon:Layers}].map(t=>(<button key={t.id} onClick={()=>setCompositionFilter(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${compositionFilter===t.id?'bg-white text-indigo-600 shadow-sm':'text-indigo-400'}`}><t.icon className="w-3.5 h-3.5"/> {t.label}</button>))}</div>
+                )}
+            </div>
+
             {renderGridContent()}
+            
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl p-8 max-h-[95vh] overflow-y-auto animate-scale-up">
@@ -609,7 +645,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Data de Emissão</label><input type="date" className="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={formData.issue_date || formData.issueDate || ''} onChange={e => setFormData({...formData, issueDate: e.target.value})} /></div>
                                                 <div className="md:col-span-3"><label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Serviços Prestados / Itens</label><textarea className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-bold min-h-[100px]" value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Ex: Manutenção de computadores, consultoria..." /></div>
                                                 
-                                                {/* Vincular Venda ou OS */}
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Venda Associada</label>
                                                     <div className="relative">
