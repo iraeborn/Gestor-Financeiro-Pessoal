@@ -289,7 +289,7 @@ const App: React.FC = () => {
             </div>
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"><Menu className="w-6 h-6" /></button>
         </div>
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
+        <div className="p-4 md:p-8 w-full">{renderContent()}</div>
       </main>
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
       <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} notifications={notifications} onMarkAsRead={(id) => {}} onAction={() => {}} />

@@ -311,6 +311,8 @@ export interface ServiceOrder {
   endDate?: string;
   items: OSItem[];
   totalAmount: number;
+  assigneeId?: string;
+  assigneeName?: string;
 }
 
 export interface CommercialOrder {
@@ -329,6 +331,8 @@ export interface CommercialOrder {
   status: 'DRAFT' | 'APPROVED' | 'CONFIRMED' | 'CANCELED' | 'ON_HOLD' | 'REJECTED';
   transactionId?: string;
   accessToken?: string;
+  assigneeId?: string;
+  assigneeName?: string;
 }
 
 export interface Contract {
@@ -437,6 +441,7 @@ export interface KanbanItem {
     amount?: number;
     date?: string;
     tags?: string[];
+    assigneeName?: string;
     raw?: any; // Objeto original
 }
 

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuditLog, NotificationLog } from '../types';
 import { getAuditLogs, getNotificationLogs, restoreRecord, revertLogChange } from '../services/storageService';
-import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight, MessageSquare, Mail, AlertCircle } from 'lucide-react';
+import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight, MessageSquare, Mail, AlertCircle, Pencil } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 const LogsView: React.FC = () => {
