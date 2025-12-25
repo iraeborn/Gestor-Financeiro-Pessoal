@@ -38,14 +38,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
   };
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-10 scrollbar-thin min-h-[650px] items-start select-none">
+    <div className="flex gap-4 overflow-x-auto pb-10 scrollbar-thin min-h-[650px] items-start select-none w-full">
       {columns.map((column, colIdx) => {
           const columnItems = items.filter(i => i.status === column.id);
           
           return (
-            <div key={column.id} className="flex-shrink-0 w-80 bg-gray-100/40 rounded-[2.5rem] border border-gray-200/50 flex flex-col max-h-full transition-all">
+            <div key={column.id} className="flex-shrink-0 w-80 bg-gray-100/40 rounded-[2.5rem] border border-gray-200/50 flex flex-col max-h-[calc(100vh-250px)] transition-all">
                 {/* Column Header */}
-                <div className="p-6 flex items-center justify-between">
+                <div className="p-6 flex items-center justify-between sticky top-0 bg-transparent backdrop-blur-sm z-10">
                     <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full shadow-sm ${column.color}`}></div>
                         <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.2em]">{column.label}</h3>
@@ -56,7 +56,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
                 </div>
 
                 {/* Column Content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[150px]">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[150px] scrollbar-thin">
                     {columnItems.map(item => (
                         <div 
                             key={item.id}

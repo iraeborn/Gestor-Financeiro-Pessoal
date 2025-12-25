@@ -351,12 +351,18 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const getOSStatusColor = (status: string) => {
         switch(status) {
-            case 'ABERTA': case 'DRAFT': return 'bg-amber-100 text-amber-700';
-            case 'APROVADA': case 'APPROVED': return 'bg-blue-100 text-blue-700';
-            case 'CONFIRMED': case 'FINALIZADA': return 'bg-emerald-100 text-emerald-700';
-            case 'REJECTED': case 'CANCELADA': return 'bg-rose-100 text-rose-700';
+            case 'ABERTA': return 'bg-amber-100 text-amber-700 border-amber-200';
+            case 'APROVADA': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case 'AGENDADA': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+            case 'EM_EXECUCAO': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+            case 'PAUSADA': return 'bg-rose-100 text-rose-700 border-rose-200';
+            case 'FINALIZADA': return 'bg-slate-200 text-slate-700 border-slate-300';
+            case 'DRAFT': return 'bg-amber-100 text-amber-700';
+            case 'APPROVED': return 'bg-blue-100 text-blue-700';
+            case 'CONFIRMED': return 'bg-emerald-100 text-emerald-700';
+            case 'REJECTED': return 'bg-rose-100 text-rose-700';
             case 'ON_HOLD': return 'bg-slate-200 text-slate-700';
-            default: return 'bg-gray-100 text-gray-700';
+            default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
     };
 
@@ -387,7 +393,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
         const filtered = rawItems.filter(i => (i.title || i.description || i.name || i.code || i.brand || i.number || '').toLowerCase().includes(searchTerm.toLowerCase()) || (i.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()));
         
-        if (filtered.length === 0) return <div className="bg-white rounded-3xl p-12 text-center border border-gray-100 shadow-sm"><Box className="w-16 h-16 text-gray-200 mx-auto mb-4" /><h3 className="text-lg font-bold text-gray-800">Nenhum registro encontrado</h3><p className="text-gray-500 max-w-sm mx-auto">Tente ajustar sua busca ou adicione um novo item.</p></div>;
+        if (filtered.length === 0) return <div className="bg-white rounded-3xl p-12 text-center border border-gray-100 shadow-sm mx-auto max-w-4xl"><Box className="w-16 h-16 text-gray-200 mx-auto mb-4" /><h3 className="text-lg font-bold text-gray-800">Nenhum registro encontrado</h3><p className="text-gray-500 max-w-sm mx-auto">Tente ajustar sua busca ou adicione um novo item.</p></div>;
         
         if (isOS && viewType === 'KANBAN') {
             const kanbanItems: KanbanItem[] = filtered.map(os => ({
@@ -401,7 +407,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 tags: [os.type, os.origin],
                 raw: os
             }));
-            return <KanbanBoard items={kanbanItems} columns={OS_KANBAN_COLUMNS} onItemClick={handleOpenModal} onStatusChange={handleOSStatusUpdate} />;
+            return (
+                <div className="w-full h-full overflow-hidden">
+                    <KanbanBoard items={kanbanItems} columns={OS_KANBAN_COLUMNS} onItemClick={handleOpenModal} onStatusChange={handleOSStatusUpdate} />
+                </div>
+            );
         }
 
         if (isOS && viewType === 'GRID') {
@@ -535,8 +545,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const modalLabel = currentView === 'SRV_SALES' ? (isRecordDraft ? 'Orçamento' : 'Venda') : header.label;
 
     return (
-        <div className="space-y-6 animate-fade-in pb-10">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="space-y-6 animate-fade-in pb-10 w-full">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-1">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><header.icon className="w-6 h-6 text-indigo-600" /> {header.title}</h1>
                 <div className="flex gap-2 w-full md:w-auto">
                     {isNF && (
@@ -557,7 +567,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4">
+            <div className="flex flex-col sm:flex-row justify-between gap-4 px-1">
                 <div className="flex gap-3">
                     {isCatalog && (
                         <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">{[{id:'ALL',label:'Categorias'},{id:'PRODUCT',label:'Produtos'},{id:'SERVICE',label:'Serviços'}].map(t=>(<button key={t.id} onClick={()=>setCatalogTab(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab===t.id?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}>{t.label}</button>))}</div>
@@ -575,7 +585,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 )}
             </div>
 
-            {renderGridContent()}
+            <div className="w-full">
+                {renderGridContent()}
+            </div>
             
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -703,7 +715,33 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
                                 <div className="bg-slate-50 p-6 rounded-3xl border border-gray-200 space-y-6">
                                     {(currentView === 'SRV_SALES' || currentView === 'SRV_PURCHASES') && (<div className="space-y-4"><div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Aplicado (R$)</label><div className="relative"><Percent className="w-4 h-4 text-gray-400 absolute left-3 top-3" /><input type="number" step="0.01" className="w-full pl-9 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold bg-white" value={formData.discountAmount || ''} onChange={e => setFormData({...formData, discountAmount: e.target.value})} placeholder="0,00"/></div></div><div className="p-4 bg-white rounded-2xl border border-gray-100 text-xs space-y-2 shadow-sm"><div className="flex justify-between items-center text-gray-500 font-medium"><span>Subtotal Bruto</span><span>{formatCurrency(pricing.gross)}</span></div><div className="flex justify-between items-center text-rose-500 font-black"><span className="flex items-center gap-1"><Tag className="w-3 h-3"/> Desconto</span><span>- {formatCurrency(pricing.disc)}</span></div></div></div>)}
-                                    {!isCatalog && (<div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Situação Atual</label><select className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all ${getOSStatusColor(formData.status || 'ABERTA')}`} value={formData.status || 'ABERTA'} onChange={e => setFormData({...formData, status: e.target.value})}><option value="ABERTA">Aberta</option><option value="APROVADA">Aprovada</option><option value="CONFIRMED">Confirmada</option><option value="ON_HOLD">Em Espera</option><option value="REJECTED">Recusada</option><option value="CANCELADA">Cancelada</option><option value="ISSUED">Emitida</option></select></div>)}
+                                    {!isCatalog && (
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Situação Atual</label>
+                                            <select 
+                                                className={`w-full rounded-xl p-3 text-sm font-black border-2 transition-all appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${getOSStatusColor(formData.status || 'ABERTA')}`} 
+                                                value={formData.status || 'ABERTA'} 
+                                                onChange={e => setFormData({...formData, status: e.target.value})}
+                                            >
+                                                {isOS ? (
+                                                    OS_KANBAN_COLUMNS.map(col => (
+                                                        <option key={col.id} value={col.id}>{col.label}</option>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <option value="DRAFT">Orçamento / Rascunho</option>
+                                                        <option value="APPROVED">Aprovada</option>
+                                                        <option value="CONFIRMED">Confirmada / Paga</option>
+                                                        <option value="ON_HOLD">Em Espera</option>
+                                                        <option value="REJECTED">Recusada</option>
+                                                        <option value="CANCELADA">Cancelada</option>
+                                                        <option value="ISSUED">Emitida</option>
+                                                    </>
+                                                )}
+                                            </select>
+                                            <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase text-center">Status sincronizado com o Kanban ágil</p>
+                                        </div>
+                                    )}
                                     <div className="pt-4 border-t border-gray-200"><div className="flex justify-between items-center mb-1"><span className="text-[10px] font-black text-gray-400 uppercase">{isCatalog ? 'Valor Final' : (currentView === 'SRV_SALES' && isRecordDraft ? 'Valor Orçado' : 'Valor Líquido')}</span>{(isOS || isCatalog) && <span title="Somatório automático de todos os itens técnicos."><Info className="w-3 h-3 text-gray-300" /></span>}</div><p className="text-3xl font-black text-gray-900">{formatCurrency(pricing.net)}</p></div>
                                     <div className="space-y-3"><button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" /> Salvar Alterações</button><button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-3 text-sm font-bold text-gray-500 hover:text-gray-700">Descartar</button></div>
                                 </div>
