@@ -16,7 +16,7 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
     connectionString: connectionString,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000, // Aumentado para 5s para evitar quedas prematuras
+    connectionTimeoutMillis: 5000,
   };
 }
 
@@ -24,7 +24,7 @@ const pool = new Pool(poolConfig);
 
 export const initDb = async () => {
     const queries = [
-        `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP, stripe_customer_id TEXT, stripe_subscription_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, PRIMARY KEY (user_id, family_id))`,
         `CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance DECIMAL, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, credit_limit DECIMAL, closing_day INTEGER, due_day INTEGER)`,
         `CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, fantasy_name TEXT, type TEXT, email TEXT, phone TEXT, document TEXT, ie TEXT, im TEXT, pix_key TEXT, zip_code TEXT, street TEXT, number TEXT, neighborhood TEXT, city TEXT, state TEXT, is_defaulter BOOLEAN, is_blocked BOOLEAN, credit_limit DECIMAL, default_payment_method TEXT, default_payment_term INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
@@ -52,20 +52,15 @@ export const initDb = async () => {
         }
 
         const migrations = [
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE branches ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE cost_centers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE departments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
-            `ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS family_id TEXT`
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`
         ];
 
         for (const m of migrations) {
             try { await pool.query(m); } catch (e) {}
         }
 
-        console.log("✅ [DATABASE] Estrutura ERP sincronizada.");
+        console.log("✅ [DATABASE] Estrutura Sincronizada com Stripe.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }

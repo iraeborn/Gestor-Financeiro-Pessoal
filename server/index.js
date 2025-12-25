@@ -16,6 +16,7 @@ import financeRoutes from './routes/finance.js';
 import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
 import servicesRoutes from './routes/services.js';
+import billingRoutes from './routes/billing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,7 +31,6 @@ const io = new Server(httpServer, {
   pingTimeout: 60000
 });
 
-// Middleware Global de Reatividade
 const logAudit = (poolInstance, userId, action, entity, entityId, details, previousState, changes, familyIdOverride) => {
     return createAuditLog(poolInstance, io, { userId, action, entity, entityId, details, previousState, changes, familyIdOverride });
 };
@@ -45,6 +45,9 @@ io.on('connection', (socket) => {
 });
 
 app.use(cors());
+
+// Webhook precisa do body RAW, os outros precisam de JSON
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // Injeção de dependências nas rotas
@@ -53,18 +56,20 @@ app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
+app.use('/api/billing', billingRoutes(logAudit));
 
 const distPath = path.join(__dirname, '../dist');
 const renderIndex = (req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        // Injeção dinâmica de variáveis de ambiente do servidor para o cliente
         content = content.replace("__GOOGLE_CLIENT_ID__", process.env.GOOGLE_CLIENT_ID || "");
         content = content.replace("__API_KEY__", process.env.API_KEY || "");
+        // Injetar Stripe Pub Key
+        content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "pk_test_51STLRbLAvFlsDMQOwt5oI5CYByQ6NAHFAtVa6zAVI0EymayKr5PTxc9qPBeJYKHquPrJ82vFCJI91njENOkumf9v00FQimrTRe");
         res.send(content);
     } else {
-        res.status(404).send('Aguardando build do frontend...');
+        res.status(404).send('Aguardando build...');
     }
 };
 
@@ -74,7 +79,6 @@ app.get('*', renderIndex);
 
 const PORT = process.env.PORT || 8080;
 
-// Inicializa banco ANTES de subir o servidor para evitar 503 por falta de tabelas
 initDb().then(() => {
     httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);

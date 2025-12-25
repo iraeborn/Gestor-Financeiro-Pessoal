@@ -59,6 +59,15 @@ export const loginWithGoogle = async (credential: string, entityType?: EntityTyp
   return data;
 };
 
+// Alterado de CheckoutSession para PagarMeSession
+export const createPagarMeSession = async (planId: string): Promise<{ success: boolean, url?: string, redirectUrl?: string }> => {
+    return handleResponse(await fetch(`${API_URL}/billing/create-pagarme-session`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ planId })
+    }));
+};
+
 export const consultCnpj = async (cnpj: string): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/consult-cnpj/${cnpj}`, { headers: getHeaders() }));
 };
@@ -130,17 +139,14 @@ export const updateProfile = async (data: { name: string; email: string; current
     return res.user;
 };
 
-// Fix: Added missing admin service exports
 export const getAdminStats = async (): Promise<any> => handleResponse(await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() }));
 export const getAdminUsers = async (): Promise<any[]> => handleResponse(await fetch(`${API_URL}/admin/users`, { headers: getHeaders() }));
 
-// Fix: Added missing audit and notification logs exports
 export const getAuditLogs = async (): Promise<AuditLog[]> => handleResponse(await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() }));
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => handleResponse(await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() }));
 export const restoreRecord = async (entity: string, entityId: string): Promise<any> => handleResponse(await fetch(`${API_URL}/restore/${entity}/${entityId}`, { method: 'POST', headers: getHeaders() }));
 export const revertLogChange = async (logId: number): Promise<any> => handleResponse(await fetch(`${API_URL}/revert-log/${logId}`, { method: 'POST', headers: getHeaders() }));
 
-// Fix: Added missing public order access exports
 export const getPublicOrder = async (token: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}`));
 export const updatePublicOrderStatus = async (token: string, status: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }));
 
@@ -156,7 +162,6 @@ export const api = {
     saveCategory: async (c: Category) => handleResponse(await fetch(`${API_URL}/categories`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
     deleteCategory: async (id: string) => handleResponse(await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: getHeaders() })),
     
-    // Módulos ERP/Profissionais
     saveModuleClient: async (c: Partial<ServiceClient>) => handleResponse(await fetch(`${API_URL}/modules/clients`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
     deleteModuleClient: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveModuleService: async (s: Partial<ServiceItem>) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(s) })),
@@ -164,11 +169,9 @@ export const api = {
     saveModuleAppointment: async (a: Partial<ServiceAppointment>) => handleResponse(await fetch(`${API_URL}/modules/appointments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(a) })),
     deleteModuleAppointment: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() })),
 
-    // Fix: Added catalog items methods to the api object
     saveCatalogItem: async (i: Partial<ServiceItem>) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteCatalogItem: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() })),
 
-    // PJ/Serviços Específicos
     saveOS: async (os: any) => handleResponse(await fetch(`${API_URL}/services/os`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(os) })),
     deleteOS: async (id: string) => handleResponse(await fetch(`${API_URL}/services/os/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveOrder: async (o: any) => handleResponse(await fetch(`${API_URL}/services/orders`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(o) })),
@@ -178,7 +181,6 @@ export const api = {
     saveInvoice: async (i: any) => handleResponse(await fetch(`${API_URL}/services/invoices`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteInvoice: async (id: string) => handleResponse(await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() })),
     
-    // Utilitários PJ
     saveBranch: async (d: any) => handleResponse(await fetch(`${API_URL}/branches`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
     deleteBranch: async (id: string) => handleResponse(await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveCompanyProfile: async (d: any) => handleResponse(await fetch(`${API_URL}/company`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
