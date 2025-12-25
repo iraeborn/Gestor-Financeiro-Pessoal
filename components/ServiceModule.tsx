@@ -23,9 +23,9 @@ interface ServiceModuleProps {
     
     onSaveClient: (c: Partial<ServiceClient>) => void;
     onDeleteClient: (id: string) => void;
-    onSaveService: (s: Omit<ServiceItem, 'moduleTag'>) => void;
+    onSaveService: (s: Partial<ServiceItem>) => void;
     onDeleteService: (id: string) => void;
-    onSaveAppointment: (a: Omit<ServiceAppointment, 'moduleTag'>) => void;
+    onSaveAppointment: (a: Partial<ServiceAppointment>) => void;
     onDeleteAppointment: (id: string) => void;
     onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
 }
@@ -435,7 +435,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             {clientModalTab === 'CLINICAL' && (
                                 <div className="space-y-4 animate-fade-in">
                                     <p className="text-xs text-sky-600 font-bold uppercase bg-sky-50 p-2 rounded border border-sky-100 flex items-center gap-2">
-                                        <FileHeart className="w-4 h-4" /> Dados do Módulo Odonto
+                                        <FileHeart className="w-4 h-4" /> Dados do Módulo Profissional
                                     </p>
 
                                     <div>
@@ -496,7 +496,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
                         <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2 flex-shrink-0">
                             <button type="button" onClick={() => setClientModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">Cancelar</button>
-                            <button onClick={handleSaveClient} type="submit" className="px-6 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 text-sm font-bold shadow-lg shadow-sky-200">Salvar Paciente</button>
+                            <button onClick={handleSaveClient} type="submit" className="px-6 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 text-sm font-bold shadow-lg shadow-sky-200">Salvar Dados</button>
                         </div>
                     </div>
                 </div>

@@ -230,6 +230,49 @@ const App: React.FC = () => {
       case 'FIN_ADVISOR':
         return <SmartAdvisor data={data} />;
       
+      // MÓDULO ODONTOLOGIA
+      case 'ODONTO_AGENDA':
+      case 'ODONTO_PATIENTS':
+      case 'ODONTO_PROCEDURES':
+        return (
+          <ServiceModule 
+            moduleTitle="Odontologia"
+            clientLabel="Paciente"
+            serviceLabel="Procedimento"
+            transactionCategory="Serviços Odontológicos"
+            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'}
+            clients={data.serviceClients.filter(c => c.moduleTag === 'odonto')}
+            services={data.serviceItems.filter(s => s.moduleTag === 'odonto')}
+            appointments={data.serviceAppointments.filter(a => a.moduleTag === 'odonto')}
+            contacts={data.contacts}
+            onSaveClient={async (c) => { 
+                await fetch('/api/modules/clients', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...c, moduleTag: 'odonto' }) }); 
+                await loadData(true); 
+            }}
+            onDeleteClient={async (id) => { 
+                await fetch(`/api/modules/clients/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
+                await loadData(true); 
+            }}
+            onSaveService={async (s) => { 
+                await fetch('/api/modules/services', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...s, moduleTag: 'odonto' }) }); 
+                await loadData(true); 
+            }}
+            onDeleteService={async (id) => { 
+                await fetch(`/api/modules/services/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
+                await loadData(true); 
+            }}
+            onSaveAppointment={async (a) => { 
+                await fetch('/api/modules/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...a, moduleTag: 'odonto' }) }); 
+                await loadData(true); 
+            }}
+            onDeleteAppointment={async (id) => { 
+                await fetch(`/api/modules/appointments/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
+                await loadData(true); 
+            }}
+            onAddTransaction={handleAddTransaction}
+          />
+        );
+
       case 'SRV_OS':
       case 'SRV_SALES':
       case 'SRV_PURCHASES':
