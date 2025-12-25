@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Mail, Lock, LogIn, AlertCircle, Briefcase, User as UserIcon, CheckCircle, Search, Building, MapPin, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, Lock, LogIn, AlertCircle, Briefcase, User as UserIcon, CheckCircle, Search } from 'lucide-react';
 import { login, register, loginWithGoogle, consultCnpj } from '../services/storageService';
 import { User, EntityType, SubscriptionPlan, TaxRegime } from '../types';
 
@@ -22,87 +22,57 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   const [cnpj, setCnpj] = useState('');
   const [loadingCnpj, setLoadingCnpj] = useState(false);
   const [companyData, setCompanyData] = useState({
-      tradeName: '',
-      legalName: '',
-      cnae: '',
-      secondaryCnaes: '',
-      zipCode: '',
-      street: '',
-      number: '',
-      neighborhood: '',
-      city: '',
-      state: '',
-      phone: '',
-      email: '',
-      taxRegime: TaxRegime.SIMPLES,
-      hasEmployees: false,
-      issuesInvoices: false
+      tradeName: '', legalName: '', cnae: '', zipCode: '', street: '', number: '', neighborhood: '', city: '', state: '', phone: '', email: '',
+      taxRegime: TaxRegime.SIMPLES, hasEmployees: false, issuesInvoices: false
   });
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const registrationContext = useRef({ entityType, cnpj, companyData });
+  useEffect(() => { registrationContext.current = { entityType, cnpj, companyData }; }, [entityType, cnpj, companyData]);
+
   useEffect(() => {
     const win = window as any;
-    const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" 
-        ? win.GOOGLE_CLIENT_ID 
-        : "";
-
-    if (mode === 'LOGIN') {
-      let retryCount = 0;
-      const maxRetries = 10;
-
-      const initGoogle = () => {
-        if (win.google?.accounts?.id) {
-          if (!clientId) {
-            console.warn("Google Client ID não configurado.");
-            return;
-          }
-
-          try {
-            win.google.accounts.id.initialize({
-              client_id: clientId,
-              callback: handleGoogleCallback,
-              auto_select: false,
-              cancel_on_tap_outside: true,
-              // Suprime logs de erro cross-origin no console que não quebram o app
-              log_level: 'error' 
-            });
-
-            const buttonDiv = document.getElementById("googleSignInDiv");
-            if (buttonDiv) {
-              win.google.accounts.id.renderButton(
-                buttonDiv,
-                { theme: "outline", size: "large", width: 350, text: "signin_with" } 
-              );
-            }
-          } catch (e) { 
-            // Silencia erro de COOP se ele for disparado na inicialização
-            if (!String(e).includes('Cross-Origin-Opener-Policy')) {
-                console.error("Google Auth Init Error:", e);
-            }
-          }
-        } else if (retryCount < maxRetries) {
-          retryCount++;
-          setTimeout(initGoogle, 500);
-        }
-      };
-
-      initGoogle();
-    }
+    const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" ? win.GOOGLE_CLIENT_ID : "";
+    const initGoogle = () => {
+      if (win.google?.accounts?.id && clientId) {
+        try {
+          win.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleCallback,
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+          renderGoogleButtons();
+        } catch (e) {}
+      } else setTimeout(initGoogle, 500);
+    };
+    const renderGoogleButtons = () => {
+        const loginDiv = document.getElementById("googleSignInDiv");
+        const registerDiv = document.getElementById("googleSignUpDiv");
+        if (loginDiv) win.google.accounts.id.renderButton(loginDiv, { theme: "outline", size: "large", width: 350, text: "signin_with" });
+        if (registerDiv) win.google.accounts.id.renderButton(registerDiv, { theme: "outline", size: "large", width: 350, text: "signup_with" });
+    };
+    initGoogle();
   }, [mode]);
 
   const handleGoogleCallback = async (response: any) => {
     setLoading(true);
     setError('');
+    const { entityType: currentType, cnpj: currentCnpj, companyData: currentPJ } = registrationContext.current;
+    if ((mode === 'REGISTER' || mode === 'CHECKOUT') && currentType === EntityType.BUSINESS && !currentCnpj) {
+        setError("Para criar uma conta jurídica com o Google, informe o CNPJ primeiro.");
+        setLoading(false);
+        return;
+    }
     try {
-        const data = await loginWithGoogle(response.credential);
+        const pjPayload = currentType === EntityType.BUSINESS ? { ...currentPJ, cnpj: currentCnpj } : undefined;
+        const data = await loginWithGoogle(response.credential, currentType, pjPayload);
         onLoginSuccess(data.user);
     } catch (err: any) {
-        setError(err.message || 'Erro ao entrar com Google.');
-    } finally {
-        setLoading(false);
-    }
+        setError(err.message || 'Erro ao processar login com Google.');
+    } finally { setLoading(false); }
   };
 
   const handleConsultCnpj = async () => {
@@ -136,18 +106,15 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     setLoading(true);
     try {
       let data;
-      if (mode === 'LOGIN') {
-        data = await login(email, password);
-      } else {
+      if (mode === 'LOGIN') data = await login(email, password);
+      else {
         const pjPayload = entityType === EntityType.BUSINESS ? { ...companyData, cnpj } : undefined;
         data = await register(name, email, password, entityType, plan, pjPayload);
       }
       onLoginSuccess(data.user);
     } catch (err: any) {
       setError(err.message || 'Erro na autenticação.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   if (mode === 'CHECKOUT' || mode === 'REGISTER') {
@@ -160,19 +127,13 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                         <div className="space-y-4">
                             <div className="bg-white/10 p-4 rounded-xl">
                                 <p className="text-xs text-gray-400 uppercase font-bold">Plano Escolhido</p>
-                                <p className="text-lg font-bold text-indigo-400">
-                                    {entityType === EntityType.PERSONAL ? 'Pessoa Física' : 'Pessoa Jurídica'}
-                                </p>
+                                <p className="text-lg font-bold text-indigo-400">{entityType === EntityType.PERSONAL ? 'Pessoa Física' : 'Pessoa Jurídica'}</p>
                                 <p className="text-sm text-gray-300">Teste Grátis Ativado</p>
                             </div>
-                            <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                                <CheckCircle className="w-4 h-4" />
-                                <span>15 dias de teste grátis</span>
-                            </div>
+                            <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle className="w-4 h-4" /><span>15 dias de teste grátis</span></div>
                         </div>
                     </div>
                 </div>
-
                 <div className="p-8 md:w-2/3 max-h-[90vh] overflow-y-auto">
                     <h2 className="text-2xl font-bold text-gray-900 mb-6">Criar Conta</h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -183,18 +144,20 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                         {entityType === EntityType.BUSINESS && (
                             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-4 animate-fade-in">
                                 <div className="flex gap-2 items-end">
-                                    <div className="flex-1"><label className="block text-xs font-bold text-indigo-800 mb-1">CNPJ</label><input type="text" value={cnpj} onChange={(e) => setCnpj(e.target.value.replace(/\D/g, ''))} className="w-full px-3 py-2 rounded-lg border border-indigo-200" placeholder="Apenas números" maxLength={14} /></div>
+                                    <div className="flex-1"><label className="block text-xs font-bold text-indigo-800 mb-1">CNPJ</label><input type="text" value={cnpj} onChange={(e) => setCnpj(e.target.value.replace(/\D/g, ''))} className="w-full px-3 py-2 rounded-lg border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Apenas números" maxLength={14} /></div>
                                     <button type="button" onClick={handleConsultCnpj} disabled={loadingCnpj || cnpj.length < 14} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"><Search className="w-4 h-4" /></button>
                                 </div>
-                                <input type="text" placeholder="Razão Social" value={companyData.legalName} onChange={e => setCompanyData({...companyData, legalName: e.target.value})} className="w-full p-2 rounded border text-sm" />
+                                {companyData.legalName && <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">{companyData.legalName}</p>}
                             </div>
                         )}
-                        <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200" placeholder="Nome Completo" />
-                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200" placeholder="seu@email.com" />
-                        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200" placeholder="Senha" />
+                        <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome Completo" />
+                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="seu@email.com" />
+                        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha" />
                         {error && <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
                         <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50">{loading ? 'Processando...' : 'Finalizar Cadastro'}</button>
-                        <div className="text-center"><button type="button" onClick={() => setMode('LOGIN')} className="text-sm text-indigo-600 hover:underline">Já tenho conta</button></div>
+                        <div className="py-4 flex items-center gap-4"><div className="h-px bg-gray-100 flex-1"></div><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ou use sua rede social</span><div className="h-px bg-gray-100 flex-1"></div></div>
+                        <div className="flex justify-center min-h-[50px]" id="googleSignUpDiv"></div>
+                        <div className="text-center mt-4"><button type="button" onClick={() => setMode('LOGIN')} className="text-sm text-indigo-600 hover:underline">Já tenho conta</button></div>
                     </form>
                 </div>
             </div>
@@ -210,8 +173,8 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             <p className="text-gray-500 mt-2">Bem-vindo de volta</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200" placeholder="seu@email.com" />
-            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200" placeholder="Senha" />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="seu@email.com" />
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha" />
             {error && <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
             <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold shadow-lg">{loading ? 'Entrando...' : 'Entrar'}</button>
           </form>

@@ -22,17 +22,16 @@ const getSystemContext = (state: AppState) => {
 };
 
 export const getDiagnosticByType = async (state: AppState, type: 'HEALTH' | 'RISK' | 'INVEST' | 'SUMMARY'): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "__API_KEY__") return "IA não configurada.";
+  if (!process.env.API_KEY || process.env.API_KEY === "__API_KEY__") return "IA não configurada.";
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const data = getSystemContext(state);
 
   const prompts = {
-    SUMMARY: `Aja como um Gestor Financeiro Pessoal Sênior. Dê um diagnóstico seco e estratégico. DADOS: ${JSON.stringify(data)}. Responda com: 1. Saúde Geral (Score 0-100), 2. Alerta de Risco, 3. Sugestão de Lucro.`,
-    HEALTH: `Analise profundamente a SAÚDE FINANCEIRA. Verifique se as receitas cobrem as despesas e se o usuário está progredindo nas metas. DADOS: ${JSON.stringify(data)}. Seja detalhado na análise de fôlego financeiro.`,
-    RISK: `FOCO TOTAL EM RISCOS. Analise contas vencidas, saldo baixo e projeção de insolvência. DADOS: ${JSON.stringify(data)}. Dê alertas vermelhos se necessário e como sair do perigo imediato.`,
-    INVEST: `FOCO EM CRESCIMENTO. Onde o usuário pode economizar para investir? Analise as metas e sugira aportes baseados no saldo livre. DADOS: ${JSON.stringify(data)}. Sugira mentalidade de investidor.`
+    SUMMARY: `Aja como um Gestor Financeiro Pessoal Sênior. Dê um diagnóstico estratégico. DADOS: ${JSON.stringify(data)}.`,
+    HEALTH: `Analise profundamente a SAÚDE FINANCEIRA baseada nos dados: ${JSON.stringify(data)}.`,
+    RISK: `FOCO EM RISCOS: contas vencidas e projeção de caixa. DADOS: ${JSON.stringify(data)}.`,
+    INVEST: `FOCO EM CRESCIMENTO: onde economizar? DADOS: ${JSON.stringify(data)}.`
   };
 
   try {
@@ -40,43 +39,32 @@ export const getDiagnosticByType = async (state: AppState, type: 'HEALTH' | 'RIS
       model: 'gemini-3-flash-preview',
       contents: prompts[type] || prompts.SUMMARY,
     });
-    return response.text || "Sem resposta do gestor.";
+    return response.text || "Sem resposta da IA.";
   } catch (e) {
-    return "Erro ao consultar IA.";
+    return "Erro ao consultar consultor inteligente.";
   }
 };
 
-// Mantido por compatibilidade
 export const getManagerDiagnostic = async (state: AppState): Promise<string> => {
     return getDiagnosticByType(state, 'SUMMARY');
 };
 
 export const analyzeFinances = async (state: AppState, userPrompt?: string): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "__API_KEY__") return "IA não configurada.";
-  const ai = new GoogleGenAI({ apiKey });
-
-  const context = `
-    Contexto Financeiro Atual:
-    - Saldo Total: R$ ${state.accounts.reduce((acc, a) => acc + a.balance, 0).toFixed(2)}
-    - Objetivos: ${state.goals.map(g => g.name).join(', ')}
-    - Fluxo Pendente: ${state.transactions.filter(t => t.status === TransactionStatus.PENDING).length} registros.
-  `;
-
-  const finalPrompt = userPrompt 
-    ? `${context}\n\nPergunta do Usuário: "${userPrompt}"\n\nResponda como um mentor financeiro sênior.`
-    : `${context}\n\nFaça uma breve análise do cenário atual e dê uma dica de ouro para o usuário.`;
+  if (!process.env.API_KEY || process.env.API_KEY === "__API_KEY__") return "IA não configurada.";
+  
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const context = `Contexto: Saldo R$ ${state.accounts.reduce((acc, a) => acc + a.balance, 0).toFixed(2)}, ${state.goals.length} metas ativas.`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: finalPrompt,
+      contents: userPrompt ? `${context}\nPergunta: ${userPrompt}` : `${context}\nDê uma dica financeira rápida.`,
       config: {
-        systemInstruction: "Você é o SmartAdvisor, consultor financeiro integrado ao FinManager. Seu objetivo é ajudar o usuário a alcançar a independência financeira através de dados reais.",
+        systemInstruction: "Você é o SmartAdvisor, consultor financeiro integrado ao FinManager.",
       }
     });
-    return response.text || "Estou pronto para analisar suas contas.";
+    return response.text || "Estou pronto para ajudar.";
   } catch (e) {
-      return "Houve um erro na consultoria inteligente.";
+      return "Erro na consultoria IA.";
   }
 };

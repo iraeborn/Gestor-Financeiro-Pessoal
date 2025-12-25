@@ -28,13 +28,11 @@ import DiagnosticView from './components/DiagnosticView';
 import AccessView from './components/AccessView';
 import LogsView from './components/LogsView';
 import SettingsView from './components/SettingsView';
-import AdminDashboard from './components/AdminDashboard';
 import Sidebar from './components/Sidebar';
 import CollaborationModal from './components/CollaborationModal';
 import ServiceModule from './components/ServiceModule';
 import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
-import ApprovalModal from './components/ApprovalModal';
 import NotificationPanel from './components/NotificationPanel';
 import LoadingOverlay from './components/LoadingOverlay';
 
@@ -48,7 +46,6 @@ const App: React.FC = () => {
   const [landingInitPlan, setLandingInitPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
   
   const socketRef = useRef<Socket | null>(null);
-
   const urlParams = new URLSearchParams(window.location.search);
   const publicToken = urlParams.get('orderToken');
 
@@ -63,10 +60,8 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
-  
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Configurações efetivas baseadas no workspace atual
   const effectiveSettings = useMemo(() => {
     if (!currentUser) return undefined;
     const familyId = currentUser.familyId || (currentUser as any).family_id;
@@ -74,14 +69,11 @@ const App: React.FC = () => {
     return ws?.ownerSettings || currentUser.settings;
   }, [currentUser]);
 
-  // Permissões efetivas do usuário no workspace atual
   const userPermissions = useMemo(() => {
     if (!currentUser) return [];
     const familyId = currentUser.familyId || (currentUser as any).family_id;
     const ws = currentUser.workspaces?.find(w => w.id === familyId);
-    
     if (currentUser.id === familyId || ws?.role === 'ADMIN') return 'ALL';
-    
     let perms = ws?.permissions || [];
     if (typeof perms === 'string') {
         try { perms = JSON.parse(perms); } catch (e) { perms = []; }
@@ -93,27 +85,7 @@ const App: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       const initialData = await loadInitialData();
-      if (initialData) {
-          setData({
-              accounts: initialData.accounts || [],
-              transactions: initialData.transactions || [],
-              goals: initialData.goals || [],
-              contacts: initialData.contacts || [],
-              categories: initialData.categories || [],
-              branches: initialData.branches || [],
-              costCenters: initialData.costCenters || [],
-              departments: initialData.departments || [],
-              projects: initialData.projects || [],
-              serviceClients: initialData.serviceClients || [],
-              serviceItems: initialData.serviceItems || [],
-              serviceAppointments: initialData.serviceAppointments || [],
-              serviceOrders: initialData.serviceOrders || [],
-              commercialOrders: initialData.commercialOrders || [],
-              contracts: initialData.contracts || [],
-              invoices: initialData.invoices || [],
-              companyProfile: initialData.companyProfile || null
-          });
-      }
+      if (initialData) setData(initialData);
       return initialData;
     } catch (e) {
       console.error("Erro na sincronização de dados:", e);
@@ -245,30 +217,12 @@ const App: React.FC = () => {
             services={data.serviceItems.filter(s => s.moduleTag === 'odonto')}
             appointments={data.serviceAppointments.filter(a => a.moduleTag === 'odonto')}
             contacts={data.contacts}
-            onSaveClient={async (c) => { 
-                await fetch('/api/modules/clients', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...c, moduleTag: 'odonto' }) }); 
-                await loadData(true); 
-            }}
-            onDeleteClient={async (id) => { 
-                await fetch(`/api/modules/clients/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
-                await loadData(true); 
-            }}
-            onSaveService={async (s) => { 
-                await fetch('/api/modules/services', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...s, moduleTag: 'odonto' }) }); 
-                await loadData(true); 
-            }}
-            onDeleteService={async (id) => { 
-                await fetch(`/api/modules/services/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
-                await loadData(true); 
-            }}
-            onSaveAppointment={async (a) => { 
-                await fetch('/api/modules/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ ...a, moduleTag: 'odonto' }) }); 
-                await loadData(true); 
-            }}
-            onDeleteAppointment={async (id) => { 
-                await fetch(`/api/modules/appointments/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }); 
-                await loadData(true); 
-            }}
+            onSaveClient={async (c) => { await api.saveModuleClient({ ...c, moduleTag: 'odonto' }); await loadData(true); }}
+            onDeleteClient={async (id) => { await api.deleteModuleClient(id); await loadData(true); }}
+            onSaveService={async (s) => { await api.saveModuleService({ ...s, moduleTag: 'odonto' }); await loadData(true); }}
+            onDeleteService={async (id) => { await api.deleteModuleService(id); await loadData(true); }}
+            onSaveAppointment={async (a) => { await api.saveModuleAppointment({ ...a, moduleTag: 'odonto' }); await loadData(true); }}
+            onDeleteAppointment={async (id) => { await api.deleteModuleAppointment(id); await loadData(true); }}
             onAddTransaction={handleAddTransaction}
           />
         );
@@ -317,7 +271,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
       <LoadingOverlay isVisible={loading} />
-      
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="w-64 h-full bg-white shadow-2xl animate-slide-in-left" onClick={e => e.stopPropagation()}>
@@ -325,25 +278,19 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-
       <div className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-30">
         <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} onOpenCollab={() => setIsCollabModalOpen(true)} onOpenNotifications={() => setIsNotifPanelOpen(true)} />
       </div>
-
       <main className="flex-1 md:ml-64 h-screen overflow-y-auto relative">
         <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-gray-100 sticky top-0 z-20">
             <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">F</div>
                 <span className="font-bold text-gray-800">FinManager</span>
             </div>
-            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
-                <Menu className="w-6 h-6" />
-            </button>
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"><Menu className="w-6 h-6" /></button>
         </div>
-
         <div className="p-4 md:p-8 max-w-7xl mx-auto">{renderContent()}</div>
       </main>
-
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
       <NotificationPanel isOpen={isNotifPanelOpen} onClose={() => setIsNotifPanelOpen(false)} notifications={notifications} onMarkAsRead={(id) => {}} onAction={() => {}} />
     </div>

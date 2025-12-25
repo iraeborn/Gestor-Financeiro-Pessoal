@@ -69,23 +69,32 @@ export default function(logAudit) {
     });
 
     router.post('/register', async (req, res) => {
-      const { name, email, password, entityType } = req.body;
+      const { name, email, password, entityType, plan, pjPayload } = req.body;
+      const client = await pool.connect();
       try {
+        await client.query('BEGIN');
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = crypto.randomUUID();
         
-        await pool.query(`INSERT INTO users (id, name, email, password_hash, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, $5, 'TRIAL', 'TRIALING')`, [id, name, email, hashedPassword, entityType || 'PF']);
-        await pool.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
+        await client.query(`INSERT INTO users (id, name, email, password_hash, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, $5, $6, 'TRIALING')`, [id, name, email, hashedPassword, entityType || 'PF', plan || 'MONTHLY']);
+        await client.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
         
+        if (entityType === 'PJ' && pjPayload) {
+            await client.query(
+                `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id, family_id, zip_code, street, number, neighborhood, phone, email)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12, $13, $14, $15, $16, $17)`,
+                [crypto.randomUUID(), pjPayload.tradeName, pjPayload.legalName, pjPayload.cnpj, pjPayload.taxRegime, pjPayload.cnae, pjPayload.city, pjPayload.state, pjPayload.hasEmployees, pjPayload.issuesInvoices, id, pjPayload.zipCode, pjPayload.street, pjPayload.number, pjPayload.neighborhood, pjPayload.phone, pjPayload.email]
+            );
+        }
+
+        await client.query('COMMIT');
         const userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
         const workspaces = await getUserWorkspaces(id);
-        
         const mappedUser = mapUser(userRow);
         mappedUser.workspaces = workspaces;
-        
         const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: mappedUser });
-      } catch (err) { res.status(500).json({ error: err.message }); }
+      } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
     });
 
     router.post('/login', async (req, res) => {
@@ -104,21 +113,40 @@ export default function(logAudit) {
     });
 
     router.post('/google', async (req, res) => {
-      const { credential } = req.body;
+      const { credential, entityType, pjPayload } = req.body;
+      const client = await pool.connect();
       try {
         const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
         const { sub: googleId, email, name } = ticket.getPayload();
         
-        let userRow = (await pool.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
+        let userRow = (await client.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
         
         if (!userRow) {
+           // Novo usuário - Criação de conta
+           await client.query('BEGIN');
            const id = crypto.randomUUID();
-           await pool.query(`INSERT INTO users (id, name, email, google_id, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, 'PF', 'TRIAL', 'TRIALING')`, [id, name, email, googleId]);
-           await pool.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
-           userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
-           if (logAudit) await logAudit(pool, id, 'CREATE', 'user', id, `Novo usuário Google: ${name}`);
+           const finalType = entityType || 'PF';
+
+           if (finalType === 'PJ' && (!pjPayload || !pjPayload.cnpj)) {
+               throw new Error("Dados da empresa (CNPJ) são obrigatórios para conta jurídica.");
+           }
+
+           await client.query(`INSERT INTO users (id, name, email, google_id, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, $5, 'TRIAL', 'TRIALING')`, [id, name, email, googleId, finalType]);
+           await client.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
+           
+           if (finalType === 'PJ') {
+               await client.query(
+                    `INSERT INTO company_profiles (id, trade_name, legal_name, cnpj, tax_regime, cnae, city, state, has_employees, issues_invoices, user_id, family_id, zip_code, street, number, neighborhood, phone, email)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12, $13, $14, $15, $16, $17)`,
+                    [crypto.randomUUID(), pjPayload.tradeName || name, pjPayload.legalName || name, pjPayload.cnpj, pjPayload.taxRegime || 'SIMPLES', pjPayload.cnae, pjPayload.city, pjPayload.state, pjPayload.hasEmployees || false, pjPayload.issuesInvoices || false, id, pjPayload.zipCode, pjPayload.street, pjPayload.number, pjPayload.neighborhood, pjPayload.phone, pjPayload.email]
+               );
+           }
+           
+           await client.query('COMMIT');
+           userRow = (await client.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
+           if (logAudit) await logAudit(pool, id, 'CREATE', 'user', id, `Novo usuário Google (${finalType}): ${name}`);
         } else if (!userRow.google_id) {
-           await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, userRow.id]);
+           await client.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, userRow.id]);
            userRow.google_id = googleId;
         }
 
@@ -129,7 +157,10 @@ export default function(logAudit) {
         const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: mappedUser });
       } catch (err) { 
-        res.status(400).json({ error: 'Google Auth Error: ' + err.message }); 
+        if (client) await client.query('ROLLBACK').catch(() => {});
+        res.status(400).json({ error: err.message }); 
+      } finally {
+        client.release();
       }
     });
 
