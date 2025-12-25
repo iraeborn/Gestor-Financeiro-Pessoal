@@ -31,8 +31,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
 
   const handleSaveGoal = (e: React.FormEvent) => {
       e.preventDefault();
-      // Fix: Ensuring both camelCase and snake_case current amount fields are provided to satisfy interface
-      const currentAmountNum = parseFloat(formData.currentAmount);
+      const currentAmountNum = parseFloat(formData.currentAmount) || 0;
       onSaveGoal({
           id: formData.id || crypto.randomUUID(),
           name: formData.name,
@@ -92,7 +91,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
                         <div className="space-y-2 mb-6">
                             <div className="flex justify-between text-sm font-bold text-gray-700"><span>Guardado</span><span>{formatCurrency(realAmount)}</span></div>
                             <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className={`h-full transition-all duration-1000 ${percent >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${percent}%` }}></div></div>
-                            <div className="flex justify-between text-[10px] text-gray-400 uppercase font-black"><span>Início: {formatCurrency(goal.currentAmount)}</span><span>Alvo: {formatCurrency(goal.targetAmount)}</span></div>
+                            <div className="flex justify-between text-[10px] text-gray-400 uppercase font-black"><span>Início: {formatCurrency(goal.currentAmount || 0)}</span><span>Alvo: {formatCurrency(goal.targetAmount)}</span></div>
                         </div>
                       </div>
                       <div className="flex gap-2">

@@ -16,7 +16,7 @@ const getSystemContext = (state: AppState) => {
     contas_vencidas: overdueCount,
     entradas_previstas: formatCurrency(pendingIncome),
     saidas_previstas: formatCurrency(pendingExpense),
-    metas_ativas: state.goals.map(g => `${g.name} (${Math.round((g.currentAmount/g.targetAmount)*100)}%)`),
+    metas_ativas: state.goals.map(g => `${g.name} (${Math.round(((g.currentAmount || 0)/g.targetAmount)*100)}%)`),
     categorias_gastos: state.transactions.filter(t => t.type === TransactionType.EXPENSE).slice(0, 20).map(t => `${t.category}: ${formatCurrency(t.amount)}`)
   };
 };

@@ -55,7 +55,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     currentView, serviceOrders, commercialOrders, contracts, invoices, contacts, accounts, companyProfile, serviceItems = [],
     onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveContract, onDeleteContract, onSaveInvoice, onDeleteInvoice, onAddTransaction, onSaveCatalogItem, onDeleteCatalogItem, onApproveOrder
 }) => {
-    // Fix: Moved constant declarations above useState to avoid "used before declaration" hoisting error
     const isCatalog = currentView === 'SRV_CATALOG';
     const isOS = currentView === 'SRV_OS';
     const isSales = currentView === 'SRV_SALES';
@@ -159,6 +158,15 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+    };
+
+    const handleOSStatusUpdate = async (itemId: string, newStatus: string) => {
+        const os = serviceOrders.find(o => o.id === itemId);
+        if (!os) return;
+        
+        // Atualiza localmente e persiste
+        onSaveOS({ ...os, status: newStatus as OSStatus });
+        showAlert(`OS #${os.id.substring(0,6)} movida para ${newStatus}`, "info");
     };
 
     const getTitle = () => {
@@ -393,7 +401,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 tags: [os.type, os.origin],
                 raw: os
             }));
-            return <KanbanBoard items={kanbanItems} columns={OS_KANBAN_COLUMNS} onItemClick={handleOpenModal} />;
+            return <KanbanBoard items={kanbanItems} columns={OS_KANBAN_COLUMNS} onItemClick={handleOpenModal} onStatusChange={handleOSStatusUpdate} />;
         }
 
         if (isOS && viewType === 'GRID') {
