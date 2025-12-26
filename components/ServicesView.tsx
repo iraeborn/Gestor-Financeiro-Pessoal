@@ -500,7 +500,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 <div className="px-5 py-4 border-t border-gray-50 flex justify-between items-center bg-gray-50/30">
                                     <div className="text-sm font-black text-gray-900">{formatCurrency(val)}</div>
                                     <div className="flex gap-1">
-                                        {/* Fix: Replaced undefined Edit with Pencil and added to imports */}
                                         <button onClick={() => handleOpenModal(item)} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
                                         <button onClick={() => handleDeleteRecord(isOrder ? (item.type === 'SALE' ? 'SALE' : 'PURCHASE') : 'OS', item.id, title)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
                                     </div>
@@ -616,8 +615,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const modalLabel = currentView === 'SRV_SALES' ? (isRecordDraft ? 'Orçamento' : 'Venda') : header.label;
 
     return (
-        <div className="space-y-6 animate-fade-in pb-10 w-full">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-1">
+        <div className="space-y-6 animate-fade-in pb-10 w-full flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-1 shrink-0">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><header.icon className="w-6 h-6 text-indigo-600" /> {header.title}</h1>
                 <div className="flex gap-2 w-full md:w-auto">
                     {isNF && (
@@ -638,7 +637,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 px-1">
+            <div className="flex flex-col sm:flex-row justify-between gap-4 px-1 shrink-0">
                 <div className="flex gap-3">
                     {isCatalog && (
                         <div className="flex bg-gray-200/50 p-1 rounded-xl w-fit border border-gray-100 shadow-sm">{[{id:'ALL',label:'Categorias'},{id:'PRODUCT',label:'Produtos'},{id:'SERVICE',label:'Serviços'}].map(t=>(<button key={t.id} onClick={()=>setCatalogTab(t.id as any)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${catalogTab===t.id?'bg-white text-indigo-600 shadow-sm':'text-gray-500'}`}>{t.label}</button>))}</div>
@@ -656,7 +655,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 )}
             </div>
 
-            <div className="w-full">
+            <div className="flex-1 overflow-hidden">
                 {renderGridContent()}
             </div>
             
