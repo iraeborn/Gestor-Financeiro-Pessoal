@@ -237,9 +237,16 @@ export interface ServiceClient {
   notes?: string;
   birthDate?: string;
   insurance?: string;
+  insuranceNumber?: string;
+  insurancePlan?: string;
   allergies?: string;
   medications?: string;
+  medicalConditions?: string;
+  legalGuardianName?: string;
+  legalGuardianPhone?: string;
+  legalGuardianDocument?: string;
   moduleTag: string;
+  attachments?: string[];
 }
 
 export interface ServiceItem {
@@ -268,8 +275,10 @@ export interface ServiceAppointment {
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
+  clinicalNotes?: string;
   transactionId?: string;
   moduleTag: string;
+  attachments?: string[];
 }
 
 export type OSStatus = 
