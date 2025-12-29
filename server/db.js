@@ -40,7 +40,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL(15,2), gross_amount DECIMAL(15,2), discount_amount DECIMAL(15,2), tax_amount DECIMAL(15,2), items JSONB DEFAULT '[]', date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, access_token TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL(15,2) DEFAULT 0, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, type TEXT, origin TEXT, priority TEXT, opened_at TIMESTAMP DEFAULT NOW(), items JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT, contact_name TEXT, contact_email TEXT, contact_phone TEXT, notes TEXT, birth_date TEXT, insurance TEXT, allergies TEXT, medications TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, odontogram JSONB DEFAULT '[]', anamnesis JSONB DEFAULT '{}', prescriptions JSONB DEFAULT '[]', attachments JSONB DEFAULT '[]', deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS service_appointments (id TEXT PRIMARY KEY, client_id TEXT, service_id TEXT, tooth INTEGER, teeth JSONB DEFAULT '[]', date TEXT, status TEXT, notes TEXT, clinical_notes TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, is_locked BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS service_appointments (id TEXT PRIMARY KEY, client_id TEXT, service_id TEXT, tooth INTEGER, teeth JSONB DEFAULT '[]', treatment_items JSONB DEFAULT '[]', date TEXT, status TEXT, notes TEXT, clinical_notes TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, is_locked BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL(15,2), start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL(15,2), issue_date DATE, status TEXT, contact_id TEXT, description TEXT, items JSONB DEFAULT '[]', file_url TEXT, order_id TEXT, service_order_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB)`
@@ -61,6 +61,7 @@ export const initDb = async () => {
             `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS clinical_notes TEXT`,
             `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS tooth INTEGER`,
             `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS teeth JSONB DEFAULT '[]'`,
+            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS treatment_items JSONB DEFAULT '[]'`,
             `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE`
         ];
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category, TransactionType, TransactionStatus, Account } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2, Clock, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category, TransactionType, TransactionStatus, Account, TreatmentItem } from '../types';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2, Clock, MapPin, ChevronDown, ChevronUp, Layers } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import AttachmentModal from './AttachmentModal';
 import Odontogram from './Odontogram';
@@ -52,6 +52,9 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
     const [attachmentTarget, setAttachmentTarget] = useState<{type: 'CLIENT' | 'APPT', id: string} | null>(null);
     const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
+
+    // Controle de Seletor de Dentes para Itens de Tratamento
+    const [activeToothPickerIdx, setActiveToothPickerIdx] = useState<number | null>(null);
 
     // Handlers Clínicos
     const handleToothClick = (tooth: number) => setSelectedTooth(tooth);
@@ -123,19 +126,18 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     const handleBillAppointment = async (appt: ServiceAppointment) => {
         if (!onAddTransaction) return;
         
-        const service = services.find(s => s.id === appt.serviceId);
-        const amount = service?.defaultPrice || 0;
+        const totalAmount = (appt.treatmentItems || []).reduce((acc, item) => acc + item.value, 0);
 
         const confirm = await showConfirm({
             title: "Gerar Cobrança",
-            message: `Deseja gerar um lançamento financeiro de ${amount.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} para este atendimento?`,
+            message: `Deseja gerar um lançamento financeiro de ${formatCurrency(totalAmount)} para este atendimento?`,
             confirmText: "Sim, Gerar Lançamento"
         });
 
         if (confirm) {
             onAddTransaction({
-                description: `Atendimento: ${appt.clientName} - ${appt.serviceName || 'Odontologia'}`,
-                amount: amount,
+                description: `Atendimento: ${appt.clientName} - ${appt.treatmentItems?.length || 1} procedimento(s)`,
+                amount: totalAmount,
                 type: TransactionType.INCOME,
                 category: 'Serviços Odontológicos',
                 date: new Date().toISOString().split('T')[0],
@@ -145,6 +147,53 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             });
             showAlert("Lançamento financeiro gerado!", "success");
         }
+    };
+
+    // --- Agendamentos / Itens de Tratamento ---
+
+    const handleAddTreatmentItem = () => {
+        const newItem: TreatmentItem = {
+            id: crypto.randomUUID(),
+            serviceId: '',
+            teeth: [],
+            value: 0
+        };
+        setApptForm(prev => ({
+            ...prev,
+            treatmentItems: [...(prev.treatmentItems || []), newItem]
+        }));
+    };
+
+    const handleUpdateTreatmentItem = (idx: number, field: keyof TreatmentItem, value: any) => {
+        const items = [...(apptForm.treatmentItems || [])];
+        if (field === 'serviceId') {
+            const service = services.find(s => s.id === value);
+            items[idx] = { 
+                ...items[idx], 
+                serviceId: value, 
+                serviceName: service?.name, 
+                value: service?.defaultPrice || 0 
+            };
+        } else {
+            items[idx] = { ...items[idx], [field]: value };
+        }
+        setApptForm({ ...apptForm, treatmentItems: items });
+    };
+
+    const handleRemoveTreatmentItem = (idx: number) => {
+        const items = [...(apptForm.treatmentItems || [])];
+        items.splice(idx, 1);
+        setApptForm({ ...apptForm, treatmentItems: items });
+    };
+
+    const toggleToothInItem = (idx: number, tooth: number) => {
+        const items = [...(apptForm.treatmentItems || [])];
+        const currentTeeth = [...(items[idx].teeth || [])];
+        const toothIdx = currentTeeth.indexOf(tooth);
+        if (toothIdx > -1) currentTeeth.splice(toothIdx, 1);
+        else currentTeeth.push(tooth);
+        items[idx].teeth = currentTeeth;
+        setApptForm({ ...apptForm, treatmentItems: items });
     };
 
     const filteredClients = clients.filter(c => c.contactName?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -172,14 +221,12 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
       return alerts;
     }, [clientForm.anamnesis]);
 
-    // Handler para novo agendamento
     const handleOpenApptModal = (appt?: ServiceAppointment) => {
-        if (appt) setApptForm({ ...appt, teeth: Array.isArray(appt.teeth) ? appt.teeth : (appt.tooth ? [appt.tooth] : []) });
-        else setApptForm({ date: new Date().toISOString().split('T')[0], status: 'SCHEDULED', teeth: [], moduleTag: 'odonto' });
+        if (appt) setApptForm(appt);
+        else setApptForm({ date: new Date().toISOString().split('T')[0], status: 'SCHEDULED', treatmentItems: [], moduleTag: 'odonto' });
         setApptModalOpen(true);
     };
 
-    // Handler para novo serviço
     const handleOpenServiceModal = (service?: ServiceItem) => {
         if (service) setServiceForm(service);
         else setServiceForm({ name: '', defaultPrice: 0, type: 'SERVICE', moduleTag: 'odonto' });
@@ -196,14 +243,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         if (activeSection === 'CALENDAR') handleOpenApptModal();
         else if (activeSection === 'SERVICES') handleOpenServiceModal();
         else handleOpenClientModal();
-    };
-
-    const toggleToothSelection = (t: number) => {
-        const current = [...(apptForm.teeth || [])];
-        const idx = current.indexOf(t);
-        if (idx > -1) current.splice(idx, 1);
-        else current.push(t);
-        setApptForm({ ...apptForm, teeth: current });
     };
 
     return (
@@ -255,7 +294,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 {c.insurance && <span className="inline-block px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg text-[9px] font-black uppercase tracking-widest border border-sky-100">{c.insurance}</span>}
                             </div>
                             <div className="pt-4 border-t border-gray-50 flex justify-between items-center text-[10px] font-black text-gray-300 uppercase tracking-widest">
-                                <span>Última Visita: 12/05</span>
+                                <span>Ult. Consulta: {appointments.find(a => a.clientId === c.id)?.date.split('T')[0] || '--/--'}</span>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button className="p-2 text-sky-600 bg-sky-50 rounded-lg"><Eye className="w-4 h-4"/></button>
                                 </div>
@@ -275,7 +314,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 <tr>
                                     <th className="px-6 py-4">Data/Hora</th>
                                     <th className="px-6 py-4">Paciente</th>
-                                    <th className="px-6 py-4">Procedimento</th>
+                                    <th className="px-6 py-4">Tratamentos</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4 text-right">Ações</th>
                                 </tr>
@@ -288,12 +327,13 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         </td>
                                         <td className="px-6 py-4 font-bold text-sky-600">{appt.clientName}</td>
                                         <td className="px-6 py-4 text-gray-600">
-                                            {appt.serviceName || 'Consulta'}
-                                            {(appt.teeth || appt.tooth) && (
-                                                <span className="ml-2 bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded font-black">
-                                                    {(appt.teeth && appt.teeth.length > 0) ? `Dentes: ${appt.teeth.join(', ')}` : `Dente: ${appt.tooth}`}
-                                                </span>
-                                            )}
+                                            <div className="flex flex-wrap gap-1">
+                                                {appt.treatmentItems?.map((item, idx) => (
+                                                    <span key={idx} className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                        {item.serviceName} {item.teeth?.length ? `(${item.teeth.join(',')})` : ''}
+                                                    </span>
+                                                )) || <span className="text-gray-300 italic">Nenhum selecionado</span>}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${appt.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -339,7 +379,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             </div>
                         </div>
                     ))}
-                    {filteredServices.length === 0 && <div className="col-span-full py-20 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-[2.5rem]"><ClipboardList className="w-16 h-16 mx-auto mb-4 opacity-10"/><p className="font-bold">Nenhum procedimento cadastrado.</p></div>}
                 </div>
             )}
 
@@ -387,7 +426,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-10">
-                            {/* ABA CADASTRO */}
                             {clientModalTab === 'CONTACT' && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10 animate-fade-in">
                                     <div className="space-y-6">
@@ -405,14 +443,11 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         <div className="space-y-4">
                                           <div><input type="text" placeholder="Nome do Convênio" className="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold" value={clientForm.insurance || ''} onChange={e => setClientForm({...clientForm, insurance: e.target.value})} /></div>
                                           <div><input type="text" placeholder="Carteirinha" className="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold" value={clientForm.insuranceNumber || ''} onChange={e => setClientForm({...clientForm, insuranceNumber: e.target.value})} /></div>
-                                          <div className="h-px bg-slate-200 my-4"></div>
-                                          <div><input type="text" placeholder="Nome Responsável (se menor)" className="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold" value={clientForm.legalGuardianName || ''} onChange={e => setClientForm({...clientForm, legalGuardianName: e.target.value})} /></div>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* ABA ANAMNESE */}
                             {clientModalTab === 'ANAMNESIS' && (
                                 <div className="space-y-10 animate-fade-in">
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -438,18 +473,12 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                       </div>
                                     ))}
                                   </div>
-                                  <div className="space-y-4">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Medicamentos em Uso e Observações</label>
-                                    <textarea className="w-full bg-slate-50 border-none rounded-3xl p-6 text-sm font-bold min-h-[120px]" placeholder="Liste aqui remédios que o paciente toma regularmente..." value={clientForm.anamnesis?.medications || ''} onChange={e => handleSaveAnamnesis('medications', e.target.value)} />
-                                  </div>
                                 </div>
                             )}
 
-                            {/* ABA ODONTOGRAMA */}
                             {clientModalTab === 'ODONTOGRAM' && (
                                 <div className="space-y-8 animate-fade-in">
                                   <Odontogram states={clientForm.odontogram || []} onToothClick={handleToothClick} />
-                                  
                                   {selectedTooth && (
                                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/20">
                                       <div className="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm border border-slate-100 animate-scale-up">
@@ -480,22 +509,15 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 </div>
                             )}
 
-                            {/* ABA HISTÓRICO / EVOLUÇÃO CLÍNICA */}
                             {clientModalTab === 'HISTORY' && (
                               <div className="space-y-6 animate-fade-in">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Anotações Clínicas Progressivas</h3>
-                                    <button onClick={() => { setApptForm({ clientId: clientForm.id, clientName: clientForm.contactName, date: new Date().toISOString(), teeth: [] }); setApptModalOpen(true); }} className="bg-sky-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-lg shadow-sky-100 transition-all">+ Nova Evolução</button>
+                                    <button onClick={() => handleOpenApptModal()} className="bg-sky-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-lg shadow-sky-100 transition-all">+ Nova Evolução</button>
                                 </div>
                                 <div className="space-y-4">
-                                  {patientAppointments.length === 0 ? (
-                                    <div className="py-20 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-[2.5rem]">
-                                        <History className="w-16 h-16 mx-auto mb-4 opacity-10" />
-                                        <p className="font-bold">Nenhum registro clínico ainda.</p>
-                                    </div>
-                                  ) : patientAppointments.map(appt => (
+                                  {patientAppointments.map(appt => (
                                     <div key={appt.id} className="bg-slate-50 border border-slate-100 p-8 rounded-[2rem] relative group">
-                                        {appt.isLocked && <div className="absolute top-4 right-4 text-slate-300" title="Registro Bloqueado (Imutável)"><Lock className="w-4 h-4"/></div>}
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="flex gap-5">
                                                 <div className="w-14 h-14 bg-white rounded-2xl flex flex-col items-center justify-center border border-slate-100 shadow-sm">
@@ -503,25 +525,22 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                     <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mt-1">{new Date(appt.date).toLocaleDateString('pt-BR', {month:'short'})}</span>
                                                 </div>
                                                 <div>
-                                                    <div className="flex items-center gap-2">
-                                                      <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider">{appt.serviceName || 'Consulta Geral'}</h4>
-                                                      {(appt.teeth && appt.teeth.length > 0) && (
-                                                        <div className="flex gap-1">
-                                                          {appt.teeth.map(t => (
-                                                            <span key={t} className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {t}</span>
-                                                          ))}
-                                                        </div>
-                                                      )}
-                                                      {(appt.tooth && (!appt.teeth || appt.teeth.length === 0)) && <span className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {appt.tooth}</span>}
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {appt.treatmentItems?.map((item, idx) => (
+                                                            <div key={idx} className="bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
+                                                                <span className="font-black text-slate-800 uppercase text-[10px] tracking-wider">{item.serviceName}</span>
+                                                                {item.teeth?.length ? <span className="ml-2 bg-sky-100 text-sky-700 text-[9px] px-1.5 py-0.5 rounded-full font-black">Dentes: {item.teeth.join(', ')}</span> : null}
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                    <div className="flex gap-2 mt-1">
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Status: {appt.status}</p>
+                                                    <div className="flex gap-2 mt-2">
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Total: {formatCurrency(appt.treatmentItems?.reduce((acc, i) => acc + i.value, 0))}</p>
                                                         {appt.status === 'COMPLETED' && <button onClick={() => handleBillAppointment(appt)} className="text-[9px] font-black text-emerald-600 hover:text-emerald-700 uppercase flex items-center gap-1"><DollarSign className="w-3 h-3"/> Gerar Cobrança</button>}
                                                     </div>
                                                 </div>
                                             </div>
                                             {!appt.isLocked && (
-                                                <button onClick={() => { handleOpenApptModal(appt); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
+                                                <button onClick={() => handleOpenApptModal(appt)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
                                             )}
                                         </div>
                                         <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic relative shadow-inner">
@@ -532,83 +551,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 </div>
                               </div>
                             )}
-
-                            {/* ABA PRESCRIÇÕES */}
-                            {clientModalTab === 'PRESCRIPTIONS' && (
-                                <div className="space-y-8 animate-fade-in">
-                                  <div className="flex justify-between items-center">
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Receituários e Atestados</h3>
-                                    <button onClick={handleAddPrescription} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">+ Nova Prescrição</button>
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {clientForm.prescriptions?.map((p, idx) => (
-                                      <div key={p.id} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
-                                        <div className="flex justify-between items-center">
-                                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{new Date(p.date).toLocaleDateString('pt-BR')}</span>
-                                          <select 
-                                            value={p.type} 
-                                            onChange={e => {
-                                              const updated = [...(clientForm.prescriptions || [])];
-                                              updated[idx].type = e.target.value as any;
-                                              setClientForm({...clientForm, prescriptions: updated});
-                                            }}
-                                            className="bg-white border-none rounded-lg text-[9px] font-black uppercase px-2 py-1 outline-none"
-                                          >
-                                            <option value="RECEITA">Receituário</option>
-                                            <option value="ORIENTACAO">Orientações</option>
-                                            <option value="ATESTADO">Atestado</option>
-                                          </select>
-                                        </div>
-                                        <textarea 
-                                          className="w-full bg-white border-none rounded-2xl p-4 text-xs font-bold min-h-[150px] shadow-inner"
-                                          value={p.content}
-                                          onChange={e => {
-                                            const updated = [...(clientForm.prescriptions || [])];
-                                            updated[idx].content = e.target.value;
-                                            setClientForm({...clientForm, prescriptions: updated});
-                                          }}
-                                          placeholder="Descreva aqui o medicamento, dose e via de administração..."
-                                        />
-                                        <div className="flex justify-end gap-2">
-                                          <button className="p-2 text-indigo-600 bg-white rounded-lg shadow-sm border border-slate-100 hover:bg-indigo-50"><FileText className="w-4 h-4"/></button>
-                                          <button 
-                                            onClick={() => {
-                                              const updated = (clientForm.prescriptions || []).filter((_, i) => i !== idx);
-                                              setClientForm({...clientForm, prescriptions: updated});
-                                            }}
-                                            className="p-2 text-rose-500 bg-white rounded-lg shadow-sm border border-slate-100 hover:bg-rose-50"
-                                          >
-                                            <Trash2 className="w-4 h-4"/>
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                            )}
-
-                            {/* ABA ARQUIVOS */}
-                            {clientModalTab === 'FILES' && (
-                                <div className="space-y-6 animate-fade-in">
-                                  <div className="flex justify-between items-center">
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Exames Radiográficos e Fotos</h3>
-                                    <button onClick={() => setAttachmentTarget({type: 'CLIENT', id: clientForm.id!})} className="bg-sky-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-lg shadow-sky-100 transition-all"><Paperclip className="w-4 h-4"/> Anexar Documento</button>
-                                  </div>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                                    {clientForm.attachments?.map((url, idx) => (
-                                      <div key={idx} className="group relative bg-slate-50 rounded-3xl border border-slate-100 overflow-hidden aspect-square hover:shadow-xl transition-all">
-                                        <img src={url} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-sky-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                          <a href={url} target="_blank" className="p-2 bg-white text-sky-600 rounded-xl"><Eye className="w-5 h-5"/></a>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                            )}
                         </div>
 
-                        {/* Footer Ações Prontuário */}
                         <div className="p-8 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
                             <button type="button" onClick={() => setClientModalOpen(false)} className="px-8 py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors uppercase text-[10px] tracking-widest">Sair sem salvar</button>
                             <button onClick={handleSaveClient} className="px-10 py-4 bg-sky-600 text-white rounded-2xl hover:bg-sky-700 text-sm font-black shadow-xl shadow-sky-100 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest">
@@ -619,14 +563,14 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 </div>
             )}
 
-            {/* Modal de Evolução Clínica / Novo Agendamento */}
+            {/* Modal de Evolução Clínica (Múltiplos Procedimentos) */}
             {isApptModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl p-8 animate-scale-up border border-slate-100 max-h-[95vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl p-8 animate-scale-up border border-slate-100 max-h-[95vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
                             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                                 {apptForm.isLocked ? <Lock className="w-5 h-5 text-amber-500" /> : <DentalIcon className="w-5 h-5 text-sky-500" />}
-                                Atendimento Clínico
+                                Registro de Atendimento Clínico
                             </h2>
                             <button onClick={() => setApptModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
                         </div>
@@ -636,13 +580,12 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             ...apptForm,
                             id: apptForm.id || crypto.randomUUID(),
                             status: apptForm.status || 'SCHEDULED',
-                            teeth: apptForm.teeth || [],
                             moduleTag: 'odonto'
                           });
                           setApptModalOpen(false);
                           showAlert("Atendimento atualizado com sucesso.", "success");
-                        }} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        }} className="space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Paciente</label>
                                     <select 
@@ -656,104 +599,123 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         {clients.map(c => <option key={c.id} value={c.id}>{c.contactName}</option>)}
                                     </select>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Procedimento</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={apptForm.serviceId || ''} 
-                                        onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} 
-                                        required
-                                        disabled={apptForm.isLocked}
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Seletor Múltiplo de Dentes em Grade */}
-                            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-4 ml-1">Selecione o(s) Dente(s) Trabalhado(s)</label>
-                                <div className="space-y-4">
-                                    {/* Superior */}
-                                    <div className="flex flex-wrap justify-center gap-1">
-                                        {[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28].map(t => (
-                                            <button 
-                                                key={t}
-                                                type="button"
-                                                disabled={apptForm.isLocked}
-                                                onClick={() => toggleToothSelection(t)}
-                                                className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${apptForm.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-sky-300'}`}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Data e Hora</label>
+                                        <input type="datetime-local" className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={apptForm.date ? apptForm.date.substring(0, 16) : ''} onChange={e => setApptForm({...apptForm, date: e.target.value})} required disabled={apptForm.isLocked} />
                                     </div>
-                                    <div className="h-px bg-slate-200 w-full opacity-50"></div>
-                                    {/* Inferior */}
-                                    <div className="flex flex-wrap justify-center gap-1">
-                                        {[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38].map(t => (
-                                            <button 
-                                                key={t}
-                                                type="button"
-                                                disabled={apptForm.isLocked}
-                                                onClick={() => toggleToothSelection(t)}
-                                                className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${apptForm.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-sky-300'}`}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Situação</label>
+                                        <select className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={apptForm.status || 'SCHEDULED'} onChange={e => setApptForm({...apptForm, status: e.target.value as any})} disabled={apptForm.isLocked}>
+                                            <option value="SCHEDULED">Agendado</option>
+                                            <option value="COMPLETED">Concluído</option>
+                                            <option value="CANCELED">Cancelado</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Data e Hora</label>
-                                    <input 
-                                        type="datetime-local" 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={apptForm.date ? apptForm.date.substring(0, 16) : ''} 
-                                        onChange={e => setApptForm({...apptForm, date: e.target.value})} 
-                                        required 
-                                        disabled={apptForm.isLocked}
-                                    />
+                            {/* LISTA DE PROCEDIMENTOS */}
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center px-1">
+                                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4" /> Procedimentos Realizados</h3>
+                                    {!apptForm.isLocked && (
+                                        <button type="button" onClick={handleAddTreatmentItem} className="text-[10px] font-black text-sky-600 bg-sky-50 px-4 py-2 rounded-xl border border-sky-100 hover:bg-sky-100 transition-all">+ Adicionar Item</button>
+                                    )}
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Situação</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={apptForm.status || 'SCHEDULED'} 
-                                        onChange={e => setApptForm({...apptForm, status: e.target.value as any})}
-                                        disabled={apptForm.isLocked}
-                                    >
-                                        <option value="SCHEDULED">Agendado</option>
-                                        <option value="COMPLETED">Concluído</option>
-                                        <option value="CANCELED">Cancelado</option>
-                                    </select>
+
+                                <div className="space-y-3">
+                                    {apptForm.treatmentItems?.map((item, idx) => (
+                                        <div key={item.id} className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 animate-fade-in relative group">
+                                            {!apptForm.isLocked && (
+                                                <button type="button" onClick={() => handleRemoveTreatmentItem(idx)} className="absolute -top-2 -right-2 p-2 bg-white text-rose-500 rounded-full shadow-md border border-rose-50 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"><X className="w-4 h-4"/></button>
+                                            )}
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <div className="md:col-span-1">
+                                                    <label className="block text-[9px] font-black uppercase text-slate-400 mb-2">Serviço</label>
+                                                    <select 
+                                                        className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold outline-none shadow-sm"
+                                                        value={item.serviceId}
+                                                        onChange={e => handleUpdateTreatmentItem(idx, 'serviceId', e.target.value)}
+                                                        disabled={apptForm.isLocked}
+                                                        required
+                                                    >
+                                                        <option value="">Selecione...</option>
+                                                        {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="md:col-span-1">
+                                                    <label className="block text-[9px] font-black uppercase text-slate-400 mb-2">Dentes ({item.teeth?.length || 0})</label>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setActiveToothPickerIdx(activeToothPickerIdx === idx ? null : idx)}
+                                                        className={`w-full text-left bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm flex items-center justify-between transition-all ${activeToothPickerIdx === idx ? 'ring-2 ring-sky-500' : ''}`}
+                                                        disabled={apptForm.isLocked}
+                                                    >
+                                                        <span className="truncate">{item.teeth?.length ? item.teeth.join(', ') : 'Selecionar dentes...'}</span>
+                                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${activeToothPickerIdx === idx ? 'rotate-180' : ''}`} />
+                                                    </button>
+                                                </div>
+                                                <div className="md:col-span-1">
+                                                    <label className="block text-[9px] font-black uppercase text-slate-400 mb-2">Valor (R$)</label>
+                                                    <div className="relative">
+                                                        <DollarSign className="w-3.5 h-3.5 text-slate-300 absolute left-3 top-3.5" />
+                                                        <input type="number" step="0.01" className="w-full pl-9 bg-white border-none rounded-xl p-3 text-xs font-black shadow-sm outline-none" value={item.value} onChange={e => handleUpdateTreatmentItem(idx, 'value', Number(e.target.value))} disabled={apptForm.isLocked} />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Seletor de Dentes em Grade (Condicional por Item) */}
+                                            {activeToothPickerIdx === idx && (
+                                                <div className="mt-6 p-6 bg-white rounded-3xl border border-sky-100 shadow-xl shadow-sky-900/5 animate-scale-up">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest">Clique nos dentes trabalhados para este procedimento</p>
+                                                        <button type="button" onClick={() => setActiveToothPickerIdx(null)} className="text-[9px] font-black text-slate-400 hover:text-slate-600 uppercase">Fechar</button>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        {/* Superior */}
+                                                        <div className="flex flex-wrap justify-center gap-1">
+                                                            {[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28].map(t => (
+                                                                <button key={t} type="button" onClick={() => toggleToothInItem(idx, t)} className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${item.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{t}</button>
+                                                            ))}
+                                                        </div>
+                                                        <div className="h-px bg-slate-100 w-full opacity-50"></div>
+                                                        {/* Inferior */}
+                                                        <div className="flex flex-wrap justify-center gap-1">
+                                                            {[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38].map(t => (
+                                                                <button key={t} type="button" onClick={() => toggleToothInItem(idx, t)} className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${item.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{t}</button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {(!apptForm.treatmentItems || apptForm.treatmentItems.length === 0) && (
+                                        <div className="py-12 text-center border-2 border-dashed border-slate-100 rounded-[2rem] text-slate-300">
+                                            <p className="font-bold text-sm">Nenhum procedimento adicionado.</p>
+                                            <p className="text-[10px] uppercase mt-1">Clique em "+ Adicionar Item" para iniciar.</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                            
-                            <div>
-                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações Clínicas Detalhadas</label>
-                              <textarea 
-                                className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[150px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70 shadow-inner" 
-                                placeholder="Descreva os procedimentos realizados em cada dente selecionado ou observações gerais..." 
-                                value={apptForm.clinicalNotes || ''} 
-                                onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} 
-                                disabled={apptForm.isLocked} 
-                              />
+
+                            <div className="space-y-4">
+                                <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Evolução Clínica / Detalhes Gerais</label>
+                                <textarea className="w-full bg-slate-50 border-none rounded-[2rem] p-6 text-sm font-bold min-h-[120px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70 shadow-inner" placeholder="Descreva os detalhes gerais do atendimento que não foram especificados nos itens acima..." value={apptForm.clinicalNotes || ''} onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} disabled={apptForm.isLocked} />
                             </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                                <button type="button" onClick={() => setApptModalOpen(false)} className="w-full py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
-                                {!apptForm.isLocked ? (
-                                  <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Evolução</button>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-2 text-amber-600 font-black uppercase text-[10px] bg-amber-50 rounded-2xl px-4">
-                                    <Lock className="w-4 h-4"/> Registro Bloqueado
-                                  </div>
-                                )}
+
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-6 border-t border-slate-100 bg-slate-50/50 -mx-8 -mb-8 p-8">
+                                <div className="text-center md:text-left">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total da Consulta</p>
+                                    <p className="text-3xl font-black text-slate-900">{formatCurrency(apptForm.treatmentItems?.reduce((acc, i) => acc + i.value, 0))}</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button type="button" onClick={() => setApptModalOpen(false)} className="px-8 py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
+                                    {!apptForm.isLocked && (
+                                        <button type="submit" className="bg-sky-600 text-white px-12 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all active:scale-95">Salvar Atendimento</button>
+                                    )}
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -765,7 +727,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 onClose={() => setAttachmentTarget(null)}
                 urls={clientForm.attachments || []}
                 onAdd={async (files) => {
-                  showAlert("Simulando upload para armazenamento clínico...", "info");
+                  showAlert("Upload simulado concluído.", "info");
                 }}
                 onRemove={(idx) => {
                   const updated = (clientForm.attachments || []).filter((_, i) => i !== idx);

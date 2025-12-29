@@ -307,22 +307,26 @@ export interface OSItem {
   isFromCatalog?: boolean;
 }
 
+export interface TreatmentItem {
+    id: string;
+    serviceId: string;
+    serviceName?: string;
+    teeth?: number[];
+    value: number;
+}
+
 export interface ServiceAppointment {
   id: string;
   clientId: string;
   clientName?: string;
-  serviceId?: string;
-  serviceName?: string;
-  // Fix: Added missing tooth property for singular tooth records
-  tooth?: number;
-  teeth?: number[]; // Lista de dentes trabalhados
+  treatmentItems?: TreatmentItem[]; // Múltiplos procedimentos
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
   clinicalNotes?: string;
   moduleTag: string;
   attachments?: string[];
-  isLocked?: boolean; // Impedir edição legal
+  isLocked?: boolean;
 }
 
 export interface ServiceOrder {
