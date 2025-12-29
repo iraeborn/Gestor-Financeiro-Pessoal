@@ -58,16 +58,16 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
     const handleUpdateToothCondition = (condition: ToothState['condition']) => {
       if (selectedTooth === null) return;
-      const currentStates = clientForm.odontogram || [];
+      const currentStates = [...(clientForm.odontogram || [])];
       const index = currentStates.findIndex(s => s.tooth === selectedTooth);
-      let updated;
+      
       if (index > -1) {
-        updated = [...currentStates];
-        updated[index] = { ...updated[index], condition };
+        currentStates[index] = { ...currentStates[index], condition };
       } else {
-        updated = [...currentStates, { tooth: selectedTooth, condition }];
+        currentStates.push({ tooth: selectedTooth, condition });
       }
-      setClientForm({ ...clientForm, odontogram: updated });
+      
+      setClientForm({ ...clientForm, odontogram: currentStates });
       setSelectedTooth(null);
     };
 
@@ -117,7 +117,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             moduleTag: 'odonto'
         });
         setClientModalOpen(false);
-        showAlert("Prontuário atualizado com sucesso!", "success");
+        showAlert("Prontuário completo salvo!", "success");
     };
 
     const handleBillAppointment = async (appt: ServiceAppointment) => {
@@ -279,7 +279,10 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                             {new Date(appt.date).toLocaleDateString('pt-BR')} <span className="text-gray-300 font-normal ml-2">{new Date(appt.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
                                         </td>
                                         <td className="px-6 py-4 font-bold text-sky-600">{appt.clientName}</td>
-                                        <td className="px-6 py-4 text-gray-600">{appt.serviceName || 'Consulta'}</td>
+                                        <td className="px-6 py-4 text-gray-600">
+                                            {appt.serviceName || 'Consulta'}
+                                            {appt.tooth && <span className="ml-2 bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded font-black">Dente {appt.tooth}</span>}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${appt.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                                 {appt.status === 'COMPLETED' ? 'Concluído' : 'Agendado'}
@@ -488,7 +491,10 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                     <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mt-1">{new Date(appt.date).toLocaleDateString('pt-BR', {month:'short'})}</span>
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider">{appt.serviceName || 'Consulta Geral'}</h4>
+                                                    <div className="flex items-center gap-2">
+                                                      <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider">{appt.serviceName || 'Consulta Geral'}</h4>
+                                                      {appt.tooth && <span className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {appt.tooth}</span>}
+                                                    </div>
                                                     <div className="flex gap-2 mt-1">
                                                         <p className="text-[10px] text-slate-400 font-bold uppercase">Status: {appt.status}</p>
                                                         {appt.status === 'COMPLETED' && <button onClick={() => handleBillAppointment(appt)} className="text-[9px] font-black text-emerald-600 hover:text-emerald-700 uppercase flex items-center gap-1"><DollarSign className="w-3 h-3"/> Gerar Cobrança</button>}
@@ -499,7 +505,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                 <button onClick={() => { setApptForm(appt); setApptModalOpen(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
                                             )}
                                         </div>
-                                        <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic relative">
+                                        <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic relative shadow-inner">
                                           {appt.clinicalNotes ? `"${appt.clinicalNotes}"` : <span className="text-slate-300">Sem anotações detalhadas.</span>}
                                         </div>
                                     </div>
@@ -616,17 +622,34 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                           setApptModalOpen(false);
                           showAlert("Atendimento atualizado com sucesso.", "success");
                         }} className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Paciente</label>
-                                <select 
-                                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                    value={apptForm.clientId || ''} 
-                                    onChange={e => setApptForm({...apptForm, clientId: e.target.value, clientName: clients.find(c => c.id === e.target.value)?.contactName})} 
-                                    required
-                                >
-                                    <option value="">Selecione o paciente...</option>
-                                    {clients.map(c => <option key={c.id} value={c.id}>{c.contactName}</option>)}
-                                </select>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Paciente</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.clientId || ''} 
+                                        onChange={e => setApptForm({...apptForm, clientId: e.target.value, clientName: clients.find(c => c.id === e.target.value)?.contactName})} 
+                                        required
+                                        disabled={apptForm.isLocked}
+                                    >
+                                        <option value="">Selecione o paciente...</option>
+                                        {clients.map(c => <option key={c.id} value={c.id}>{c.contactName}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Dente (Opcional)</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.tooth || ''} 
+                                        onChange={e => setApptForm({...apptForm, tooth: Number(e.target.value) || undefined})}
+                                        disabled={apptForm.isLocked}
+                                    >
+                                        <option value="">Nenhum específico</option>
+                                        {[...Array(32)].map((_, i) => (
+                                          <option key={i} value={i+11}>Dente {i+11}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -637,6 +660,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         value={apptForm.date ? apptForm.date.substring(0, 16) : ''} 
                                         onChange={e => setApptForm({...apptForm, date: e.target.value})} 
                                         required 
+                                        disabled={apptForm.isLocked}
                                     />
                                 </div>
                                 <div>
@@ -646,6 +670,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         value={apptForm.serviceId || ''} 
                                         onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} 
                                         required
+                                        disabled={apptForm.isLocked}
                                     >
                                         <option value="">Selecione...</option>
                                         {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -655,7 +680,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             <div>
                               <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações Clínicas</label>
                               <textarea 
-                                className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[150px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70" 
+                                className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[150px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70 shadow-inner" 
                                 placeholder="Descreva os procedimentos realizados ou observações..." 
                                 value={apptForm.clinicalNotes || ''} 
                                 onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} 
@@ -664,69 +689,14 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <button type="button" onClick={() => setApptModalOpen(false)} className="w-full py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
-                                <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Agendamento</button>
+                                {!apptForm.isLocked ? (
+                                  <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Agendamento</button>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-2 text-amber-600 font-black uppercase text-[10px] bg-amber-50 rounded-2xl px-4">
+                                    <Lock className="w-4 h-4"/> Registro Bloqueado
+                                  </div>
+                                )}
                             </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal de Novo Procedimento / Serviço */}
-            {isServiceModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-scale-up border border-slate-100">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                                <ClipboardList className="w-5 h-5 text-sky-500" />
-                                Configurar Procedimento
-                            </h2>
-                            <button onClick={() => setServiceModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
-                        </div>
-                        <form onSubmit={(e) => {
-                          e.preventDefault();
-                          onSaveService({
-                            ...serviceForm,
-                            id: serviceForm.id || crypto.randomUUID(),
-                            moduleTag: 'odonto'
-                          });
-                          setServiceModalOpen(false);
-                          showAlert("Procedimento salvo com sucesso.", "success");
-                        }} className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Nome do Procedimento</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                    value={serviceForm.name || ''} 
-                                    onChange={e => setServiceForm({...serviceForm, name: e.target.value})} 
-                                    placeholder="Ex: Limpeza, Extração, etc."
-                                    required 
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Valor Sugerido (R$)</label>
-                                    <input 
-                                        type="number" 
-                                        step="0.01"
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={serviceForm.defaultPrice || ''} 
-                                        onChange={e => setServiceForm({...serviceForm, defaultPrice: Number(e.target.value)})} 
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Duração (minutos)</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={serviceForm.defaultDuration || ''} 
-                                        onChange={e => setServiceForm({...serviceForm, defaultDuration: Number(e.target.value)})} 
-                                        placeholder="Ex: 30"
-                                    />
-                                </div>
-                            </div>
-                            <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Procedimento</button>
                         </form>
                     </div>
                 </div>
@@ -737,7 +707,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 onClose={() => setAttachmentTarget(null)}
                 urls={clientForm.attachments || []}
                 onAdd={async (files) => {
-                  showAlert("Upload simulado concluído.", "info");
+                  showAlert("Simulando upload para armazenamento clínico...", "info");
                 }}
                 onRemove={(idx) => {
                   const updated = (clientForm.attachments || []).filter((_, i) => i !== idx);

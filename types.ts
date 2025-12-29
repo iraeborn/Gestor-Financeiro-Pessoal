@@ -1,5 +1,4 @@
 
-
 export enum EntityType {
   PERSONAL = 'PF',
   BUSINESS = 'PJ'
@@ -314,6 +313,7 @@ export interface ServiceAppointment {
   clientName?: string;
   serviceId?: string;
   serviceName?: string;
+  tooth?: number; // Vinculado a um dente específico
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
@@ -323,9 +323,6 @@ export interface ServiceAppointment {
   isLocked?: boolean; // Impedir edição legal
 }
 
-/** 
- * Fix: Added missing interfaces before AppState
- */
 export interface ServiceOrder {
   id: string;
   number?: string;
@@ -414,9 +411,6 @@ export interface AppState {
   companyProfile?: CompanyProfile | null;
 }
 
-/**
- * Fix: Added missing exported members for storageService and others
- */
 export interface AuthResponse {
   token: string;
   user: User;

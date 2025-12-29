@@ -58,7 +58,7 @@ export default function(logAudit) {
 
     // --- MODULE CLIENTS ---
     router.post('/modules/clients', authenticateToken, async (req, res) => {
-        const { id, contactId, contactName, contactEmail, contactPhone, notes, birthDate, insurance, allergies, medications, moduleTag } = req.body;
+        const { id, contactId, contactName, contactEmail, contactPhone, notes, birthDate, insurance, allergies, medications, moduleTag, odontogram, anamnesis, prescriptions, attachments } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const clientId = id || crypto.randomUUID();
@@ -66,13 +66,31 @@ export default function(logAudit) {
             const isUpdate = existingRes.rows.length > 0;
 
             await pool.query(
-                `INSERT INTO service_clients (id, contact_id, contact_name, contact_email, contact_phone, notes, birth_date, insurance, allergies, medications, module_tag, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                `INSERT INTO service_clients (id, contact_id, contact_name, contact_email, contact_phone, notes, birth_date, insurance, allergies, medications, module_tag, user_id, family_id, odontogram, anamnesis, prescriptions, attachments)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                  ON CONFLICT (id) DO UPDATE SET 
                     contact_id=$2, contact_name=$3, contact_email=$4, contact_phone=$5, 
                     notes=$6, birth_date=$7, insurance=$8, allergies=$9, medications=$10, 
-                    module_tag=$11, deleted_at=NULL`,
-                [clientId, sanitizeValue(contactId), contactName, contactEmail, contactPhone, notes, sanitizeValue(birthDate), insurance, allergies, medications, moduleTag || 'GENERAL', req.user.id, familyId]
+                    module_tag=$11, odontogram=$14, anamnesis=$15, prescriptions=$16, attachments=$17, deleted_at=NULL`,
+                [
+                    clientId, 
+                    sanitizeValue(contactId), 
+                    contactName, 
+                    contactEmail, 
+                    contactPhone, 
+                    notes, 
+                    sanitizeValue(birthDate), 
+                    insurance, 
+                    allergies, 
+                    medications, 
+                    moduleTag || 'GENERAL', 
+                    req.user.id, 
+                    familyId,
+                    JSON.stringify(odontogram || []),
+                    JSON.stringify(anamnesis || {}),
+                    JSON.stringify(prescriptions || []),
+                    JSON.stringify(attachments || [])
+                ]
             );
             await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'service_client', clientId, contactName);
             res.json({ success: true, id: clientId });
@@ -125,7 +143,7 @@ export default function(logAudit) {
 
     // --- MODULE APPOINTMENTS ---
     router.post('/modules/appointments', authenticateToken, async (req, res) => {
-        const { id, clientId, serviceId, date, status, notes, moduleTag } = req.body;
+        const { id, clientId, serviceId, date, status, notes, clinicalNotes, moduleTag, tooth, isLocked } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const apptId = id || crypto.randomUUID();
@@ -133,10 +151,10 @@ export default function(logAudit) {
             const isUpdate = existingRes.rows.length > 0;
 
             await pool.query(
-                `INSERT INTO service_appointments (id, client_id, service_id, date, status, notes, module_tag, user_id, family_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                 ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, date=$4, status=$5, notes=$6, module_tag=$7, deleted_at=NULL`,
-                [apptId, clientId, sanitizeValue(serviceId), date, status || 'SCHEDULED', notes, moduleTag || 'GENERAL', req.user.id, familyId]
+                `INSERT INTO service_appointments (id, client_id, service_id, tooth, date, status, notes, clinical_notes, module_tag, user_id, family_id, is_locked)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, tooth=$4, date=$5, status=$6, notes=$7, clinical_notes=$8, module_tag=$9, is_locked=$12, deleted_at=NULL`,
+                [apptId, clientId, sanitizeValue(serviceId), tooth || null, date, status || 'SCHEDULED', notes, clinicalNotes || '', moduleTag || 'GENERAL', req.user.id, familyId, isLocked || false]
             );
             await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'appointment', apptId, `Agenda: ${date}`);
             res.json({ success: true, id: apptId });
