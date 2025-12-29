@@ -91,6 +91,20 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     const workspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
     const isAdmin = workspace?.role === 'ADMIN';
 
+    // Helper para normalizar permissões que podem vir como string JSON do banco
+    const normalizePermissions = (perms: string[] | string | undefined): string[] => {
+        if (!perms) return [];
+        if (typeof perms === 'string') {
+            try {
+                const parsed = JSON.parse(perms);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+        return perms;
+    };
+
     useEffect(() => {
         loadData();
     }, []);
@@ -152,9 +166,11 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         }
     };
 
-    const findMatchingProfile = (perms: string[]) => {
-        if (!perms) return 'CUSTOM';
-        const sortedPerms = [...perms].sort();
+    const findMatchingProfile = (perms: string[] | string | undefined) => {
+        const normalized = normalizePermissions(perms);
+        if (normalized.length === 0) return 'CUSTOM';
+        
+        const sortedPerms = [...normalized].sort();
         const jsonPerms = JSON.stringify(sortedPerms);
 
         const match = ROLE_DEFINITIONS.find(r => {
@@ -178,7 +194,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     const openEditModal = (member: Member) => {
         setEditingMember(member);
         setEditRole(member.role as 'ADMIN' | 'MEMBER');
-        const perms = member.permissions || [];
+        const perms = normalizePermissions(member.permissions);
         setEditPermissions(perms);
         setSelectedProfileId(findMatchingProfile(perms));
     };
@@ -217,9 +233,8 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         setSelectedProfileId(match);
     };
 
-    const countPermissions = (perms: string[] | undefined) => {
-        if (!perms) return 0;
-        return perms.length;
+    const countPermissions = (perms: string[] | string | undefined) => {
+        return normalizePermissions(perms).length;
     };
 
     const filteredPermissionGroups = PERMISSION_GROUPS.filter(group => {
