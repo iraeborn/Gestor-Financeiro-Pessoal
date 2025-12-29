@@ -53,7 +53,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     const [attachmentTarget, setAttachmentTarget] = useState<{type: 'CLIENT' | 'APPT', id: string} | null>(null);
     const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
 
-    // Controle de Seletor de Dentes para Itens de Tratamento
     const [activeToothPickerIdx, setActiveToothPickerIdx] = useState<number | null>(null);
 
     // Handlers Clínicos
@@ -126,7 +125,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     const handleBillAppointment = async (appt: ServiceAppointment) => {
         if (!onAddTransaction) return;
         
-        const totalAmount = (appt.treatmentItems || []).reduce((acc, item) => acc + item.value, 0);
+        // Correção de NaN: Garantir que cada item seja numérico e tratar nulos
+        const totalAmount = (appt.treatmentItems || []).reduce((acc, item) => acc + (Number(item.value) || 0), 0);
 
         const confirm = await showConfirm({
             title: "Gerar Cobrança",
@@ -149,8 +149,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         }
     };
 
-    // --- Agendamentos / Itens de Tratamento ---
-
     const handleAddTreatmentItem = () => {
         const newItem: TreatmentItem = {
             id: crypto.randomUUID(),
@@ -172,8 +170,11 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 ...items[idx], 
                 serviceId: value, 
                 serviceName: service?.name, 
-                value: service?.defaultPrice || 0 
+                value: Number(service?.defaultPrice) || 0 
             };
+        } else if (field === 'value') {
+            // Correção de NaN: Garantir conversão para número ou 0 se vazio
+            items[idx] = { ...items[idx], value: value === '' ? 0 : (Number(value) || 0) };
         } else {
             items[idx] = { ...items[idx], [field]: value };
         }
@@ -233,12 +234,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         setServiceModalOpen(true);
     };
 
-    const getActionButtonLabel = () => {
-        if (activeSection === 'CALENDAR') return `Novo Agendamento`;
-        if (activeSection === 'SERVICES') return `Novo ${serviceLabel}`;
-        return `Novo ${clientLabel}`;
-    };
-
     const handleMainAction = () => {
         if (activeSection === 'CALENDAR') handleOpenApptModal();
         else if (activeSection === 'SERVICES') handleOpenServiceModal();
@@ -253,7 +248,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                         <div className="p-2 bg-sky-600 rounded-xl text-white shadow-lg"><DentalIcon className="w-6 h-6"/></div>
                         {moduleTitle}
                         <span className="text-gray-400 font-light text-xl">| 
-                            {activeSection === 'CALENDAR' ? ' Agenda' : activeSection === 'CLIENTS' ? ` ${clientLabel}s` : ` ${serviceLabel}s`}
+                            {activeSection === 'CALENDAR' ? ' Agenda' : activeSection === 'CLIENTS' ? ` Pacientes` : ` Procedimentos`}
                         </span>
                     </h1>
                 </div>
@@ -269,7 +264,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                         />
                     </div>
                     <button onClick={handleMainAction} className="bg-sky-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-sky-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
-                        <Plus className="w-4 h-4" /> {getActionButtonLabel()}
+                        <Plus className="w-4 h-4" /> {activeSection === 'CALENDAR' ? 'Novo Agendamento' : activeSection === 'SERVICES' ? 'Novo Procedimento' : 'Novo Paciente'}
                     </button>
                 </div>
             </div>
@@ -534,7 +529,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                         ))}
                                                     </div>
                                                     <div className="flex gap-2 mt-2">
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Total: {formatCurrency(appt.treatmentItems?.reduce((acc, i) => acc + i.value, 0))}</p>
+                                                        {/* Correção de NaN no histórico */}
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Total: {formatCurrency(appt.treatmentItems?.reduce((acc, i) => acc + (Number(i.value) || 0), 0))}</p>
                                                         {appt.status === 'COMPLETED' && <button onClick={() => handleBillAppointment(appt)} className="text-[9px] font-black text-emerald-600 hover:text-emerald-700 uppercase flex items-center gap-1"><DollarSign className="w-3 h-3"/> Gerar Cobrança</button>}
                                                     </div>
                                                 </div>
@@ -660,7 +656,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                     <label className="block text-[9px] font-black uppercase text-slate-400 mb-2">Valor (R$)</label>
                                                     <div className="relative">
                                                         <DollarSign className="w-3.5 h-3.5 text-slate-300 absolute left-3 top-3.5" />
-                                                        <input type="number" step="0.01" className="w-full pl-9 bg-white border-none rounded-xl p-3 text-xs font-black shadow-sm outline-none" value={item.value} onChange={e => handleUpdateTreatmentItem(idx, 'value', Number(e.target.value))} disabled={apptForm.isLocked} />
+                                                        <input type="number" step="0.01" className="w-full pl-9 bg-white border-none rounded-xl p-3 text-xs font-black shadow-sm outline-none" value={item.value} onChange={e => handleUpdateTreatmentItem(idx, 'value', e.target.value)} disabled={apptForm.isLocked} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -708,7 +704,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-6 border-t border-slate-100 bg-slate-50/50 -mx-8 -mb-8 p-8">
                                 <div className="text-center md:text-left">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total da Consulta</p>
-                                    <p className="text-3xl font-black text-slate-900">{formatCurrency(apptForm.treatmentItems?.reduce((acc, i) => acc + i.value, 0))}</p>
+                                    {/* Correção de NaN no rodapé do modal */}
+                                    <p className="text-3xl font-black text-slate-900">{formatCurrency(apptForm.treatmentItems?.reduce((acc, i) => acc + (Number(i.value) || 0), 0))}</p>
                                 </div>
                                 <div className="flex gap-3">
                                     <button type="button" onClick={() => setApptModalOpen(false)} className="px-8 py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
