@@ -1,9 +1,7 @@
 
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-/* Fix: Added missing Account import */
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category, TransactionType, TransactionStatus, Account } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2 } from 'lucide-react';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2, Clock, MapPin } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import AttachmentModal from './AttachmentModal';
 import Odontogram from './Odontogram';
@@ -21,7 +19,6 @@ interface ServiceModuleProps {
     services: ServiceItem[];
     appointments: ServiceAppointment[];
     contacts: Contact[];
-    /* Fix: Account is now correctly imported */
     accounts: Account[];
     onSaveClient: (c: Partial<ServiceClient>) => void;
     onDeleteClient: (id: string) => void;
@@ -151,6 +148,9 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
     };
 
     const filteredClients = clients.filter(c => c.contactName?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredServices = services.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredAppointments = appointments.filter(a => a.clientName?.toLowerCase().includes(searchTerm.toLowerCase())).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
     const patientAppointments = useMemo(() => {
         if (!clientForm.id) return [];
         return appointments
@@ -172,6 +172,32 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
       return alerts;
     }, [clientForm.anamnesis]);
 
+    // Handler para novo agendamento
+    const handleOpenApptModal = (appt?: ServiceAppointment) => {
+        if (appt) setApptForm(appt);
+        else setApptForm({ date: new Date().toISOString().split('T')[0], status: 'SCHEDULED', moduleTag: 'odonto' });
+        setApptModalOpen(true);
+    };
+
+    // Handler para novo serviço
+    const handleOpenServiceModal = (service?: ServiceItem) => {
+        if (service) setServiceForm(service);
+        else setServiceForm({ name: '', defaultPrice: 0, type: 'SERVICE', moduleTag: 'odonto' });
+        setServiceModalOpen(true);
+    };
+
+    const getActionButtonLabel = () => {
+        if (activeSection === 'CALENDAR') return `Novo Agendamento`;
+        if (activeSection === 'SERVICES') return `Novo ${serviceLabel}`;
+        return `Novo ${clientLabel}`;
+    };
+
+    const handleMainAction = () => {
+        if (activeSection === 'CALENDAR') handleOpenApptModal();
+        else if (activeSection === 'SERVICES') handleOpenServiceModal();
+        else handleOpenClientModal();
+    };
+
     return (
         <div className="space-y-6 animate-fade-in pb-20">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -184,9 +210,19 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                         </span>
                     </h1>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => handleOpenClientModal()} className="bg-sky-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-sky-700 shadow-lg transition-all active:scale-95">
-                        <Plus className="w-4 h-4" /> Novo {clientLabel}
+                <div className="flex gap-2 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-64">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            className="w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-sky-500 outline-none shadow-sm" 
+                        />
+                    </div>
+                    <button onClick={handleMainAction} className="bg-sky-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-sky-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
+                        <Plus className="w-4 h-4" /> {getActionButtonLabel()}
                     </button>
                 </div>
             </div>
@@ -218,6 +254,77 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             </div>
                         </div>
                     ))}
+                    {filteredClients.length === 0 && <div className="col-span-full py-20 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-[2.5rem]"><User className="w-16 h-16 mx-auto mb-4 opacity-10"/><p className="font-bold">Nenhum paciente cadastrado.</p></div>}
+                </div>
+            )}
+
+            {/* ABA AGENDA (CALENDAR) */}
+            {activeSection === 'CALENDAR' && (
+                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] tracking-widest border-b border-gray-100">
+                                <tr>
+                                    <th className="px-6 py-4">Data/Hora</th>
+                                    <th className="px-6 py-4">Paciente</th>
+                                    <th className="px-6 py-4">Procedimento</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {filteredAppointments.map(appt => (
+                                    <tr key={appt.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-gray-700">
+                                            {new Date(appt.date).toLocaleDateString('pt-BR')} <span className="text-gray-300 font-normal ml-2">{new Date(appt.date).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-sky-600">{appt.clientName}</td>
+                                        <td className="px-6 py-4 text-gray-600">{appt.serviceName || 'Consulta'}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${appt.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                {appt.status === 'COMPLETED' ? 'Concluído' : 'Agendado'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <button onClick={() => handleOpenApptModal(appt)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
+                                                <button onClick={() => onDeleteAppointment(appt.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filteredAppointments.length === 0 && <div className="py-20 text-center text-slate-300"><Calendar className="w-16 h-16 mx-auto mb-4 opacity-10"/><p className="font-bold">Nenhum agendamento para exibir.</p></div>}
+                    </div>
+                </div>
+            )}
+
+            {/* ABA PROCEDIMENTOS (SERVICES) */}
+            {activeSection === 'SERVICES' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredServices.map(service => (
+                        <div key={service.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 hover:shadow-xl transition-all group">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-sky-50 text-sky-600 rounded-2xl">
+                                    <ClipboardList className="w-6 h-6"/>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Valor Base</p>
+                                    <p className="text-lg font-black text-gray-900">{formatCurrency(service.defaultPrice)}</p>
+                                </div>
+                            </div>
+                            <h3 className="font-bold text-gray-800 mb-2 line-clamp-2">{service.name}</h3>
+                            <div className="flex items-center gap-4 text-[10px] font-black text-gray-400 uppercase tracking-widest mt-auto pt-4 border-t border-gray-50">
+                                <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {service.defaultDuration || 30} min</span>
+                                <div className="flex gap-2 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handleOpenServiceModal(service)} className="p-1.5 text-indigo-600 bg-indigo-50 rounded-lg"><Pencil className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => onDeleteService(service.id)} className="p-1.5 text-rose-500 bg-rose-50 rounded-lg"><Trash2 className="w-3.5 h-3.5"/></button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {filteredServices.length === 0 && <div className="col-span-full py-20 text-center text-slate-300 border-2 border-dashed border-slate-100 rounded-[2.5rem]"><ClipboardList className="w-16 h-16 mx-auto mb-4 opacity-10"/><p className="font-bold">Nenhum procedimento cadastrado.</p></div>}
                 </div>
             )}
 
@@ -487,7 +594,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 </div>
             )}
 
-            {/* Modal de Evolução Clínica (Atendimento) */}
+            {/* Modal de Evolução Clínica / Novo Agendamento */}
             {isApptModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl p-8 animate-scale-up border border-slate-100">
@@ -503,33 +610,123 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                           onSaveAppointment({
                             ...apptForm,
                             id: apptForm.id || crypto.randomUUID(),
-                            status: apptForm.status || 'COMPLETED',
-                            isLocked: true, // Trava legal ao salvar evolução
+                            status: apptForm.status || 'SCHEDULED',
                             moduleTag: 'odonto'
                           });
                           setApptModalOpen(false);
-                          showAlert("Evolução registrada e bloqueada legalmente.", "success");
+                          showAlert("Atendimento atualizado com sucesso.", "success");
                         }} className="space-y-6">
                             <div>
-                              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Procedimento Realizado</label>
-                              <select className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none disabled:opacity-50" value={apptForm.serviceId || ''} onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} required disabled={apptForm.isLocked}>
-                                <option value="">Selecione...</option>
-                                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                              </select>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Paciente</label>
+                                <select 
+                                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                    value={apptForm.clientId || ''} 
+                                    onChange={e => setApptForm({...apptForm, clientId: e.target.value, clientName: clients.find(c => c.id === e.target.value)?.contactName})} 
+                                    required
+                                >
+                                    <option value="">Selecione o paciente...</option>
+                                    {clients.map(c => <option key={c.id} value={c.id}>{c.contactName}</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Data e Hora</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.date ? apptForm.date.substring(0, 16) : ''} 
+                                        onChange={e => setApptForm({...apptForm, date: e.target.value})} 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Procedimento</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.serviceId || ''} 
+                                        onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} 
+                                        required
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
                             <div>
-                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações da Evolução (Imutável após salvar)</label>
-                              <textarea className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[200px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70" placeholder="Descreva os procedimentos realizados, intercorrências e orientações dadas ao paciente..." value={apptForm.clinicalNotes || ''} onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} required disabled={apptForm.isLocked} />
+                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações Clínicas</label>
+                              <textarea 
+                                className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[150px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70" 
+                                placeholder="Descreva os procedimentos realizados ou observações..." 
+                                value={apptForm.clinicalNotes || ''} 
+                                onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} 
+                                disabled={apptForm.isLocked} 
+                              />
                             </div>
-                            {!apptForm.isLocked ? (
-                                <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all flex items-center justify-center gap-2">
-                                    <FileCheck className="w-5 h-5" /> Finalizar & Bloquear Evolução
-                                </button>
-                            ) : (
-                                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-amber-800 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2">
-                                    <Lock className="w-3 h-3" /> Este registro não pode ser alterado por conformidade legal.
+                            <div className="grid grid-cols-2 gap-4">
+                                <button type="button" onClick={() => setApptModalOpen(false)} className="w-full py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
+                                <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Agendamento</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Novo Procedimento / Serviço */}
+            {isServiceModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-scale-up border border-slate-100">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                                <ClipboardList className="w-5 h-5 text-sky-500" />
+                                Configurar Procedimento
+                            </h2>
+                            <button onClick={() => setServiceModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={(e) => {
+                          e.preventDefault();
+                          onSaveService({
+                            ...serviceForm,
+                            id: serviceForm.id || crypto.randomUUID(),
+                            moduleTag: 'odonto'
+                          });
+                          setServiceModalOpen(false);
+                          showAlert("Procedimento salvo com sucesso.", "success");
+                        }} className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Nome do Procedimento</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                    value={serviceForm.name || ''} 
+                                    onChange={e => setServiceForm({...serviceForm, name: e.target.value})} 
+                                    placeholder="Ex: Limpeza, Extração, etc."
+                                    required 
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Valor Sugerido (R$)</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={serviceForm.defaultPrice || ''} 
+                                        onChange={e => setServiceForm({...serviceForm, defaultPrice: Number(e.target.value)})} 
+                                        required 
+                                    />
                                 </div>
-                            )}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Duração (minutos)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={serviceForm.defaultDuration || ''} 
+                                        onChange={e => setServiceForm({...serviceForm, defaultDuration: Number(e.target.value)})} 
+                                        placeholder="Ex: 30"
+                                    />
+                                </div>
+                            </div>
+                            <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Procedimento</button>
                         </form>
                     </div>
                 </div>
@@ -550,5 +747,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         </div>
     );
 };
+
+const formatCurrency = (val: number | undefined) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
 export default ServiceModule;
