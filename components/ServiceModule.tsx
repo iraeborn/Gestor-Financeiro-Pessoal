@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category, TransactionType, TransactionStatus, Account } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2, Clock, MapPin } from 'lucide-react';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2, Clock, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import AttachmentModal from './AttachmentModal';
 import Odontogram from './Odontogram';
@@ -174,8 +174,8 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
 
     // Handler para novo agendamento
     const handleOpenApptModal = (appt?: ServiceAppointment) => {
-        if (appt) setApptForm(appt);
-        else setApptForm({ date: new Date().toISOString().split('T')[0], status: 'SCHEDULED', moduleTag: 'odonto' });
+        if (appt) setApptForm({ ...appt, teeth: Array.isArray(appt.teeth) ? appt.teeth : (appt.tooth ? [appt.tooth] : []) });
+        else setApptForm({ date: new Date().toISOString().split('T')[0], status: 'SCHEDULED', teeth: [], moduleTag: 'odonto' });
         setApptModalOpen(true);
     };
 
@@ -196,6 +196,14 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         if (activeSection === 'CALENDAR') handleOpenApptModal();
         else if (activeSection === 'SERVICES') handleOpenServiceModal();
         else handleOpenClientModal();
+    };
+
+    const toggleToothSelection = (t: number) => {
+        const current = [...(apptForm.teeth || [])];
+        const idx = current.indexOf(t);
+        if (idx > -1) current.splice(idx, 1);
+        else current.push(t);
+        setApptForm({ ...apptForm, teeth: current });
     };
 
     return (
@@ -281,7 +289,11 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                         <td className="px-6 py-4 font-bold text-sky-600">{appt.clientName}</td>
                                         <td className="px-6 py-4 text-gray-600">
                                             {appt.serviceName || 'Consulta'}
-                                            {appt.tooth && <span className="ml-2 bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded font-black">Dente {appt.tooth}</span>}
+                                            {(appt.teeth || appt.tooth) && (
+                                                <span className="ml-2 bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded font-black">
+                                                    {(appt.teeth && appt.teeth.length > 0) ? `Dentes: ${appt.teeth.join(', ')}` : `Dente: ${appt.tooth}`}
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${appt.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -473,7 +485,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                               <div className="space-y-6 animate-fade-in">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Anotações Clínicas Progressivas</h3>
-                                    <button onClick={() => { setApptForm({ clientId: clientForm.id, clientName: clientForm.contactName, date: new Date().toISOString() }); setApptModalOpen(true); }} className="bg-sky-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-lg shadow-sky-100 transition-all">+ Nova Evolução</button>
+                                    <button onClick={() => { setApptForm({ clientId: clientForm.id, clientName: clientForm.contactName, date: new Date().toISOString(), teeth: [] }); setApptModalOpen(true); }} className="bg-sky-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 shadow-lg shadow-sky-100 transition-all">+ Nova Evolução</button>
                                 </div>
                                 <div className="space-y-4">
                                   {patientAppointments.length === 0 ? (
@@ -493,7 +505,14 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                       <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider">{appt.serviceName || 'Consulta Geral'}</h4>
-                                                      {appt.tooth && <span className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {appt.tooth}</span>}
+                                                      {(appt.teeth && appt.teeth.length > 0) && (
+                                                        <div className="flex gap-1">
+                                                          {appt.teeth.map(t => (
+                                                            <span key={t} className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {t}</span>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                      {(appt.tooth && (!appt.teeth || appt.teeth.length === 0)) && <span className="bg-sky-100 text-sky-700 text-[10px] px-2 py-0.5 rounded-full font-black">Dente {appt.tooth}</span>}
                                                     </div>
                                                     <div className="flex gap-2 mt-1">
                                                         <p className="text-[10px] text-slate-400 font-bold uppercase">Status: {appt.status}</p>
@@ -502,7 +521,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                 </div>
                                             </div>
                                             {!appt.isLocked && (
-                                                <button onClick={() => { setApptForm(appt); setApptModalOpen(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
+                                                <button onClick={() => { handleOpenApptModal(appt); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
                                             )}
                                         </div>
                                         <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic relative shadow-inner">
@@ -603,7 +622,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             {/* Modal de Evolução Clínica / Novo Agendamento */}
             {isApptModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl p-8 animate-scale-up border border-slate-100">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl p-8 animate-scale-up border border-slate-100 max-h-[95vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                                 {apptForm.isLocked ? <Lock className="w-5 h-5 text-amber-500" /> : <DentalIcon className="w-5 h-5 text-sky-500" />}
@@ -617,6 +636,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                             ...apptForm,
                             id: apptForm.id || crypto.randomUUID(),
                             status: apptForm.status || 'SCHEDULED',
+                            teeth: apptForm.teeth || [],
                             moduleTag: 'odonto'
                           });
                           setApptModalOpen(false);
@@ -637,33 +657,6 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Dente (Opcional)</label>
-                                    <select 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={apptForm.tooth || ''} 
-                                        onChange={e => setApptForm({...apptForm, tooth: Number(e.target.value) || undefined})}
-                                        disabled={apptForm.isLocked}
-                                    >
-                                        <option value="">Nenhum específico</option>
-                                        {[...Array(32)].map((_, i) => (
-                                          <option key={i} value={i+11}>Dente {i+11}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Data e Hora</label>
-                                    <input 
-                                        type="datetime-local" 
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
-                                        value={apptForm.date ? apptForm.date.substring(0, 16) : ''} 
-                                        onChange={e => setApptForm({...apptForm, date: e.target.value})} 
-                                        required 
-                                        disabled={apptForm.isLocked}
-                                    />
-                                </div>
-                                <div>
                                     <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Procedimento</label>
                                     <select 
                                         className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
@@ -677,20 +670,85 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                     </select>
                                 </div>
                             </div>
+
+                            {/* Seletor Múltiplo de Dentes em Grade */}
+                            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-4 ml-1">Selecione o(s) Dente(s) Trabalhado(s)</label>
+                                <div className="space-y-4">
+                                    {/* Superior */}
+                                    <div className="flex flex-wrap justify-center gap-1">
+                                        {[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28].map(t => (
+                                            <button 
+                                                key={t}
+                                                type="button"
+                                                disabled={apptForm.isLocked}
+                                                onClick={() => toggleToothSelection(t)}
+                                                className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${apptForm.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-sky-300'}`}
+                                            >
+                                                {t}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="h-px bg-slate-200 w-full opacity-50"></div>
+                                    {/* Inferior */}
+                                    <div className="flex flex-wrap justify-center gap-1">
+                                        {[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38].map(t => (
+                                            <button 
+                                                key={t}
+                                                type="button"
+                                                disabled={apptForm.isLocked}
+                                                onClick={() => toggleToothSelection(t)}
+                                                className={`w-7 h-9 text-[10px] font-black rounded-md border-2 transition-all flex flex-col items-center justify-center ${apptForm.teeth?.includes(t) ? 'bg-sky-600 text-white border-sky-700 shadow-md scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-sky-300'}`}
+                                            >
+                                                {t}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Data e Hora</label>
+                                    <input 
+                                        type="datetime-local" 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.date ? apptForm.date.substring(0, 16) : ''} 
+                                        onChange={e => setApptForm({...apptForm, date: e.target.value})} 
+                                        required 
+                                        disabled={apptForm.isLocked}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Situação</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" 
+                                        value={apptForm.status || 'SCHEDULED'} 
+                                        onChange={e => setApptForm({...apptForm, status: e.target.value as any})}
+                                        disabled={apptForm.isLocked}
+                                    >
+                                        <option value="SCHEDULED">Agendado</option>
+                                        <option value="COMPLETED">Concluído</option>
+                                        <option value="CANCELED">Cancelado</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
                             <div>
-                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações Clínicas</label>
+                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações Clínicas Detalhadas</label>
                               <textarea 
                                 className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[150px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70 shadow-inner" 
-                                placeholder="Descreva os procedimentos realizados ou observações..." 
+                                placeholder="Descreva os procedimentos realizados em cada dente selecionado ou observações gerais..." 
                                 value={apptForm.clinicalNotes || ''} 
                                 onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} 
                                 disabled={apptForm.isLocked} 
                               />
                             </div>
+                            
                             <div className="grid grid-cols-2 gap-4">
                                 <button type="button" onClick={() => setApptModalOpen(false)} className="w-full py-4 text-slate-400 font-black text-sm uppercase tracking-widest">Cancelar</button>
                                 {!apptForm.isLocked ? (
-                                  <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Agendamento</button>
+                                  <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Salvar Evolução</button>
                                 ) : (
                                   <div className="flex items-center justify-center gap-2 text-amber-600 font-black uppercase text-[10px] bg-amber-50 rounded-2xl px-4">
                                     <Lock className="w-4 h-4"/> Registro Bloqueado

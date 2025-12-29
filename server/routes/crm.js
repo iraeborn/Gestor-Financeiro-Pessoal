@@ -143,7 +143,7 @@ export default function(logAudit) {
 
     // --- MODULE APPOINTMENTS ---
     router.post('/modules/appointments', authenticateToken, async (req, res) => {
-        const { id, clientId, serviceId, date, status, notes, clinicalNotes, moduleTag, tooth, isLocked } = req.body;
+        const { id, clientId, serviceId, date, status, notes, clinicalNotes, moduleTag, tooth, teeth, isLocked } = req.body;
         try {
             const familyId = await getFamilyId(req.user.id);
             const apptId = id || crypto.randomUUID();
@@ -151,10 +151,24 @@ export default function(logAudit) {
             const isUpdate = existingRes.rows.length > 0;
 
             await pool.query(
-                `INSERT INTO service_appointments (id, client_id, service_id, tooth, date, status, notes, clinical_notes, module_tag, user_id, family_id, is_locked)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                 ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, tooth=$4, date=$5, status=$6, notes=$7, clinical_notes=$8, module_tag=$9, is_locked=$12, deleted_at=NULL`,
-                [apptId, clientId, sanitizeValue(serviceId), tooth || null, date, status || 'SCHEDULED', notes, clinicalNotes || '', moduleTag || 'GENERAL', req.user.id, familyId, isLocked || false]
+                `INSERT INTO service_appointments (id, client_id, service_id, tooth, teeth, date, status, notes, clinical_notes, module_tag, user_id, family_id, is_locked)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 ON CONFLICT (id) DO UPDATE SET client_id=$2, service_id=$3, tooth=$4, teeth=$5, date=$6, status=$7, notes=$8, clinical_notes=$9, module_tag=$10, is_locked=$13, deleted_at=NULL`,
+                [
+                    apptId, 
+                    clientId, 
+                    sanitizeValue(serviceId), 
+                    tooth || null, 
+                    JSON.stringify(teeth || []), 
+                    date, 
+                    status || 'SCHEDULED', 
+                    notes, 
+                    clinicalNotes || '', 
+                    moduleTag || 'GENERAL', 
+                    req.user.id, 
+                    familyId, 
+                    isLocked || false
+                ]
             );
             await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'appointment', apptId, `Agenda: ${date}`);
             res.json({ success: true, id: apptId });

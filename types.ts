@@ -313,7 +313,9 @@ export interface ServiceAppointment {
   clientName?: string;
   serviceId?: string;
   serviceName?: string;
-  tooth?: number; // Vinculado a um dente específico
+  // Fix: Added missing tooth property for singular tooth records
+  tooth?: number;
+  teeth?: number[]; // Lista de dentes trabalhados
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
