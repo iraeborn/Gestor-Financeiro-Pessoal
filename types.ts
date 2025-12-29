@@ -91,7 +91,7 @@ export interface ToothState {
   tooth: number;
   condition: 'HEALTHY' | 'CAVITY' | 'FILLING' | 'MISSING' | 'CROWN' | 'ENDO' | 'IMPLANT';
   notes?: string;
-  isDeciduous?: boolean; // Se dente de leite
+  isDeciduous?: boolean;
 }
 
 export interface Anamnesis {
@@ -99,10 +99,10 @@ export interface Anamnesis {
   hypertension: boolean;
   diabetes: boolean;
   allergy: boolean;
-  anestheticAllergy: boolean; // Crítico
+  anestheticAllergy: boolean;
   bleedingProblem: boolean;
   isPregnant: boolean;
-  bisphosphonates: boolean; // Importante para cirurgias
+  bisphosphonates: boolean;
   medications: string;
   notes: string;
 }
@@ -208,7 +208,7 @@ export interface FinancialGoal {
   name: string;
   targetAmount: number;
   currentAmount?: number;
-  current_amount?: number; // DB compatibility
+  current_amount?: number;
   deadline: string;
 }
 
@@ -254,6 +254,32 @@ export interface Project {
   name: string;
 }
 
+export interface TreatmentProcedure {
+    id: string;
+    planId: string;
+    serviceId: string;
+    serviceName: string;
+    category?: 'ORTODONTIA' | 'IMPLANTE' | 'ESTETICA' | 'PERIODONTIA' | 'ENDODONTIA' | 'GERAL';
+    teeth?: number[];
+    value: number;
+    discount: number;
+    netValue: number;
+    responsibleId?: string;
+    responsibleName?: string;
+    status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+    notes?: string;
+    completedAt?: string;
+}
+
+export interface TreatmentPlan {
+    id: string;
+    clientId: string;
+    title: string;
+    status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+    createdAt: string;
+    procedures: TreatmentProcedure[];
+}
+
 export interface ServiceClient {
   id: string;
   contactId?: string;
@@ -272,6 +298,7 @@ export interface ServiceClient {
   odontogram?: ToothState[];
   anamnesis?: Anamnesis;
   prescriptions?: Prescription[];
+  treatmentPlans?: TreatmentPlan[];
 }
 
 export interface ServiceItem {
@@ -307,6 +334,82 @@ export interface OSItem {
   isFromCatalog?: boolean;
 }
 
+// Fix: Added missing ServiceOrder interface
+export interface ServiceOrder {
+  id: string;
+  number?: number;
+  title: string;
+  description?: string;
+  contactId?: string;
+  contactName?: string;
+  status: OSStatus;
+  totalAmount: number;
+  startDate?: string;
+  endDate?: string;
+  openedAt: string;
+  type: OSType;
+  origin: OSOrigin;
+  priority: OSPriority;
+  items: OSItem[];
+  assigneeId?: string;
+  assigneeName?: string;
+  createdAt?: string;
+}
+
+// Fix: Added missing CommercialOrder interface
+export interface CommercialOrder {
+  id: string;
+  type: 'SALE' | 'PURCHASE';
+  description: string;
+  contactId?: string;
+  contactName?: string;
+  amount: number;
+  grossAmount: number;
+  discountAmount: number;
+  taxAmount: number;
+  items: OSItem[];
+  date: string;
+  status: 'DRAFT' | 'APPROVED' | 'ON_HOLD' | 'CONFIRMED' | 'REJECTED' | 'CANCELADA';
+  transactionId?: string;
+  accessToken?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  createdAt?: string;
+}
+
+// Fix: Added missing Contract interface
+export interface Contract {
+  id: string;
+  title: string;
+  contactId?: string;
+  contactName?: string;
+  value: number;
+  startDate: string;
+  endDate?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+  billingDay?: number;
+  createdAt?: string;
+}
+
+// Fix: Added missing Invoice interface
+export interface Invoice {
+  id: string;
+  number: string;
+  series: string;
+  type: string;
+  amount: number;
+  issueDate: string;
+  status: 'ISSUED' | 'CANCELLED';
+  contactId?: string;
+  contactName?: string;
+  description: string;
+  items: OSItem[];
+  fileUrl?: string;
+  orderId?: string;
+  serviceOrderId?: string;
+  createdAt?: string;
+}
+
 export interface TreatmentItem {
     id: string;
     serviceId: string;
@@ -319,7 +422,7 @@ export interface ServiceAppointment {
   id: string;
   clientId: string;
   clientName?: string;
-  treatmentItems?: TreatmentItem[]; // Múltiplos procedimentos
+  treatmentItems?: TreatmentItem[];
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   notes?: string;
@@ -327,74 +430,6 @@ export interface ServiceAppointment {
   moduleTag: string;
   attachments?: string[];
   isLocked?: boolean;
-}
-
-export interface ServiceOrder {
-  id: string;
-  number?: string;
-  title: string;
-  description: string;
-  contactId?: string;
-  contactName?: string;
-  status: OSStatus;
-  totalAmount: number;
-  startDate?: string;
-  endDate?: string;
-  items: OSItem[];
-  type: OSType;
-  origin: OSOrigin;
-  priority: OSPriority;
-  openedAt: string;
-  assigneeId?: string;
-  assigneeName?: string;
-}
-
-export interface CommercialOrder {
-  id: string;
-  type: 'SALE' | 'PURCHASE';
-  description: string;
-  contactId?: string;
-  contactName?: string;
-  amount: number;
-  grossAmount?: number;
-  discountAmount?: number;
-  taxAmount?: number;
-  items: OSItem[];
-  date: string;
-  status: string;
-  transactionId?: string;
-  accessToken?: string;
-  assigneeId?: string;
-  assigneeName?: string;
-}
-
-export interface Contract {
-  id: string;
-  title: string;
-  contactId?: string;
-  contactName?: string;
-  value: number;
-  startDate: string;
-  endDate?: string;
-  status: string;
-  billingDay?: number;
-}
-
-export interface Invoice {
-  id: string;
-  number: string;
-  series: string;
-  type: string;
-  amount: number;
-  issueDate: string;
-  status: string;
-  contactId?: string;
-  contactName?: string;
-  description?: string;
-  items: OSItem[];
-  fileUrl?: string;
-  orderId?: string;
-  serviceOrderId?: string;
 }
 
 export interface AppState {
