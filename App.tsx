@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
@@ -217,6 +218,8 @@ const App: React.FC = () => {
             services={data.serviceItems.filter(s => s.moduleTag === 'odonto')}
             appointments={data.serviceAppointments.filter(a => a.moduleTag === 'odonto')}
             contacts={data.contacts}
+            /* Fix: Added missing accounts prop to ServiceModule instantiation */
+            accounts={data.accounts}
             onSaveClient={async (c) => { await api.saveModuleClient({ ...c, moduleTag: 'odonto' }); await loadData(true); }}
             onDeleteClient={async (id) => { await api.deleteModuleClient(id); await loadData(true); }}
             onSaveService={async (s) => { await api.saveModuleService({ ...s, moduleTag: 'odonto' }); await loadData(true); }}

@@ -1,4 +1,5 @@
 
+
 export enum EntityType {
   PERSONAL = 'PF',
   BUSINESS = 'PJ'
@@ -91,6 +92,7 @@ export interface ToothState {
   tooth: number;
   condition: 'HEALTHY' | 'CAVITY' | 'FILLING' | 'MISSING' | 'CROWN' | 'ENDO' | 'IMPLANT';
   notes?: string;
+  isDeciduous?: boolean; // Se dente de leite
 }
 
 export interface Anamnesis {
@@ -98,8 +100,10 @@ export interface Anamnesis {
   hypertension: boolean;
   diabetes: boolean;
   allergy: boolean;
+  anestheticAllergy: boolean; // Crítico
   bleedingProblem: boolean;
   isPregnant: boolean;
+  bisphosphonates: boolean; // Importante para cirurgias
   medications: string;
   notes: string;
 }
@@ -316,22 +320,26 @@ export interface ServiceAppointment {
   clinicalNotes?: string;
   moduleTag: string;
   attachments?: string[];
+  isLocked?: boolean; // Impedir edição legal
 }
 
+/** 
+ * Fix: Added missing interfaces before AppState
+ */
 export interface ServiceOrder {
   id: string;
-  number?: number;
+  number?: string;
   title: string;
   description: string;
   contactId?: string;
   contactName?: string;
-  status: string;
+  status: OSStatus;
   totalAmount: number;
   startDate?: string;
   endDate?: string;
-  items?: OSItem[];
-  type: string;
-  origin: string;
+  items: OSItem[];
+  type: OSType;
+  origin: OSOrigin;
   priority: OSPriority;
   openedAt: string;
   assigneeId?: string;
@@ -345,10 +353,10 @@ export interface CommercialOrder {
   contactId?: string;
   contactName?: string;
   amount: number;
-  grossAmount: number;
-  discountAmount: number;
-  taxAmount: number;
-  items?: OSItem[];
+  grossAmount?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  items: OSItem[];
   date: string;
   status: string;
   transactionId?: string;
@@ -371,27 +379,54 @@ export interface Contract {
 
 export interface Invoice {
   id: string;
-  number?: string;
-  series?: string;
+  number: string;
+  series: string;
   type: string;
   amount: number;
   issueDate: string;
-  issue_date?: string; // DB compatibility
   status: string;
   contactId?: string;
   contactName?: string;
   description?: string;
-  items?: OSItem[];
+  items: OSItem[];
   fileUrl?: string;
   orderId?: string;
   serviceOrderId?: string;
+}
+
+export interface AppState {
+  accounts: Account[];
+  transactions: Transaction[];
+  contacts: Contact[];
+  serviceClients: ServiceClient[];
+  serviceItems: ServiceItem[];
+  serviceAppointments: ServiceAppointment[];
+  goals: FinancialGoal[];
+  categories: Category[];
+  branches: Branch[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  projects: Project[];
+  serviceOrders: ServiceOrder[];
+  commercialOrders: CommercialOrder[];
+  contracts: Contract[];
+  invoices: Invoice[];
+  companyProfile?: CompanyProfile | null;
+}
+
+/**
+ * Fix: Added missing exported members for storageService and others
+ */
+export interface AuthResponse {
+  token: string;
+  user: User;
 }
 
 export interface AuditLog {
   id: number;
   userId: string;
   userName: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT' | 'JOIN';
+  action: string;
   entity: string;
   entityId: string;
   details: string;
@@ -413,27 +448,59 @@ export interface NotificationLog {
 }
 
 export interface AppNotification {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: string;
-  type: 'SUCCESS' | 'INFO' | 'WARNING' | 'ERROR';
-  isRead: boolean;
-  entity?: 'order' | 'os' | 'invoice' | 'transaction';
-  entityId?: string;
+    id: string;
+    title: string;
+    message: string;
+    timestamp: string;
+    type: 'INFO' | 'SUCCESS' | 'WARNING';
+    isRead: boolean;
+    entity?: string;
+    entityId?: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: User;
-}
-
-export interface KanbanColumnConfig {
+export interface RoleDefinition {
   id: string;
   label: string;
-  color: string;
-  borderColor: string;
+  description: string;
+  defaultPermissions: string[];
+  requiredModule?: 'odonto' | 'services' | 'intelligence';
 }
+
+export const ROLE_DEFINITIONS: RoleDefinition[] = [
+  {
+      id: 'ADMIN',
+      label: 'Administrador',
+      description: 'Acesso total ao sistema e gestão de equipe.',
+      defaultPermissions: []
+  },
+  {
+      id: 'FIN_MANAGER',
+      label: 'Gerente Financeiro',
+      description: 'Gestão completa de contas, lançamentos e relatórios.',
+      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS']
+  },
+  {
+      id: 'SALES_REP',
+      label: 'Vendedor / Comercial',
+      description: 'Foco em orçamentos, vendas e catálogo de itens.',
+      requiredModule: 'services',
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CATALOG', 'SRV_CLIENTS', 'FIN_CONTACTS']
+  },
+  {
+      id: 'TECH_OPERATOR',
+      label: 'Técnico Operacional',
+      description: 'Gestão de ordens de serviço e execução técnica.',
+      requiredModule: 'services',
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'SRV_CATALOG', 'SRV_CLIENTS']
+  },
+  {
+      id: 'ODONTO_DOC',
+      label: 'Dentista / Clínico',
+      description: 'Acesso total ao prontuário, agenda e procedimentos.',
+      requiredModule: 'odonto',
+      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES']
+  }
+];
 
 export interface KanbanItem {
   id: string;
@@ -448,64 +515,9 @@ export interface KanbanItem {
   raw?: any;
 }
 
-export const ROLE_DEFINITIONS = [
-  { 
-      id: 'ADMIN', 
-      label: 'Administrador', 
-      description: 'Acesso total a todas as funcionalidades e configurações.',
-      defaultPermissions: [] 
-  },
-  { 
-      id: 'MANAGER', 
-      label: 'Gerente Financeiro', 
-      description: 'Pode gerenciar contas, transações e ver relatórios.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_REPORTS', 'FIN_CATEGORIES'] 
-  },
-  { 
-      id: 'OPERATOR', 
-      label: 'Operador / Caixa', 
-      description: 'Lançar novas transações e ver extrato.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS'] 
-  },
-  {
-      id: 'DENTIST',
-      label: 'Cirurgião Dentista',
-      description: 'Acesso clínico aos pacientes, agenda e procedimentos.',
-      requiredModule: 'odonto',
-      defaultPermissions: ['ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES']
-  },
-  {
-      id: 'SALES_REP',
-      label: 'Representante de Vendas',
-      description: 'Gerencia orçamentos, vendas e catálogo.',
-      requiredModule: 'services',
-      defaultPermissions: ['SRV_SALES', 'SRV_CATALOG', 'SRV_CLIENTS']
-  },
-  {
-      id: 'TECH_LEAD',
-      label: 'Líder Técnico',
-      description: 'Gestão de ordens de serviço e catálogo técnico.',
-      requiredModule: 'services',
-      defaultPermissions: ['SRV_OS', 'SRV_CATALOG']
-  }
-];
-
-export interface AppState {
-  accounts: Account[];
-  transactions: Transaction[];
-  contacts: Contact[];
-  serviceClients: ServiceClient[];
-  serviceItems: ServiceItem[];
-  serviceAppointments: ServiceAppointment[];
-  goals: FinancialGoal[];
-  categories: Category[];
-  branches: Branch[];
-  costCenters: CostCenter[];
-  departments: Department[];
-  projects: Project[];
-  serviceOrders: ServiceOrder[];
-  commercialOrders: CommercialOrder[];
-  contracts: Contract[];
-  invoices: Invoice[];
-  companyProfile?: CompanyProfile | null;
+export interface KanbanColumnConfig {
+  id: string;
+  label: string;
+  color: string;
+  borderColor: string;
 }

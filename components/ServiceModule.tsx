@@ -1,7 +1,9 @@
 
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category } from '../types';
-import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill } from 'lucide-react';
+/* Fix: Added missing Account import */
+import { ServiceClient, ServiceItem, ServiceAppointment, Contact, ToothState, Anamnesis, Prescription, Transaction, Category, TransactionType, TransactionStatus, Account } from '../types';
+import { Calendar, User, ClipboardList, Plus, Search, Trash2, Mail, Phone, FileHeart, Stethoscope, AlertCircle, Shield, Paperclip, Eye, History, Heart, AlertTriangle, FileText, Image as ImageIcon, X, Info, Pencil, Activity, FileCheck, Stethoscope as DentalIcon, Pill, Lock, Unlock, DollarSign, CheckCircle2 } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import AttachmentModal from './AttachmentModal';
 import Odontogram from './Odontogram';
@@ -19,21 +21,22 @@ interface ServiceModuleProps {
     services: ServiceItem[];
     appointments: ServiceAppointment[];
     contacts: Contact[];
+    /* Fix: Account is now correctly imported */
+    accounts: Account[];
     onSaveClient: (c: Partial<ServiceClient>) => void;
     onDeleteClient: (id: string) => void;
     onSaveService: (s: Partial<ServiceItem>) => void;
     onDeleteService: (id: string) => void;
     onSaveAppointment: (a: Partial<ServiceAppointment>) => void;
     onDeleteAppointment: (id: string) => void;
-    // Added missing prop for App.tsx
     onAddTransaction?: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
 }
 
 const ServiceModule: React.FC<ServiceModuleProps> = ({ 
     moduleTitle, clientLabel, serviceLabel, activeSection,
-    clients, services, appointments, contacts,
+    clients, services, appointments, contacts, accounts,
     onSaveClient, onDeleteClient, onSaveService, onDeleteService,
-    onSaveAppointment, onDeleteAppointment
+    onSaveAppointment, onDeleteAppointment, onAddTransaction
 }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
@@ -75,7 +78,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
       setClientForm({
         ...clientForm,
         anamnesis: {
-          ...(clientForm.anamnesis || { heartProblem: false, hypertension: false, diabetes: false, allergy: false, bleedingProblem: false, isPregnant: false, medications: '', notes: '' }),
+          ...(clientForm.anamnesis || { heartProblem: false, hypertension: false, diabetes: false, allergy: false, anestheticAllergy: false, bleedingProblem: false, isPregnant: false, bisphosphonates: false, medications: '', notes: '' }),
           [field]: value
         }
       });
@@ -101,7 +104,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
             setClientForm({ 
               odontogram: [], 
               prescriptions: [], 
-              anamnesis: { heartProblem: false, hypertension: false, diabetes: false, allergy: false, bleedingProblem: false, isPregnant: false, medications: '', notes: '' },
+              anamnesis: { heartProblem: false, hypertension: false, diabetes: false, allergy: false, anestheticAllergy: false, bleedingProblem: false, isPregnant: false, bisphosphonates: false, medications: '', notes: '' },
               attachments: [],
               moduleTag: 'odonto'
             });
@@ -120,6 +123,33 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
         showAlert("Prontuário atualizado com sucesso!", "success");
     };
 
+    const handleBillAppointment = async (appt: ServiceAppointment) => {
+        if (!onAddTransaction) return;
+        
+        const service = services.find(s => s.id === appt.serviceId);
+        const amount = service?.defaultPrice || 0;
+
+        const confirm = await showConfirm({
+            title: "Gerar Cobrança",
+            message: `Deseja gerar um lançamento financeiro de ${amount.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})} para este atendimento?`,
+            confirmText: "Sim, Gerar Lançamento"
+        });
+
+        if (confirm) {
+            onAddTransaction({
+                description: `Atendimento: ${appt.clientName} - ${appt.serviceName || 'Odontologia'}`,
+                amount: amount,
+                type: TransactionType.INCOME,
+                category: 'Serviços Odontológicos',
+                date: new Date().toISOString().split('T')[0],
+                status: TransactionStatus.PENDING,
+                accountId: accounts[0]?.id || '',
+                contactId: clients.find(c => c.id === appt.clientId)?.contactId
+            });
+            showAlert("Lançamento financeiro gerado!", "success");
+        }
+    };
+
     const filteredClients = clients.filter(c => c.contactName?.toLowerCase().includes(searchTerm.toLowerCase()));
     const patientAppointments = useMemo(() => {
         if (!clientForm.id) return [];
@@ -136,7 +166,9 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
       if (ana.hypertension) alerts.push("Hipertenso");
       if (ana.diabetes) alerts.push("Diabético");
       if (ana.allergy) alerts.push("Alergias");
+      if (ana.anestheticAllergy) alerts.push("ALERGIA ANESTÉSICO");
       if (ana.bleedingProblem) alerts.push("Risco Hemorrágico");
+      if (ana.bisphosphonates) alerts.push("Uso de Bifosfonatos");
       return alerts;
     }, [clientForm.anamnesis]);
 
@@ -175,7 +207,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 </div>
                             </div>
                             <div className="space-y-2 mb-4 h-8 overflow-hidden">
-                                {c.anamnesis?.allergy && <span className="inline-block px-2 py-0.5 bg-rose-50 text-rose-700 rounded-lg text-[9px] font-black uppercase tracking-widest border border-rose-100 mr-2">Alergia</span>}
+                                {c.anamnesis?.anestheticAllergy && <span className="inline-block px-2 py-0.5 bg-rose-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest animate-pulse mr-2">Cuidado Anestésico</span>}
                                 {c.insurance && <span className="inline-block px-2 py-0.5 bg-sky-50 text-sky-700 rounded-lg text-[9px] font-black uppercase tracking-widest border border-sky-100">{c.insurance}</span>}
                             </div>
                             <div className="pt-4 border-t border-gray-50 flex justify-between items-center text-[10px] font-black text-gray-300 uppercase tracking-widest">
@@ -201,7 +233,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                 </div>
                                 <div>
                                     <h2 className="text-3xl font-black text-gray-900">{clientForm.contactName || 'Novo Paciente'}</h2>
-                                    <div className="flex gap-3 mt-2">
+                                    <div className="flex flex-wrap gap-2 mt-2">
                                         {clinicalAlerts.map(a => (
                                           <span key={a} className="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 animate-pulse"><AlertTriangle className="w-3 h-3"/> {a}</span>
                                         ))}
@@ -267,8 +299,10 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                       { id: 'hypertension', label: 'Hipertensão Arterial' },
                                       { id: 'diabetes', label: 'Diabetes' },
                                       { id: 'allergy', label: 'Alergias Alimentares/Med' },
+                                      { id: 'anestheticAllergy', label: 'Alergia a Anestésicos' },
                                       { id: 'bleedingProblem', label: 'Problemas de Hemorragia' },
-                                      { id: 'isPregnant', label: 'Está Grávida?' }
+                                      { id: 'isPregnant', label: 'Está Grávida?' },
+                                      { id: 'bisphosphonates', label: 'Uso de Bifosfonatos' }
                                     ].map(q => (
                                       <div key={q.id} className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100">
                                         <span className="text-sm font-bold text-slate-700">{q.label}</span>
@@ -283,7 +317,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                     ))}
                                   </div>
                                   <div className="space-y-4">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Medicamentos em Uso</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Medicamentos em Uso e Observações</label>
                                     <textarea className="w-full bg-slate-50 border-none rounded-3xl p-6 text-sm font-bold min-h-[120px]" placeholder="Liste aqui remédios que o paciente toma regularmente..." value={clientForm.anamnesis?.medications || ''} onChange={e => handleSaveAnamnesis('medications', e.target.value)} />
                                   </div>
                                 </div>
@@ -339,6 +373,7 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                     </div>
                                   ) : patientAppointments.map(appt => (
                                     <div key={appt.id} className="bg-slate-50 border border-slate-100 p-8 rounded-[2rem] relative group">
+                                        {appt.isLocked && <div className="absolute top-4 right-4 text-slate-300" title="Registro Bloqueado (Imutável)"><Lock className="w-4 h-4"/></div>}
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="flex gap-5">
                                                 <div className="w-14 h-14 bg-white rounded-2xl flex flex-col items-center justify-center border border-slate-100 shadow-sm">
@@ -347,12 +382,17 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                                                 </div>
                                                 <div>
                                                     <h4 className="font-black text-slate-800 uppercase text-xs tracking-wider">{appt.serviceName || 'Consulta Geral'}</h4>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Status: {appt.status}</p>
+                                                    <div className="flex gap-2 mt-1">
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Status: {appt.status}</p>
+                                                        {appt.status === 'COMPLETED' && <button onClick={() => handleBillAppointment(appt)} className="text-[9px] font-black text-emerald-600 hover:text-emerald-700 uppercase flex items-center gap-1"><DollarSign className="w-3 h-3"/> Gerar Cobrança</button>}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <DentalIcon className="w-6 h-6 text-slate-200" />
+                                            {!appt.isLocked && (
+                                                <button onClick={() => { setApptForm(appt); setApptModalOpen(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
+                                            )}
                                         </div>
-                                        <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic">
+                                        <div className="bg-white p-6 rounded-2xl border border-slate-100 text-sm text-slate-600 font-medium leading-relaxed italic relative">
                                           {appt.clinicalNotes ? `"${appt.clinicalNotes}"` : <span className="text-slate-300">Sem anotações detalhadas.</span>}
                                         </div>
                                     </div>
@@ -452,7 +492,10 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl p-8 animate-scale-up border border-slate-100">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Atendimento Clínico</h2>
+                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                                {apptForm.isLocked ? <Lock className="w-5 h-5 text-amber-500" /> : <DentalIcon className="w-5 h-5 text-sky-500" />}
+                                Atendimento Clínico
+                            </h2>
                             <button onClick={() => setApptModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
                         </div>
                         <form onSubmit={(e) => {
@@ -460,24 +503,33 @@ const ServiceModule: React.FC<ServiceModuleProps> = ({
                           onSaveAppointment({
                             ...apptForm,
                             id: apptForm.id || crypto.randomUUID(),
-                            status: 'COMPLETED',
+                            status: apptForm.status || 'COMPLETED',
+                            isLocked: true, // Trava legal ao salvar evolução
                             moduleTag: 'odonto'
                           });
                           setApptModalOpen(false);
-                          showAlert("Evolução registrada!", "success");
+                          showAlert("Evolução registrada e bloqueada legalmente.", "success");
                         }} className="space-y-6">
                             <div>
                               <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Procedimento Realizado</label>
-                              <select className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={apptForm.serviceId || ''} onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} required>
+                              <select className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none disabled:opacity-50" value={apptForm.serviceId || ''} onChange={e => setApptForm({...apptForm, serviceId: e.target.value, serviceName: services.find(s=>s.id===e.target.value)?.name})} required disabled={apptForm.isLocked}>
                                 <option value="">Selecione...</option>
                                 {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações da Evolução (Obrigatório)</label>
-                              <textarea className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[200px] outline-none focus:ring-2 focus:ring-sky-500" placeholder="Descreva os procedimentos realizados, intercorrências e orientações dadas ao paciente..." value={apptForm.clinicalNotes || ''} onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} required />
+                              <label className="block text-[10px] font-black uppercase text-sky-600 mb-2 ml-1">Anotações da Evolução (Imutável após salvar)</label>
+                              <textarea className="w-full bg-slate-50 border-none rounded-2xl p-6 text-sm font-bold min-h-[200px] outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-70" placeholder="Descreva os procedimentos realizados, intercorrências e orientações dadas ao paciente..." value={apptForm.clinicalNotes || ''} onChange={e => setApptForm({...apptForm, clinicalNotes: e.target.value})} required disabled={apptForm.isLocked} />
                             </div>
-                            <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all">Finalizar Evolução Clínica</button>
+                            {!apptForm.isLocked ? (
+                                <button type="submit" className="w-full bg-sky-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all flex items-center justify-center gap-2">
+                                    <FileCheck className="w-5 h-5" /> Finalizar & Bloquear Evolução
+                                </button>
+                            ) : (
+                                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 text-amber-800 text-[10px] font-black uppercase text-center flex items-center justify-center gap-2">
+                                    <Lock className="w-3 h-3" /> Este registro não pode ser alterado por conformidade legal.
+                                </div>
+                            )}
                         </form>
                     </div>
                 </div>
