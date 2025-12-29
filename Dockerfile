@@ -1,6 +1,7 @@
 # ============================
 # 1) STAGE DE BUILD
 # ============================
+
 FROM node:18 AS build
 
 WORKDIR /app
