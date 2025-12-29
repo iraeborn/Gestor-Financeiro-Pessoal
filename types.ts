@@ -181,8 +181,8 @@ export interface FinancialGoal {
   id: string;
   name: string;
   targetAmount: number;
-  current_amount: number; // Snake case adjustment from DB
-  currentAmount?: number; // Camel case for frontend
+  current_amount: number; 
+  currentAmount?: number; 
   deadline: string;
 }
 
@@ -328,7 +328,6 @@ export interface CommercialOrder {
   id: string;
   type: 'SALE' | 'PURCHASE';
   description: string;
-  contact_id?: string; // DB Mapping
   contactId?: string;
   contactName?: string;
   amount: number;
@@ -440,7 +439,6 @@ export interface AppState {
   invoices: Invoice[];
 }
 
-// Kanban Component Props
 export interface KanbanItem {
     id: string;
     title: string;
@@ -451,19 +449,16 @@ export interface KanbanItem {
     date?: string;
     tags?: string[];
     assigneeName?: string;
-    raw?: any; // Objeto original
+    raw?: any; 
 }
 
 export interface KanbanColumnConfig {
     id: string;
     label: string;
-    color: string; // Tailwind class
+    color: string; 
     borderColor: string;
 }
 
-/**
- * Interface for pre-configured roles used in invite and access management
- */
 export interface RoleDefinition {
     id: string;
     label: string;
@@ -472,15 +467,12 @@ export interface RoleDefinition {
     requiredModule?: string;
 }
 
-/**
- * Pre-defined role templates for quick setup of new members
- */
 export const ROLE_DEFINITIONS: RoleDefinition[] = [
     {
         id: 'ADMIN',
         label: 'Administrador',
         description: 'Acesso total ao sistema e gestão de equipe.',
-        defaultPermissions: [] // Admins usually get everything logic-wise
+        defaultPermissions: [] 
     },
     {
         id: 'MEMBER',
