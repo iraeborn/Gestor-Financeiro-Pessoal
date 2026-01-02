@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx } from '../types';
 
 const API_URL = '/api';
 const getHeaders = () => ({
@@ -59,55 +59,6 @@ export const loginWithGoogle = async (credential: string, entityType?: EntityTyp
   return data;
 };
 
-// Alterado de CheckoutSession para PagarMeSession
-export const createPagarMeSession = async (planId: string): Promise<{ success: boolean, url?: string, redirectUrl?: string }> => {
-    return handleResponse(await fetch(`${API_URL}/billing/create-pagarme-session`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ planId })
-    }));
-};
-
-export const consultCnpj = async (cnpj: string): Promise<any> => {
-    return handleResponse(await fetch(`${API_URL}/consult-cnpj/${cnpj}`, { headers: getHeaders() }));
-};
-
-export const createInvite = async (role?: string): Promise<{ code: string }> => {
-    return handleResponse(await fetch(`${API_URL}/invites`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ role })
-    }));
-};
-
-export const joinFamily = async (code: string): Promise<User> => {
-    const data = await handleResponse(await fetch(`${API_URL}/invites/join`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ code })
-    }));
-    return data.user;
-};
-
-export const getFamilyMembers = async (): Promise<Member[]> => {
-    return handleResponse(await fetch(`${API_URL}/members`, { headers: getHeaders() }));
-};
-
-export const updateMemberRole = async (memberId: string, role: string, permissions: string[]): Promise<any> => {
-    return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({ role, permissions })
-    }));
-};
-
-export const removeMember = async (memberId: string): Promise<any> => {
-    return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    }));
-};
-
 export const switchContext = async (workspaceId: string) => {
     const data = await handleResponse(await fetch(`${API_URL}/auth/switch-context`, {
         method: 'POST',
@@ -139,16 +90,94 @@ export const updateProfile = async (data: { name: string; email: string; current
     return res.user;
 };
 
-export const getAdminStats = async (): Promise<any> => handleResponse(await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() }));
-export const getAdminUsers = async (): Promise<any[]> => handleResponse(await fetch(`${API_URL}/admin/users`, { headers: getHeaders() }));
-
 export const getAuditLogs = async (): Promise<AuditLog[]> => handleResponse(await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() }));
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => handleResponse(await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() }));
-export const restoreRecord = async (entity: string, entityId: string): Promise<any> => handleResponse(await fetch(`${API_URL}/restore/${entity}/${entityId}`, { method: 'POST', headers: getHeaders() }));
-export const revertLogChange = async (logId: number): Promise<any> => handleResponse(await fetch(`${API_URL}/revert-log/${logId}`, { method: 'POST', headers: getHeaders() }));
 
 export const getPublicOrder = async (token: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}`));
 export const updatePublicOrderStatus = async (token: string, status: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }));
+
+// Fix: Added missing exported member 'consultCnpj'
+export const consultCnpj = async (cnpj: string): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/consult-cnpj/${cnpj}`, { headers: getHeaders() }));
+};
+
+// Fix: Added missing exported member 'createPagarMeSession'
+export const createPagarMeSession = async (planId: string): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/billing/create-pagarme-session`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ planId })
+    }));
+};
+
+// Fix: Added missing exported member 'createInvite'
+export const createInvite = async (role?: string): Promise<{ code: string }> => {
+    return handleResponse(await fetch(`${API_URL}/invites`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ role })
+    }));
+};
+
+// Fix: Added missing exported member 'joinFamily'
+export const joinFamily = async (code: string): Promise<User> => {
+    const data = await handleResponse(await fetch(`${API_URL}/invites/join`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ code })
+    }));
+    return data.user;
+};
+
+// Fix: Added missing exported member 'getFamilyMembers'
+export const getFamilyMembers = async (): Promise<Member[]> => {
+    return handleResponse(await fetch(`${API_URL}/members`, { headers: getHeaders() }));
+};
+
+// Fix: Added missing exported member 'getAdminStats'
+export const getAdminStats = async (): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() }));
+};
+
+// Fix: Added missing exported member 'getAdminUsers'
+export const getAdminUsers = async (): Promise<any[]> => {
+    return handleResponse(await fetch(`${API_URL}/admin/users`, { headers: getHeaders() }));
+};
+
+// Fix: Added missing exported member 'restoreRecord'
+export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/restore`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ entity, entityId })
+    }));
+};
+
+// Fix: Added missing exported member 'revertLogChange'
+export const revertLogChange = async (logId: number): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/revert-log`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ logId })
+    }));
+};
+
+// Fix: Added missing exported member 'updateMemberRole'
+export const updateMemberRole = async (memberId: string, role: string, permissions: string[]): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ role, permissions })
+    }));
+};
+
+// Fix: Added missing exported member 'removeMember'
+export const removeMember = async (memberId: string): Promise<any> => {
+    return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+    }));
+};
 
 export const api = {
     saveTransaction: async (t: Transaction) => handleResponse(await fetch(`${API_URL}/transactions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(t) })),
@@ -162,12 +191,9 @@ export const api = {
     saveCategory: async (c: Category) => handleResponse(await fetch(`${API_URL}/categories`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
     deleteCategory: async (id: string) => handleResponse(await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: getHeaders() })),
     
-    saveModuleClient: async (c: Partial<ServiceClient>) => handleResponse(await fetch(`${API_URL}/modules/clients`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
-    deleteModuleClient: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() })),
-    saveModuleService: async (s: Partial<ServiceItem>) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(s) })),
-    deleteModuleService: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() })),
-    saveModuleAppointment: async (a: Partial<ServiceAppointment>) => handleResponse(await fetch(`${API_URL}/modules/appointments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(a) })),
-    deleteModuleAppointment: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    // Ótica
+    saveOpticalRx: async (rx: OpticalRx) => handleResponse(await fetch(`${API_URL}/optical/rx`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(rx) })),
+    deleteOpticalRx: async (id: string) => handleResponse(await fetch(`${API_URL}/optical/rx/${id}`, { method: 'DELETE', headers: getHeaders() })),
 
     saveCatalogItem: async (i: Partial<ServiceItem>) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteCatalogItem: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() })),
@@ -181,19 +207,17 @@ export const api = {
     saveInvoice: async (i: any) => handleResponse(await fetch(`${API_URL}/services/invoices`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteInvoice: async (id: string) => handleResponse(await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() })),
     
-    saveBranch: async (d: any) => handleResponse(await fetch(`${API_URL}/branches`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
-    deleteBranch: async (id: string) => handleResponse(await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: getHeaders() })),
-    saveCompanyProfile: async (d: any) => handleResponse(await fetch(`${API_URL}/company`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(d) })),
-    
-    importInvoiceXml: async (file: File) => {
+    // Fix: Added missing property 'importInvoiceXml'
+    importInvoiceXml: async (xmlFile: File): Promise<any> => {
         const formData = new FormData();
-        formData.append('xml', file);
+        formData.append('xml', xmlFile);
         return handleResponse(await fetch(`${API_URL}/services/invoices/import-xml`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
             body: formData
         }));
     },
+
     shareOrder: async (orderId: string, channel: string) => handleResponse(await fetch(`${API_URL}/services/orders/${orderId}/share`, {
         method: 'POST',
         headers: getHeaders(),

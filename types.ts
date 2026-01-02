@@ -50,14 +50,15 @@ export enum TransactionClassification {
   INTER_BRANCH = 'INTER_BRANCH'
 }
 
-export type OSStatus = 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' | 'PAUSADA' | 'FINALIZADA';
-export type OSType = 'MANUTENCAO' | 'INSTALACAO' | 'REPARO' | 'OUTRO';
-export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO';
+export type OSStatus = 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' | 'PAUSADA' | 'FINALIZADA' | 'PRONTA' | 'ENTREGUE';
+export type OSType = 'MANUTENCAO' | 'INSTALACAO' | 'REPARO' | 'MONTAGEM_OTICA' | 'OUTRO';
+export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO' | 'VENDA_OTICA';
 export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export type ViewMode = 
   | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS'
   | 'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS'
+  | 'OPTICAL_RX' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
   | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS';
@@ -67,6 +68,7 @@ export interface AppSettings {
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
+    optical?: boolean;
     intelligence?: boolean;
     [key: string]: boolean | undefined;
   };
@@ -85,6 +87,37 @@ export interface AppSettings {
     notifyOverdue: boolean;
     notifyWeeklyReport: boolean;
   };
+}
+
+export interface OpticalRx {
+  id: string;
+  contactId: string;
+  contactName?: string;
+  professionalName?: string;
+  rxDate: string;
+  expirationDate?: string;
+  // OD
+  sphereOdLonge?: number;
+  cylOdLonge?: number;
+  axisOdLonge?: number;
+  sphereOdPerto?: number;
+  cylOdPerto?: number;
+  axisOdPerto?: number;
+  // OE
+  sphereOeLonge?: number;
+  cylOeLonge?: number;
+  axisOeLonge?: number;
+  sphereOePerto?: number;
+  cylOePerto?: number;
+  axisOePerto?: number;
+  // Geral
+  addition?: number;
+  dnpOd?: number;
+  dnpOe?: number;
+  heightOd?: number;
+  heightOe?: number;
+  imageUrl?: string;
+  observations?: string;
 }
 
 export interface ToothState {
@@ -316,6 +349,7 @@ export interface ServiceItem {
   unit?: string;
   description?: string;
   imageUrl?: string;
+  opticalCategory?: 'FRAME' | 'LENS' | 'TREATMENT' | 'CONTACT_LENS' | 'OTHER';
 }
 
 export interface OSItem {
@@ -334,7 +368,6 @@ export interface OSItem {
   isFromCatalog?: boolean;
 }
 
-// Fix: Added missing ServiceOrder interface
 export interface ServiceOrder {
   id: string;
   number?: number;
@@ -354,9 +387,10 @@ export interface ServiceOrder {
   assigneeId?: string;
   assigneeName?: string;
   createdAt?: string;
+  rxId?: string; // Vínculo com Receita Ótica
+  moduleTag?: string;
 }
 
-// Fix: Added missing CommercialOrder interface
 export interface CommercialOrder {
   id: string;
   type: 'SALE' | 'PURCHASE';
@@ -375,9 +409,10 @@ export interface CommercialOrder {
   assigneeId?: string;
   assigneeName?: string;
   createdAt?: string;
+  rxId?: string; // Vínculo com Receita Ótica
+  moduleTag?: string;
 }
 
-// Fix: Added missing Contract interface
 export interface Contract {
   id: string;
   title: string;
@@ -391,7 +426,6 @@ export interface Contract {
   createdAt?: string;
 }
 
-// Fix: Added missing Invoice interface
 export interface Invoice {
   id: string;
   number: string;
@@ -449,6 +483,7 @@ export interface AppState {
   commercialOrders: CommercialOrder[];
   contracts: Contract[];
   invoices: Invoice[];
+  opticalRxs: OpticalRx[];
   companyProfile?: CompanyProfile | null;
 }
 
@@ -498,7 +533,7 @@ export interface RoleDefinition {
   label: string;
   description: string;
   defaultPermissions: string[];
-  requiredModule?: 'odonto' | 'services' | 'intelligence';
+  requiredModule?: 'odonto' | 'services' | 'intelligence' | 'optical';
 }
 
 export const ROLE_DEFINITIONS: RoleDefinition[] = [
@@ -522,18 +557,11 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CATALOG', 'SRV_CLIENTS', 'FIN_CONTACTS']
   },
   {
-      id: 'TECH_OPERATOR',
-      label: 'Técnico Operacional',
-      description: 'Gestão de ordens de serviço e execução técnica.',
-      requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'SRV_CATALOG', 'SRV_CLIENTS']
-  },
-  {
-      id: 'ODONTO_DOC',
-      label: 'Dentista / Clínico',
-      description: 'Acesso total ao prontuário, agenda e procedimentos.',
-      requiredModule: 'odonto',
-      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES']
+      id: 'OPTICAL_MANAGER',
+      label: 'Gestor de Ótica',
+      description: 'Gestão de receitas, vendas guiadas e laboratório.',
+      requiredModule: 'optical',
+      defaultPermissions: ['FIN_DASHBOARD', 'OPTICAL_RX', 'OPTICAL_SALES', 'OPTICAL_LAB', 'SRV_CATALOG', 'FIN_CONTACTS']
   }
 ];
 
