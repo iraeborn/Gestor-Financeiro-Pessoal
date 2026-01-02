@@ -82,8 +82,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { if (!publicToken) checkAuth(); }, []);
-
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -101,6 +99,37 @@ const App: React.FC = () => {
     }
     setAuthChecked(true);
   };
+
+  useEffect(() => { if (!publicToken) checkAuth(); }, []);
+
+  // Socket setup para atualizações em tempo real
+  useEffect(() => {
+    if (currentUser && !publicToken) {
+        const socket = io({ transports: ['websocket', 'polling'] }) as any;
+        socketRef.current = socket;
+        
+        const familyId = currentUser.familyId || (currentUser as any).family_id;
+        socket.on('connect', () => {
+            socket.emit('join_family', familyId);
+        });
+
+        socket.on('DATA_UPDATED', async (payload: any) => {
+            // Se for alteração de configurações ou permissões, atualiza o usuário para refletir no menu
+            if (['settings', 'membership', 'user'].includes(payload.entity)) {
+                try {
+                    const updatedUser = await refreshUser();
+                    setCurrentUser(updatedUser);
+                    showAlert("Configurações de acesso atualizadas pelo administrador.", "info");
+                } catch (e) { console.error("Erro ao atualizar dados do usuário via socket", e); }
+            } else {
+                // Atualiza os dados da tela (transações, etc)
+                loadData(true);
+            }
+        });
+
+        return () => { socket.disconnect(); };
+    }
+  }, [currentUser?.id, currentUser?.familyId]);
 
   const renderContent = () => {
     const handleSaveTransaction = async (t: Transaction | Omit<Transaction, 'id'>) => {

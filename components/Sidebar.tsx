@@ -27,7 +27,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isMobileShowText, setIsMobileShowText] = useState(false);
 
   // No mobile, o comportamento é um pouco diferente: 
   // starts collapsed, can expand via toggle.
@@ -47,6 +46,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const currentWorkspace = workspaces.find(w => w.id === familyId);
   const isAdmin = currentUser.id === familyId || currentWorkspace?.role === 'ADMIN'; 
   
+  // Permissões do usuário logado no contexto atual
+  const userPermissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
+  
   const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
   const activeModules = workspaceSettings.activeModules || {};
 
@@ -55,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     window.location.reload();
   };
 
-  const menuItems = [
+  const menuSections = [
     { 
       section: 'Financeiro', 
       items: [
@@ -64,28 +66,29 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_CALENDAR', label: 'Agenda Fin', icon: Calendar },
         { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
+        { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
+        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: Activity },
       ]
     },
-    ...(activeModules.services ? [{ 
+    { 
       section: 'Vendas e OS', 
+      enabled: !!activeModules.services,
       items: [
         { id: 'SRV_OS', label: activeModules.optical ? 'Laboratório' : 'Ordens de Serviço', icon: Wrench },
         { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
         { id: 'SRV_CATALOG', label: 'Estoque', icon: Package },
+        { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
       ]
-    }] : []),
-    ...((activeModules.optical || activeModules.odonto) ? [{
-      section: 'Profissional',
+    },
+    {
+      section: 'Especialidade',
+      enabled: !!(activeModules.optical || activeModules.odonto),
       items: [
-        ...(activeModules.optical ? [
-          { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye },
-        ] : []),
-        ...(activeModules.odonto ? [
-          { id: 'ODONTO_AGENDA', label: 'Agenda Clínica', icon: Calendar },
-          { id: 'ODONTO_PATIENTS', label: 'Prontuários', icon: SmilePlus },
-        ] : [])
+        { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye, enabled: !!activeModules.optical },
+        { id: 'ODONTO_AGENDA', label: 'Agenda Clínica', icon: Calendar, enabled: !!activeModules.odonto },
+        { id: 'ODONTO_PATIENTS', label: 'Prontuários', icon: SmilePlus, enabled: !!activeModules.odonto },
       ]
-    }] : []),
+    },
     { 
       section: 'Ajustes', 
       items: [
@@ -94,6 +97,29 @@ const Sidebar: React.FC<SidebarProps> = ({
       ]
     }
   ];
+
+  // Filtra as seções e os itens baseando-se em:
+  // 1. Se o módulo está ativo para o Workspace
+  // 2. Se o usuário tem permissão para aquela ViewMode (ou se é ADMIN)
+  const filteredMenuItems = menuSections
+    .filter(section => section.enabled === undefined || section.enabled)
+    .map(section => {
+        const visibleItems = section.items.filter(item => {
+            // Fix: cast item to any to allow checking optional 'enabled' property which is present on some items
+            // Se o item tem sua própria flag de habilitado (ex: RX só em Ótica dentro de Especialidade)
+            if ((item as any).enabled !== undefined && !(item as any).enabled) return false;
+            
+            // Fix: ensure proper return for admin role check
+            // Se for Admin do workspace, vê tudo o que o módulo permite
+            if (isAdmin) return true;
+
+            // Se for membro, checa se a permissão está na lista
+            return userPermissions.includes(item.id);
+        });
+
+        return { ...section, items: visibleItems };
+    })
+    .filter(section => section.items.length > 0);
 
   const handleToggle = () => {
       setIsCollapsed(!isCollapsed);
@@ -120,7 +146,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
             
-            {/* Ícone de Notificação Mantido Fora do Check de isCollapsed para estar sempre acessível */}
             <button 
                 onClick={onOpenNotifications} 
                 className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
@@ -135,35 +160,33 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
         </div>
 
-        {/* Menu Items */}
+        {/* Menu Items Filtrados */}
         <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-none">
-            {menuItems.map((section, idx) => (
-                section.items.length > 0 && (
-                    <div key={idx}>
-                        {!isCollapsed ? (
-                            <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 animate-fade-in truncate">{section.section}</p>
-                        ) : (
-                            <div className="h-px bg-gray-100 mx-2 mb-4"></div>
-                        )}
-                        <div className="space-y-1">
-                            {section.items.map((item: any) => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => onChangeView(item.id as ViewMode)}
-                                    title={isCollapsed ? item.label : ''}
-                                    className={`w-full flex items-center rounded-xl text-sm font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'px-4 py-2.5 gap-3'} ${currentView === item.id ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
-                                >
-                                    <item.icon className={`shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'}`} />
-                                    {!isCollapsed && <span className="truncate animate-fade-in">{item.label}</span>}
-                                </button>
-                            ))}
-                        </div>
+            {filteredMenuItems.map((section, idx) => (
+                <div key={idx}>
+                    {!isCollapsed ? (
+                        <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 animate-fade-in truncate">{section.section}</p>
+                    ) : (
+                        <div className="h-px bg-gray-100 mx-2 mb-4"></div>
+                    )}
+                    <div className="space-y-1">
+                        {section.items.map((item: any) => (
+                            <button
+                                key={item.id}
+                                onClick={() => onChangeView(item.id as ViewMode)}
+                                title={isCollapsed ? item.label : ''}
+                                className={`w-full flex items-center rounded-xl text-sm font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'px-4 py-2.5 gap-3'} ${currentView === item.id ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                            >
+                                <item.icon className={`shrink-0 ${isCollapsed ? 'w-6 h-6' : 'w-5 h-5'} ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'}`} />
+                                {!isCollapsed && <span className="truncate animate-fade-in">{item.label}</span>}
+                            </button>
+                        ))}
                     </div>
-                )
+                </div>
             ))}
         </div>
 
-        {/* User / Workspace Area */}
+        {/* User Area */}
         <div className={`p-4 border-t border-gray-100 bg-gray-50/50 transition-all ${isCollapsed ? 'flex justify-center' : ''}`}>
              <button 
                 onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)} 
