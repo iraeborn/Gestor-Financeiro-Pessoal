@@ -114,7 +114,16 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
+        return <Dashboard 
+          state={data} 
+          settings={effectiveSettings} 
+          currentUser={currentUser || undefined}
+          onAddTransaction={handleSaveTransaction} 
+          onDeleteTransaction={handleDeleteTransaction} 
+          onEditTransaction={handleSaveTransaction} 
+          onUpdateStatus={handleSaveTransaction} 
+          onChangeView={setCurrentView} 
+        />;
       
       case 'FIN_TRANSACTIONS':
         return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser?.entityType} onDelete={handleDeleteTransaction} onEdit={handleSaveTransaction} onToggleStatus={handleSaveTransaction} onAdd={handleSaveTransaction} />;

@@ -6,7 +6,7 @@ import {
     Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, 
     OSPriority, KanbanItem, KanbanColumnConfig, Member, AppSettings, OpticalRx 
 } from '../types';
-// Fix: Added missing 'Glasses' icon import
+// Added Glasses icon to imports
 import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
@@ -435,7 +435,9 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
 
         const filtered = rawItems.filter(i => {
+            // Se estamos no contexto de Ótica, mostrar apenas itens com tag optical
             if (isOpticalContext && i.moduleTag !== 'optical') return false;
+            // Se estamos no contexto genérico, omitir itens marcados como Ótica para evitar confusão se o usuário quiser separar
             if (!isOpticalContext && i.moduleTag === 'optical' && (currentView === 'SRV_SALES' || currentView === 'SRV_OS')) return false;
 
             const text = (i.title || i.description || i.name || i.code || i.brand || i.number || '').toLowerCase();

@@ -96,21 +96,18 @@ export interface OpticalRx {
   professionalName?: string;
   rxDate: string;
   expirationDate?: string;
-  // OD
   sphereOdLonge?: number;
   cylOdLonge?: number;
   axisOdLonge?: number;
   sphereOdPerto?: number;
   cylOdPerto?: number;
   axisOdPerto?: number;
-  // OE
   sphereOeLonge?: number;
   cylOeLonge?: number;
   axisOeLonge?: number;
   sphereOePerto?: number;
   cylOePerto?: number;
   axisOePerto?: number;
-  // Geral
   addition?: number;
   dnpOd?: number;
   dnpOe?: number;
@@ -387,7 +384,7 @@ export interface ServiceOrder {
   assigneeId?: string;
   assigneeName?: string;
   createdAt?: string;
-  rxId?: string; // Vínculo com Receita Ótica
+  rxId?: string;
   moduleTag?: string;
 }
 
@@ -409,7 +406,7 @@ export interface CommercialOrder {
   assigneeId?: string;
   assigneeName?: string;
   createdAt?: string;
-  rxId?: string; // Vínculo com Receita Ótica
+  rxId?: string;
   moduleTag?: string;
 }
 
@@ -562,6 +559,13 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       description: 'Gestão de receitas, vendas guiadas e laboratório.',
       requiredModule: 'optical',
       defaultPermissions: ['FIN_DASHBOARD', 'OPTICAL_RX', 'OPTICAL_SALES', 'OPTICAL_LAB', 'SRV_CATALOG', 'FIN_CONTACTS']
+  },
+  {
+      id: 'ODONTO_MANAGER',
+      label: 'Gestor de Odontologia',
+      description: 'Gestão de prontuários, agenda clínica e tratamentos.',
+      requiredModule: 'odonto',
+      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'SRV_CATALOG', 'FIN_CONTACTS']
   }
 ];
 

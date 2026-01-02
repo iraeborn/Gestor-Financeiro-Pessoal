@@ -1,14 +1,13 @@
 
 import React, { useState } from 'react';
-import { ViewMode, User, EntityType, AppSettings } from '../types';
+import { ViewMode, User, AppSettings } from '../types';
 import { 
-  LayoutDashboard, List, Calendar, CreditCard, PieChart, 
-  Tag, Users, BrainCircuit, Settings, LogOut, Briefcase, 
-  ShieldCheck, ScrollText, SmilePlus, ShoppingBag, Wrench, 
-  FileText, FileSignature, UserCog, Check, Building, Package, Bell,
-  Sparkles, Glasses, Eye, Monitor
+  LayoutDashboard, List, Calendar, CreditCard, Users, 
+  Settings, LogOut, Briefcase, ShieldCheck, SmilePlus, 
+  ShoppingBag, Wrench, FileText, UserCog, Package, Bell, 
+  Glasses, Eye, Activity
 } from 'lucide-react';
-import { logout, switchContext } from '../services/storageService';
+import { logout } from '../services/storageService';
 import ProfileModal from './ProfileModal';
 
 interface SidebarProps {
@@ -23,7 +22,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ 
     currentView, onChangeView, currentUser, 
-    onOpenCollab, onOpenNotifications, notificationCount = 0, onUserUpdate
+    onOpenNotifications, notificationCount = 0, onUserUpdate
 }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -46,42 +45,40 @@ const Sidebar: React.FC<SidebarProps> = ({
       section: 'Financeiro', 
       items: [
         { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
-        { id: 'FIN_TRANSACTIONS', label: 'Lançamentos', icon: List },
+        { id: 'FIN_TRANSACTIONS', label: 'Extrato & Fluxo', icon: List },
         { id: 'FIN_CALENDAR', label: 'Calendário', icon: Calendar },
-        { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
+        { id: 'FIN_ACCOUNTS', label: 'Minhas Contas', icon: Briefcase }, 
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
         { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
-        { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
       ]
     },
-    ...(activeModules.optical ? [{
-      section: 'Ótica',
-      items: [
-        { id: 'OPTICAL_RX', label: 'Receitas (RX)', icon: Eye },
-        { id: 'OPTICAL_SALES', label: 'Venda de Óculos', icon: Glasses },
-        { id: 'OPTICAL_LAB', label: 'Lab (Montagem)', icon: Monitor },
-      ]
-    }] : []),
+    // Módulo Complementar Principal de Faturamento e Operações
     ...(activeModules.services ? [{ 
-      section: 'Serviços & Vendas', 
+      section: 'Operações & Vendas', 
       items: [
-        { id: 'SRV_OS', label: 'Ordens de Serviço', icon: Wrench },
-        { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
-        { id: 'SRV_CATALOG', label: 'Catálogo', icon: Package },
-        { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
+        { id: 'SRV_OS', label: activeModules.optical ? 'Lab (Montagens)' : 'Ordens de Serviço', icon: Wrench },
+        { id: 'SRV_SALES', label: activeModules.optical ? 'Venda de Óculos' : 'Vendas & Orçamentos', icon: ShoppingBag },
+        { id: 'SRV_CATALOG', label: 'Catálogo / Estoque', icon: Package },
+        { id: 'SRV_CLIENTS', label: 'Gestão de Clientes', icon: Users },
       ]
     }] : []),
-    ...(activeModules.odonto ? [{ 
-      section: 'Odontologia', 
+    // Seção de Especialidades Profissionais (Itens Únicos/Clínicos)
+    ...((activeModules.optical || activeModules.odonto) ? [{
+      section: 'Especialidades',
       items: [
-        { id: 'ODONTO_AGENDA', label: 'Agenda', icon: Calendar },
-        { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: SmilePlus },
+        ...(activeModules.optical ? [
+          { id: 'OPTICAL_RX', label: 'Receitas (RX)', icon: Eye },
+        ] : []),
+        ...(activeModules.odonto ? [
+          { id: 'ODONTO_AGENDA', label: 'Agenda Clínica', icon: Calendar },
+          { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: SmilePlus },
+        ] : [])
       ]
     }] : []),
     { 
       section: 'Sistema', 
       items: [
-        { id: 'SYS_ACCESS', label: 'Equipe', icon: ShieldCheck },
+        { id: 'SYS_ACCESS', label: 'Equipe & Acessos', icon: ShieldCheck },
         { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
       ]
     }
@@ -104,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {menuItems.map((section, idx) => (
                 section.items.length > 0 && (
                     <div key={idx}>
-                        <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{section.section}</p>
+                        <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">{section.section}</p>
                         <div className="space-y-1">
                             {section.items.map((item: any) => (
                                 <button
