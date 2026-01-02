@@ -28,8 +28,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // No mobile, o comportamento é um pouco diferente: 
-  // starts collapsed, can expand via toggle.
+  // No mobile, começa contraído mas permite expansão total
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -46,9 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const currentWorkspace = workspaces.find(w => w.id === familyId);
   const isAdmin = currentUser.id === familyId || currentWorkspace?.role === 'ADMIN'; 
   
-  // Permissões do usuário logado no contexto atual
   const userPermissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
-  
   const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
   const activeModules = workspaceSettings.activeModules || {};
 
@@ -63,21 +60,16 @@ const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'FIN_DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'FIN_TRANSACTIONS', label: 'Extrato', icon: List },
-        { id: 'FIN_CALENDAR', label: 'Agenda Fin', icon: Calendar },
         { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
-        { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
-        { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
-        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: Activity },
       ]
     },
     { 
-      section: 'Vendas e OS', 
+      section: 'Operacional', 
       enabled: !!activeModules.services,
       items: [
         { id: 'SRV_OS', label: activeModules.optical ? 'Laboratório' : 'Ordens de Serviço', icon: Wrench },
-        { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
+        { id: 'SRV_SALES', label: activeModules.optical ? 'Vendas Óculos' : 'Vendas', icon: ShoppingBag },
         { id: 'SRV_CATALOG', label: 'Estoque', icon: Package },
-        { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
       ]
     },
     {
@@ -90,59 +82,46 @@ const Sidebar: React.FC<SidebarProps> = ({
       ]
     },
     { 
-      section: 'Ajustes', 
+      section: 'Configuração', 
       items: [
         { id: 'SYS_ACCESS', label: 'Equipe', icon: ShieldCheck },
-        { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
+        { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
       ]
     }
   ];
 
-  // Filtra as seções e os itens baseando-se em:
-  // 1. Se o módulo está ativo para o Workspace
-  // 2. Se o usuário tem permissão para aquela ViewMode (ou se é ADMIN)
   const filteredMenuItems = menuSections
     .filter(section => section.enabled === undefined || section.enabled)
     .map(section => {
         const visibleItems = section.items.filter(item => {
-            // Fix: cast item to any to allow checking optional 'enabled' property which is present on some items
-            // Se o item tem sua própria flag de habilitado (ex: RX só em Ótica dentro de Especialidade)
             if ((item as any).enabled !== undefined && !(item as any).enabled) return false;
-            
-            // Fix: ensure proper return for admin role check
-            // Se for Admin do workspace, vê tudo o que o módulo permite
             if (isAdmin) return true;
-
-            // Se for membro, checa se a permissão está na lista
             return userPermissions.includes(item.id);
         });
-
         return { ...section, items: visibleItems };
     })
     .filter(section => section.items.length > 0);
 
-  const handleToggle = () => {
-      setIsCollapsed(!isCollapsed);
-  };
+  const handleToggle = () => setIsCollapsed(!isCollapsed);
 
   return (
     <div className={`flex flex-col h-full bg-white border-r border-gray-100 shadow-sm overflow-hidden transition-all duration-300 ease-in-out relative z-[100] ${isCollapsed ? 'w-20' : 'w-72'}`}>
         
-        {/* Toggle Button - Desktop & Mobile */}
+        {/* Toggle - Desktop & Smartphone */}
         <button 
             onClick={handleToggle}
-            className="absolute top-16 -right-3 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 shadow-sm z-[110] transition-transform"
+            className="absolute top-14 -right-3 w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 shadow-md z-[110] transition-transform"
             style={{ transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)' }}
         >
             <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* Header / Logo + Notificação (Sempre visível) */}
+        {/* Header - Notificação Mantida Visível */}
         <div className={`p-6 flex flex-col items-center gap-4 flex-shrink-0 transition-all border-b border-gray-50/50 mb-2 ${isCollapsed ? 'justify-center' : ''}`}>
             <div className={`flex items-center w-full transition-all ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
                 <div className="flex items-center gap-3 shrink-0">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg shrink-0">F</div>
-                    {!isCollapsed && <span className="font-bold text-xl text-gray-800 tracking-tight animate-fade-in truncate">FinManager</span>}
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shrink-0">F</div>
+                    {!isCollapsed && <span className="font-black text-lg text-gray-800 tracking-tighter animate-fade-in truncate">FinManager</span>}
                 </div>
             </div>
             
@@ -160,7 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
         </div>
 
-        {/* Menu Items Filtrados */}
+        {/* Menu Items */}
         <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-none">
             {filteredMenuItems.map((section, idx) => (
                 <div key={idx}>

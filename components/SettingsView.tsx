@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-// Added Search icon to imports from lucide-react
 import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
@@ -28,25 +27,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const { showAlert } = useAlert();
   const settings = user.settings || { includeCreditCardsInTotal: true, activeModules: {} };
 
-  const [waConfig, setWaConfig] = useState(settings.whatsapp || {
-      enabled: false,
-      phoneNumber: '',
-      notifyDueToday: true,
-      notifyDueTomorrow: true,
-      notifyOverdue: false
-  });
-  const [testingWa, setTestingWa] = useState(false);
-
-  const [emailConfig, setEmailConfig] = useState(settings.email || {
-      enabled: false,
-      email: user.email,
-      notifyDueToday: true,
-      notifyDueTomorrow: true,
-      notifyOverdue: true,
-      notifyWeeklyReport: true
-  });
-  const [testingEmail, setTestingEmail] = useState(false);
-
   const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { 
       tradeName: '', legalName: '', cnpj: '', 
       taxRegime: TaxRegime.SIMPLES, cnae: '', secondaryCnaes: '', 
@@ -55,36 +35,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   });
   const [loadingCnpj, setLoadingCnpj] = useState(false);
 
-  const handleToggleCreditCard = async () => {
-    const newSettings = { ...settings, includeCreditCardsInTotal: !settings.includeCreditCardsInTotal };
-    try {
-        await updateSettings(newSettings);
-        onUpdateSettings(newSettings);
-    } catch (e) {
-        showAlert("Erro ao salvar configuração.", "error");
-    }
-  };
-
   const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence' | 'optical') => {
       const currentActive = settings.activeModules?.[moduleKey] || false;
       
-      // Lógica de Exclusividade Mútua solicitada pelo usuário
+      // Lógica de Exclusividade Mútua solicitada: Ótica vs Odonto
       let nextActiveModules = { ...settings.activeModules, [moduleKey]: !currentActive };
       
-      if (!currentActive) { // Ativando um módulo
+      if (!currentActive) { // Se estiver ativando
           if (moduleKey === 'odonto') {
               nextActiveModules.optical = false;
-              if (settings.activeModules?.optical) showAlert("Módulo Ótica desativado automaticamente (conflito de fluxo).", "warning");
+              if (settings.activeModules?.optical) showAlert("Módulo Ótica desativado para evitar conflito de fluxo.", "warning");
           } else if (moduleKey === 'optical') {
               nextActiveModules.odonto = false;
-              if (settings.activeModules?.odonto) showAlert("Módulo Odonto desativado automaticamente (conflito de fluxo).", "warning");
+              if (settings.activeModules?.odonto) showAlert("Módulo Odonto desativado para priorizar fluxo ótico.", "warning");
           }
       }
 
-      const newSettings = { 
-          ...settings, 
-          activeModules: nextActiveModules 
-      };
+      const newSettings = { ...settings, activeModules: nextActiveModules };
 
       try {
           await updateSettings(newSettings);
@@ -93,17 +60,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           if (!currentActive) showAlert(`Módulo ${label} ativado!`, "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
-      }
-  };
-
-  const handleSaveWhatsApp = async () => {
-      const newSettings = { ...settings, whatsapp: waConfig };
-      try {
-          await updateSettings(newSettings);
-          onUpdateSettings(newSettings);
-          showAlert("Configurações WhatsApp salvas!", "success");
-      } catch (e) {
-          showAlert("Erro ao salvar.", "error");
       }
   };
 
@@ -137,20 +93,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl pb-10">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Configurações do Sistema</h1>
-        <p className="text-gray-500">Personalize seu ambiente de trabalho e notificações.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Configurações de Negócio</h1>
+        <p className="text-gray-500">Personalize os módulos e a identidade da sua ótica ou clínica.</p>
       </div>
 
       <div className="space-y-6">
-        {/* Gestão de Módulos */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-indigo-600">
             <div className="p-6 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                     <Plus className="w-5 h-5 text-indigo-600" />
-                    Módulos e Especialidades
+                    Especialidades Ativas
                 </h2>
                 <div className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Regra de Exclusividade Ativa
+                    <AlertTriangle className="w-3 h-3" /> Regra de Fluxo Exclusivo
                 </div>
             </div>
             <div className="p-6 space-y-6">
@@ -163,8 +118,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
                         </div>
-                        <h4 className="font-bold text-gray-800">Especialidade: Ótica</h4>
-                        <p className="text-xs text-gray-500 mt-1">Gestão de Receitas (RX) e Laboratório.</p>
+                        <h4 className="font-bold text-gray-800">Módulo Ótica</h4>
+                        <p className="text-xs text-gray-500 mt-1">Vendas de armações, lentes e laboratório.</p>
                     </div>
 
                     <div className={`p-5 rounded-2xl border-2 transition-all ${settings.activeModules?.odonto ? 'border-sky-200 bg-sky-50/50' : 'border-gray-100'}`}>
@@ -175,27 +130,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
                             </label>
                         </div>
-                        <h4 className="font-bold text-gray-800">Especialidade: Odonto</h4>
-                        <p className="text-xs text-gray-500 mt-1">Odontograma e Prontuário Clínico.</p>
+                        <h4 className="font-bold text-gray-800">Módulo Odonto</h4>
+                        <p className="text-xs text-gray-500 mt-1">Prontuário clínico e odontograma.</p>
                     </div>
                 </div>
 
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
                     <Info className="w-5 h-5 text-blue-600 mt-0.5" />
                     <p className="text-xs text-blue-800 leading-relaxed">
-                        <strong>Nota:</strong> Para garantir a integridade dos dados financeiros, os módulos profissionais são mutuamente exclusivos. Ativar um desativará o outro automaticamente.
+                        <strong>Integração de Dados:</strong> Ao ativar o módulo de Ótica, as Ordens de Serviço (OS) e Receitas (RX) serão priorizadas no seu Dashboard e menu.
                     </p>
                 </div>
             </div>
         </div>
 
-        {/* Dados Corporativos */}
         {isPJ && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-slate-800">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-gray-50 bg-gray-50/50">
                     <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                         <Briefcase className="w-5 h-5 text-slate-800" />
-                        Identidade Visual e PJ
+                        Dados da Empresa
                     </h2>
                 </div>
                 <div className="p-6">
@@ -204,20 +158,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             <label className="block text-xs font-bold text-gray-500 mb-1">CNPJ</label>
                             <div className="flex gap-2">
                                 <input type="text" value={companyForm.cnpj} onChange={e => setCompanyForm({...companyForm, cnpj: e.target.value})} className="flex-1 rounded-lg border border-gray-200 p-2 text-sm"/>
-                                {/* Fixed missing Search icon on line 206 */}
                                 <button type="button" onClick={handleConsultCnpj} className="bg-gray-100 text-gray-600 px-3 rounded-lg"><Search className="w-4 h-4"/></button>
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Razão Social</label>
-                            <input type="text" value={companyForm.legalName} onChange={e => setCompanyForm({...companyForm, legalName: e.target.value})} className="w-full rounded-lg border border-gray-200 p-2 text-sm"/>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Nome Fantasia</label>
-                            <input type="text" value={companyForm.tradeName} onChange={e => setCompanyForm({...companyForm, tradeName: e.target.value})} className="w-full rounded-lg border border-gray-200 p-2 text-sm"/>
-                        </div>
                         <div className="md:col-span-2 flex justify-end">
-                            <button type="submit" className="bg-slate-900 text-white px-6 rounded-xl text-sm font-bold py-3 hover:bg-black transition-colors">Salvar Dados da Empresa</button>
+                            <button type="submit" className="bg-slate-900 text-white px-6 rounded-xl text-sm font-bold py-3 hover:bg-black transition-colors">Atualizar Identidade</button>
                         </div>
                     </form>
                 </div>
