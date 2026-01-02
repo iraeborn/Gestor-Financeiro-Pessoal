@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { AppState, TransactionType, TransactionStatus } from "../types";
 
@@ -76,8 +75,9 @@ export const getDiagnosticByType = async (state: AppState, type: 'HEALTH' | 'RIS
   };
 
   try {
+    // Fix: Upgrade model to gemini-3-pro-preview for complex reasoning tasks as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompts[type] || prompts.SUMMARY,
     });
     return response.text || "Sem resposta da IA.";
@@ -97,8 +97,9 @@ export const analyzeFinances = async (state: AppState, userPrompt?: string): Pro
   const data = getSystemContext(state);
 
   try {
+    // Fix: Upgrade model to gemini-3-pro-preview for complex reasoning tasks as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: userPrompt ? `Contexto Financeiro: ${JSON.stringify(data.indicadores_chave)}\nPergunta: ${userPrompt}` : `Contexto: ${JSON.stringify(data.indicadores_chave)}\nDê uma diretriz estratégica para melhorar meu resultado este mês.`,
       config: {
         systemInstruction: "Você é o Gestor Senior de Finanças. Sua missão é garantir a liquidez e o lucro. Nunca ignore contas em atraso.",

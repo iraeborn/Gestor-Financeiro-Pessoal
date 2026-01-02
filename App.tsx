@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
@@ -48,6 +47,7 @@ const App: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const urlParams = new URLSearchParams(window.location.search);
   const publicToken = urlParams.get('orderToken');
+  const viewFromUrl = urlParams.get('view') as ViewMode;
 
   const [data, setData] = useState<AppState>({
     accounts: [], transactions: [], goals: [], contacts: [], categories: [],
@@ -57,11 +57,20 @@ const App: React.FC = () => {
     opticalRxs: []
   });
   const [loading, setLoading] = useState(false);
-  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
+  const [currentView, setCurrentView] = useState<ViewMode>(viewFromUrl || 'FIN_DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  // Sincroniza a View com a URL sem recarregar
+  useEffect(() => {
+    if (!publicToken) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', currentView);
+      window.history.pushState({}, '', url);
+    }
+  }, [currentView, publicToken]);
 
   const effectiveSettings = useMemo(() => {
     if (!currentUser) return undefined;
@@ -105,7 +114,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (currentUser && !publicToken) {
-        const socket = io({ transports: ['websocket', 'polling'] }) as any;
+        // Fix: Pass empty string as URI and cast options to any to resolve ambiguous overload resolution in socket.io-client
+        const socket = io({ transports: ['websocket', 'polling'] } as any) as any;
         socketRef.current = socket;
         
         const familyId = currentUser.familyId || (currentUser as any).family_id;

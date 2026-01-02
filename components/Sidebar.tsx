@@ -5,10 +5,11 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, Users, 
   Settings, LogOut, Briefcase, ShieldCheck, SmilePlus, 
   ShoppingBag, Wrench, FileText, UserCog, Package, Bell, 
-  Glasses, Eye, Activity, ChevronLeft, Menu, X
+  Glasses, Eye, Activity, ChevronLeft, Menu, X, Share2
 } from 'lucide-react';
 import { logout } from '../services/storageService';
 import ProfileModal from './ProfileModal';
+import { useAlert } from './AlertSystem';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -24,6 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     currentView, onChangeView, currentUser, 
     onOpenNotifications, notificationCount = 0, onUserUpdate
 }) => {
+  const { showAlert } = useAlert();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -52,6 +54,19 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleLogout = () => {
     logout();
     window.location.reload();
+  };
+
+  const handleShareCurrentView = () => {
+    const url = new URL(window.location.origin);
+    url.searchParams.set('view', currentView);
+    
+    navigator.clipboard.writeText(url.toString())
+      .then(() => {
+        showAlert("Link da página copiado! Envie para o suporte ou colega.", "success");
+      })
+      .catch(() => {
+        showAlert("Erro ao copiar link.", "error");
+      });
   };
 
   const menuSections = [
@@ -125,18 +140,28 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
             
-            <button 
-                onClick={onOpenNotifications} 
-                className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
-                title="Notificações"
-            >
-                <Bell className="w-5 h-5" />
-                {notificationCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">
-                        {notificationCount}
-                    </span>
-                )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                  onClick={onOpenNotifications} 
+                  className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
+                  title="Notificações"
+              >
+                  <Bell className="w-5 h-5" />
+                  {notificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">
+                          {notificationCount}
+                      </span>
+                  )}
+              </button>
+
+              <button 
+                  onClick={handleShareCurrentView} 
+                  className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shrink-0"
+                  title="Compartilhar Link desta Página"
+              >
+                  <Share2 className="w-5 h-5" />
+              </button>
+            </div>
         </div>
 
         {/* Menu Items */}
