@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, Calendar, CreditCard, Users, 
   Settings, LogOut, Briefcase, ShieldCheck, SmilePlus, 
   ShoppingBag, Wrench, FileText, UserCog, Package, Bell, 
-  Glasses, Eye, Activity, ChevronLeft, Menu
+  Glasses, Eye, Activity, ChevronLeft, Menu, X
 } from 'lucide-react';
 import { logout } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -27,15 +27,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMobileShowText, setIsMobileShowText] = useState(false);
 
-  // Detectar mobile para iniciar recolhido
+  // No mobile, o comportamento é um pouco diferente: 
+  // starts collapsed, can expand via toggle.
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
         setIsCollapsed(true);
       }
     };
-    handleResize(); // Check initial
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -57,37 +59,35 @@ const Sidebar: React.FC<SidebarProps> = ({
     { 
       section: 'Financeiro', 
       items: [
-        { id: 'FIN_DASHBOARD', label: 'Visão Geral', icon: LayoutDashboard },
-        { id: 'FIN_TRANSACTIONS', label: 'Extrato & Fluxo', icon: List },
-        { id: 'FIN_CALENDAR', label: 'Calendário', icon: Calendar },
-        { id: 'FIN_ACCOUNTS', label: 'Minhas Contas', icon: Briefcase }, 
+        { id: 'FIN_DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'FIN_TRANSACTIONS', label: 'Extrato', icon: List },
+        { id: 'FIN_CALENDAR', label: 'Agenda Fin', icon: Calendar },
+        { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
-        { id: 'FIN_REPORTS', label: 'Relatórios', icon: FileText },
       ]
     },
     ...(activeModules.services ? [{ 
-      section: 'Operações', 
+      section: 'Vendas e OS', 
       items: [
-        { id: 'SRV_OS', label: activeModules.optical ? 'Lab (Montagem)' : 'Ordens de Serviço', icon: Wrench },
-        { id: 'SRV_SALES', label: activeModules.optical ? 'Venda Ótica' : 'Vendas', icon: ShoppingBag },
+        { id: 'SRV_OS', label: activeModules.optical ? 'Laboratório' : 'Ordens de Serviço', icon: Wrench },
+        { id: 'SRV_SALES', label: 'Vendas', icon: ShoppingBag },
         { id: 'SRV_CATALOG', label: 'Estoque', icon: Package },
-        { id: 'SRV_CLIENTS', label: 'Clientes', icon: Users },
       ]
     }] : []),
     ...((activeModules.optical || activeModules.odonto) ? [{
-      section: 'Especialidade',
+      section: 'Profissional',
       items: [
         ...(activeModules.optical ? [
-          { id: 'OPTICAL_RX', label: 'Receitas (RX)', icon: Eye },
+          { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye },
         ] : []),
         ...(activeModules.odonto ? [
           { id: 'ODONTO_AGENDA', label: 'Agenda Clínica', icon: Calendar },
-          { id: 'ODONTO_PATIENTS', label: 'Pacientes', icon: SmilePlus },
+          { id: 'ODONTO_PATIENTS', label: 'Prontuários', icon: SmilePlus },
         ] : [])
       ]
     }] : []),
     { 
-      section: 'Sistema', 
+      section: 'Ajustes', 
       items: [
         { id: 'SYS_ACCESS', label: 'Equipe', icon: ShieldCheck },
         { id: 'SYS_SETTINGS', label: 'Configurações', icon: Settings },
@@ -95,30 +95,44 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   ];
 
+  const handleToggle = () => {
+      setIsCollapsed(!isCollapsed);
+  };
+
   return (
-    <div className={`flex flex-col h-full bg-white border-r border-gray-100 shadow-sm overflow-hidden transition-all duration-300 ease-in-out relative ${isCollapsed ? 'w-20' : 'w-72'}`}>
+    <div className={`flex flex-col h-full bg-white border-r border-gray-100 shadow-sm overflow-hidden transition-all duration-300 ease-in-out relative z-[100] ${isCollapsed ? 'w-20' : 'w-72'}`}>
         
-        {/* Toggle Button - Desktop Only (Mobile stays short by default or user can toggle) */}
+        {/* Toggle Button - Desktop & Mobile */}
         <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute top-16 -right-3 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 shadow-sm z-50 transition-transform hidden md:flex"
+            onClick={handleToggle}
+            className="absolute top-16 -right-3 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 shadow-sm z-[110] transition-transform"
             style={{ transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)' }}
         >
             <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* Header / Logo */}
-        <div className={`p-6 flex items-center flex-shrink-0 transition-all ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
-            <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg shrink-0">F</div>
-                {!isCollapsed && <span className="font-bold text-xl text-gray-800 tracking-tight animate-fade-in">FinManager</span>}
+        {/* Header / Logo + Notificação (Sempre visível) */}
+        <div className={`p-6 flex flex-col items-center gap-4 flex-shrink-0 transition-all border-b border-gray-50/50 mb-2 ${isCollapsed ? 'justify-center' : ''}`}>
+            <div className={`flex items-center w-full transition-all ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg shrink-0">F</div>
+                    {!isCollapsed && <span className="font-bold text-xl text-gray-800 tracking-tight animate-fade-in truncate">FinManager</span>}
+                </div>
             </div>
-            {!isCollapsed && (
-                <button onClick={onOpenNotifications} className="relative p-2 text-gray-400 hover:text-indigo-600 rounded-xl transition-all animate-fade-in">
-                    <Bell className="w-5 h-5" />
-                    {notificationCount > 0 && <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">{notificationCount}</span>}
-                </button>
-            )}
+            
+            {/* Ícone de Notificação Mantido Fora do Check de isCollapsed para estar sempre acessível */}
+            <button 
+                onClick={onOpenNotifications} 
+                className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
+                title="Notificações"
+            >
+                <Bell className="w-5 h-5" />
+                {notificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">
+                        {notificationCount}
+                    </span>
+                )}
+            </button>
         </div>
 
         {/* Menu Items */}
@@ -127,7 +141,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 section.items.length > 0 && (
                     <div key={idx}>
                         {!isCollapsed ? (
-                            <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 animate-fade-in">{section.section}</p>
+                            <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 animate-fade-in truncate">{section.section}</p>
                         ) : (
                             <div className="h-px bg-gray-100 mx-2 mb-4"></div>
                         )}
@@ -164,10 +178,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                           <p className="text-xs text-gray-500 truncate">{isAdmin ? 'Administrador' : 'Membro'}</p>
                       </div>
                   )}
-                  {!isCollapsed && <Settings className="w-4 h-4 text-gray-400 shrink-0" />}
              </button>
              {isWorkspaceDropdownOpen && (
-                 <div className={`absolute bottom-16 bg-white rounded-xl shadow-xl border border-gray-100 p-2 z-50 transition-all ${isCollapsed ? 'left-20 w-48' : 'left-4 right-4'}`}>
+                 <div className={`absolute bottom-16 bg-white rounded-xl shadow-xl border border-gray-100 p-2 z-[120] transition-all ${isCollapsed ? 'left-20 w-48' : 'left-4 right-4'}`}>
                      <button onClick={() => {setIsProfileModalOpen(true); setIsWorkspaceDropdownOpen(false);}} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 rounded-lg flex items-center gap-2 font-medium text-gray-700"><UserCog className="w-4 h-4" /> Perfil</button>
                      <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 font-medium"><LogOut className="w-4 h-4" /> Sair</button>
                  </div>
