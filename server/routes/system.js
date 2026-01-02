@@ -18,8 +18,6 @@ export default function(logAudit) {
         const { settings } = req.body;
         const userId = req.user.id;
         try {
-            // Salva as configurações no registro do usuário (Dono ou Membro)
-            // No nosso sistema, as configurações do Dono definem o comportamento do Workspace
             await pool.query(
                 'UPDATE users SET settings = $1 WHERE id = $2',
                 [JSON.stringify(settings), userId]
@@ -127,7 +125,8 @@ export default function(logAudit) {
     router.get('/members', authenticateToken, async (req, res) => {
         try {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
-            const familyId = userRes.rows[0]?.family_id;
+            if (!userRes.rows[0]) return res.status(404).json({ error: 'Contexto não encontrado.' });
+            const familyId = userRes.rows[0].family_id;
 
             const members = await pool.query(`
                 SELECT u.id, u.name, u.email, m.role, m.permissions, u.entity_type as "entityType"
@@ -158,7 +157,6 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const familyId = userRes.rows[0]?.family_id;
 
-            // Valida se quem está tentando editar é ADMIN do workspace
             const adminCheck = await pool.query(
                 'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', 
                 [userId, familyId]
@@ -197,7 +195,6 @@ export default function(logAudit) {
                 return res.status(403).json({ error: 'Apenas administradores podem remover membros.' });
             }
 
-            // Impede de remover a si próprio se for o único admin (opcional, mas recomendado)
             if (memberId === familyId) {
                 return res.status(400).json({ error: 'O proprietário do ambiente não pode ser removido.' });
             }
@@ -207,7 +204,6 @@ export default function(logAudit) {
                 [memberId, familyId]
             );
             
-            // Retorna o usuário removido para o contexto dele mesmo
             await pool.query('UPDATE users SET family_id = id WHERE id = $1', [memberId]);
 
             await logAudit(pool, userId, 'DELETE', 'membership', memberId, 'Membro removido do workspace');
@@ -221,17 +217,29 @@ export default function(logAudit) {
 
     router.post('/invites', authenticateToken, async (req, res) => {
         const { role } = req.body;
+        const userId = req.user.id;
         try {
-            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
-            const familyId = userRes.rows[0]?.family_id;
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            if (!userRes.rows[0]) return res.status(404).json({ error: 'Contexto de usuário inválido.' });
+            const familyId = userRes.rows[0].family_id;
 
-            const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // Código de 6 caracteres
+            // Validação de ADMIN necessária para gerar convite
+            const adminCheck = await pool.query(
+                'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', 
+                [userId, familyId]
+            );
+
+            if (!adminCheck.rows[0] || adminCheck.rows[0].role !== 'ADMIN') {
+                return res.status(403).json({ error: 'Apenas administradores podem gerar códigos de convite.' });
+            }
+
+            const code = crypto.randomBytes(3).toString('hex').toUpperCase(); 
             const expiresAt = new Date();
             expiresAt.setHours(expiresAt.getHours() + 24);
 
             await pool.query(
                 'INSERT INTO invites (code, family_id, created_by, expires_at, role_template) VALUES ($1, $2, $3, $4, $5)',
-                [code, familyId, req.user.id, expiresAt, role || 'MEMBER']
+                [code, familyId, userId, expiresAt, role || 'MEMBER']
             );
 
             res.json({ code });
@@ -255,7 +263,6 @@ export default function(logAudit) {
             const invite = inviteRes.rows[0];
             const userId = req.user.id;
 
-            // Cria o vínculo no banco
             await pool.query(
                 `INSERT INTO memberships (user_id, family_id, role, permissions) 
                  VALUES ($1, $2, $3, $4)
@@ -263,7 +270,6 @@ export default function(logAudit) {
                 [userId, invite.family_id, invite.role_template || 'MEMBER', '[]']
             );
 
-            // Troca o contexto ativo do usuário
             await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
 
             const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);

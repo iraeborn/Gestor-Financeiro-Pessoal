@@ -76,7 +76,13 @@ export default function(logAudit) {
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = crypto.randomUUID();
         
-        await client.query(`INSERT INTO users (id, name, email, password_hash, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, $5, $6, 'TRIALING')`, [id, name, email, hashedPassword, entityType || 'PF', plan || 'MONTHLY']);
+        // Garante que o role do dono seja ADMIN na tabela users também
+        await client.query(
+            `INSERT INTO users (id, name, email, password_hash, family_id, entity_type, plan, status, role) 
+             VALUES ($1, $2, $3, $4, $1, $5, $6, 'TRIALING', 'ADMIN')`, 
+            [id, name, email, hashedPassword, entityType || 'PF', plan || 'MONTHLY']
+        );
+        
         await client.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
         
         if (entityType === 'PJ' && pjPayload) {
@@ -88,6 +94,9 @@ export default function(logAudit) {
         }
 
         await client.query('COMMIT');
+        
+        if (logAudit) await logAudit(pool, id, 'CREATE', 'user', id, `Nova conta criada via e-mail: ${name}`);
+
         const userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0];
         const workspaces = await getUserWorkspaces(id);
         const mappedUser = mapUser(userRow);
@@ -122,7 +131,6 @@ export default function(logAudit) {
         let userRow = (await client.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
         
         if (!userRow) {
-           // Novo usuário - Criação de conta
            await client.query('BEGIN');
            const id = crypto.randomUUID();
            const finalType = entityType || 'PF';
@@ -131,7 +139,11 @@ export default function(logAudit) {
                throw new Error("Dados da empresa (CNPJ) são obrigatórios para conta jurídica.");
            }
 
-           await client.query(`INSERT INTO users (id, name, email, google_id, family_id, entity_type, plan, status) VALUES ($1, $2, $3, $4, $1, $5, 'TRIAL', 'TRIALING')`, [id, name, email, googleId, finalType]);
+           await client.query(
+               `INSERT INTO users (id, name, email, google_id, family_id, entity_type, plan, status, role) 
+                VALUES ($1, $2, $3, $4, $1, $5, 'TRIAL', 'TRIALING', 'ADMIN')`, 
+               [id, name, email, googleId, finalType]
+            );
            await client.query('INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', [id, 'ADMIN', '[]']);
            
            if (finalType === 'PJ') {
