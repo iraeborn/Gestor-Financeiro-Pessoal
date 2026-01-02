@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { ViewMode, HelpStep } from '../types';
 import { X, ChevronRight, ChevronLeft, CheckCircle2, PlayCircle, Info, Glasses, ShoppingBag, Wrench, PackageCheck, UserCheck } from 'lucide-react';
 
@@ -129,16 +129,56 @@ const HelpOverlay: React.FC<{ currentStep: HelpStep, isActive: boolean }> = ({ c
     const { nextStep, prevStep, closeGuide, currentStep: idx } = useHelp();
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
+    // Monitora o redimensionamento da tela para recalcular posição
+    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+    useEffect(() => {
+        const handleResize = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     useEffect(() => {
         if (isActive) {
             const timer = setTimeout(() => {
                 const el = document.getElementById(currentStep.targetId);
                 if (el) setTargetRect(el.getBoundingClientRect());
                 else setTargetRect(null);
-            }, 500); // Espera a view carregar
+            }, 600); // Delay leve para garantir que a transição de view terminou
             return () => clearTimeout(timer);
         }
-    }, [isActive, currentStep]);
+    }, [isActive, currentStep, windowWidth]);
+
+    const bubbleStyles = useMemo(() => {
+        if (!targetRect) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+
+        const bubbleWidth = 320; // Largura fixa (w-80)
+        const margin = 20;
+        
+        // Lógica para evitar sair pela ESQUERDA
+        let left = targetRect.left;
+        if (left < margin) {
+            left = margin;
+        }
+
+        // Lógica para evitar sair pela DIREITA
+        if (left + bubbleWidth > window.innerWidth - margin) {
+            left = window.innerWidth - bubbleWidth - margin;
+        }
+
+        // Ajuste básico de altura (sempre abaixo do elemento por padrão, ou centralizado se o elemento sumir)
+        let top = targetRect.bottom + 20;
+        
+        // Se o elemento estiver muito embaixo, joga o balão para cima
+        if (top + 200 > window.innerHeight) {
+            top = targetRect.top - 220;
+        }
+
+        return {
+            top,
+            left,
+            transform: 'none'
+        };
+    }, [targetRect, windowWidth]);
 
     if (!isActive) return null;
 
@@ -158,14 +198,10 @@ const HelpOverlay: React.FC<{ currentStep: HelpStep, isActive: boolean }> = ({ c
                 />
             )}
 
-            {/* Help Bubble */}
+            {/* Help Bubble com lógica de Viewport */}
             <div 
                 className="absolute bg-white rounded-2xl shadow-2xl p-6 w-80 pointer-events-auto border border-indigo-100 animate-scale-up"
-                style={{
-                    top: targetRect ? targetRect.bottom + 20 : '50%',
-                    left: targetRect ? targetRect.left : '50%',
-                    transform: targetRect ? 'none' : 'translate(-50%, -50%)'
-                }}
+                style={bubbleStyles}
             >
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-2">
