@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, Users, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -72,7 +72,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence') => {
+  const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence' | 'optical') => {
       const currentActive = settings.activeModules?.[moduleKey] || false;
       const newSettings = { 
           ...settings, 
@@ -81,7 +81,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          let label = moduleKey === 'odonto' ? 'Odonto' : moduleKey === 'services' ? 'Serviços' : 'Inteligência';
+          let label = moduleKey === 'odonto' ? 'Odonto' : moduleKey === 'services' ? 'Serviços' : moduleKey === 'intelligence' ? 'Inteligência' : 'Ótica';
           if (!currentActive) showAlert(`Módulo ${label} ativado!`, "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
@@ -146,7 +146,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           showAlert("Informe um email.", "warning");
           return;
       }
-      setTestingEmail(true);
+      setTestingEmail(false);
       try {
           const token = localStorage.getItem('token');
           const res = await fetch('/api/test-email', {
@@ -302,6 +302,29 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.intelligence ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                         {settings.activeModules?.intelligence ? <><CheckCircle className="w-4 h-4" /> Ativado</> : "Ativar"}
+                    </button>
+                </div>
+
+                <div className="border-t border-gray-100"></div>
+
+                {/* Módulo Ótica */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                            <Glasses className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-gray-900">Módulo Ótica (Receitas e Laboratório)</h3>
+                            <p className="text-sm text-gray-500 max-w-md mt-1">
+                                Gestão clínica de receitas óticas, venda guiada de óculos e controle de laboratório (OS).
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => handleToggleModule('optical')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 ${settings.activeModules?.optical ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        {settings.activeModules?.optical ? <><CheckCircle className="w-4 h-4" /> Ativado</> : "Ativar"}
                     </button>
                 </div>
 
@@ -574,14 +597,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Cidade / UF</label>
                                 <div className="flex gap-2">
                                     <input 
-                                        type="text"
+                                        type="text" 
                                         value={companyForm.city}
                                         onChange={e => setCompanyForm({...companyForm, city: e.target.value})}
                                         placeholder="Cidade"
                                         className="flex-1 rounded-lg border border-gray-200 p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                     />
                                     <input 
-                                        type="text"
+                                        type="text" 
                                         value={companyForm.state}
                                         onChange={e => setCompanyForm({...companyForm, state: e.target.value.toUpperCase()})}
                                         placeholder="UF"
