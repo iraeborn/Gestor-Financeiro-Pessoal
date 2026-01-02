@@ -103,10 +103,40 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    // Shared common handlers
+    const handleSaveTransaction = async (t: Transaction | Omit<Transaction, 'id'>) => {
+        await api.saveTransaction(t as Transaction);
+        await loadData(true);
+    };
+    const handleDeleteTransaction = async (id: string) => {
+        await api.deleteTransaction(id);
+        await loadData(true);
+    };
+
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={async (t) => { await api.saveTransaction({...t, id: crypto.randomUUID()} as Transaction); await loadData(true); }} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={async (t) => { await api.saveTransaction(t); await loadData(true); }} onUpdateStatus={async (t) => { await api.saveTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID}); await loadData(true); }} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
       
+      case 'FIN_TRANSACTIONS':
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser?.entityType} onDelete={handleDeleteTransaction} onEdit={handleSaveTransaction} onToggleStatus={handleSaveTransaction} onAdd={handleSaveTransaction} />;
+
+      case 'FIN_CALENDAR':
+        return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleSaveTransaction} onEdit={handleSaveTransaction} />;
+
+      case 'FIN_ACCOUNTS':
+        return <AccountsView accounts={data.accounts} onSaveAccount={async (a) => { await api.saveAccount(a); loadData(true); }} onDeleteAccount={async (id) => { await api.deleteAccount(id); loadData(true); }} />;
+
+      case 'FIN_CARDS':
+        return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => { await api.saveAccount(a); loadData(true); }} onDeleteAccount={async (id) => { await api.deleteAccount(id); loadData(true); }} onAddTransaction={handleSaveTransaction} />;
+
+      case 'FIN_REPORTS':
+        return <Reports transactions={data.transactions} />;
+
+      case 'FIN_CONTACTS':
+      case 'SRV_CLIENTS':
+      case 'SYS_CONTACTS':
+        return <ContactsView contacts={data.contacts} onAddContact={async (c) => { await api.saveContact(c); loadData(true); }} onEditContact={async (c) => { await api.saveContact(c); loadData(true); }} onDeleteContact={async (id) => { await api.deleteContact(id); loadData(true); }} />;
+
       case 'OPTICAL_RX':
       case 'OPTICAL_SALES':
       case 'OPTICAL_LAB':
@@ -128,11 +158,84 @@ const App: React.FC = () => {
       case 'SRV_OS':
       case 'SRV_SALES':
       case 'SRV_CATALOG':
-      case 'SRV_CLIENTS':
-        return <ServicesView currentView={currentView} serviceOrders={data.serviceOrders} commercialOrders={data.commercialOrders} contracts={data.contracts} invoices={data.invoices} contacts={data.contacts} accounts={data.accounts} serviceItems={data.serviceItems} onSaveOS={async (os) => { await api.saveOS(os); await loadData(true); }} onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }} onSaveOrder={async (o) => { await api.saveOrder(o); await loadData(true); }} onDeleteOrder={async (id) => { await api.deleteOrder(id); await loadData(true); }} onSaveContract={async (c) => { await api.saveContract(c); await loadData(true); }} onDeleteContract={async (id) => { await api.deleteContract(id); await loadData(true); }} onSaveInvoice={async (i) => { await api.saveInvoice(i); await loadData(true); }} onDeleteInvoice={async (id) => { await api.deleteInvoice(id); await loadData(true); }} onAddTransaction={async (t) => { await api.saveTransaction(t); await loadData(true); }} onSaveCatalogItem={async (i) => { await api.saveCatalogItem(i); await loadData(true); }} onDeleteCatalogItem={async (id) => { await api.deleteCatalogItem(id); await loadData(true); }} />;
+        return <ServicesView 
+          currentView={currentView} 
+          serviceOrders={data.serviceOrders} 
+          commercialOrders={data.commercialOrders} 
+          contracts={data.contracts} 
+          invoices={data.invoices} 
+          contacts={data.contacts} 
+          accounts={data.accounts} 
+          serviceItems={data.serviceItems} 
+          onSaveOS={async (os) => { await api.saveOS(os); await loadData(true); }} 
+          onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }} 
+          onSaveOrder={async (o) => { await api.saveOrder(o); await loadData(true); }} 
+          onDeleteOrder={async (id) => { await api.deleteOrder(id); await loadData(true); }} 
+          onSaveContract={async (c) => { await api.saveContract(c); await loadData(true); }} 
+          onDeleteContract={async (id) => { await api.deleteContract(id); await loadData(true); }} 
+          onSaveInvoice={async (i) => { await api.saveInvoice(i); await loadData(true); }} 
+          onDeleteInvoice={async (id) => { await api.deleteInvoice(id); await loadData(true); }} 
+          onAddTransaction={handleSaveTransaction} 
+          onSaveCatalogItem={async (i) => { await api.saveCatalogItem(i); await loadData(true); }} 
+          onDeleteCatalogItem={async (id) => { await api.deleteCatalogItem(id); await loadData(true); }} 
+        />;
+
+      case 'ODONTO_AGENDA':
+      case 'ODONTO_PATIENTS':
+        return <ServiceModule 
+            moduleTitle="Odontologia" 
+            clientLabel="Paciente" 
+            serviceLabel="Procedimento" 
+            transactionCategory="Serviços Odontológicos"
+            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : 'CLIENTS'}
+            clients={data.serviceClients}
+            services={data.serviceItems.filter(i => i.moduleTag === 'odonto')}
+            appointments={data.serviceAppointments}
+            contacts={data.contacts}
+            accounts={data.accounts}
+            onSaveClient={async (c) => { await fetch('/api/modules/clients', { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(c)}); loadData(true); }}
+            onDeleteClient={async (id) => { await fetch(`/api/modules/clients/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}}); loadData(true); }}
+            onSaveService={async (s) => { await api.saveCatalogItem({...s, moduleTag: 'odonto'}); loadData(true); }}
+            onDeleteService={async (id) => { await api.deleteCatalogItem(id); loadData(true); }}
+            onSaveAppointment={async (a) => { await fetch('/api/modules/appointments', { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(a)}); loadData(true); }}
+            onDeleteAppointment={async (id) => { await fetch(`/api/modules/appointments/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}}); loadData(true); }}
+            onAddTransaction={handleSaveTransaction}
+        />;
+
+      case 'DIAG_HUB':
+        return <DiagnosticView state={data} />;
+
+      case 'SYS_ACCESS':
+        return <AccessView currentUser={currentUser!} />;
+
+      case 'SYS_LOGS':
+        return <LogsView />;
+
+      case 'SYS_SETTINGS':
+        return <SettingsView 
+            user={currentUser!} 
+            pjData={{
+                companyProfile: data.companyProfile,
+                branches: data.branches,
+                costCenters: data.costCenters,
+                departments: data.departments,
+                projects: data.projects
+            }}
+            onUpdateSettings={async (s) => { await updateSettings(s); checkAuth(); }}
+            onOpenCollab={() => setIsCollabModalOpen(true)}
+            onSavePJEntity={async (type, payload) => {
+                const endpoint = type === 'company' ? '/api/settings/company' : `/api/pj/${type}`;
+                await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(payload)});
+                loadData(true);
+            }}
+            onDeletePJEntity={async (type, id) => {
+                await fetch(`/api/pj/${type}/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}});
+                loadData(true);
+            }}
+        />;
 
       default:
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={async (t) => { await api.saveTransaction({...t, id: crypto.randomUUID()} as Transaction); await loadData(true); }} onDeleteTransaction={async (id) => { await api.deleteTransaction(id); await loadData(true); }} onEditTransaction={async (t) => { await api.saveTransaction(t); await loadData(true); }} onUpdateStatus={async (t) => { await api.saveTransaction({...t, status: t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID}); await loadData(true); }} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
     }
   };
 
