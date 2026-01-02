@@ -27,7 +27,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [switching, setSwitching] = useState(false);
 
   const familyId = currentUser.familyId || (currentUser as any).family_id;
   const workspaces = currentUser.workspaces || [];
@@ -59,8 +58,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       section: 'Ótica',
       items: [
         { id: 'OPTICAL_RX', label: 'Receitas (RX)', icon: Eye },
-        { id: 'OPTICAL_SALES', label: 'Venda Guiada', icon: Glasses },
-        { id: 'OPTICAL_LAB', label: 'Laboratório (OS)', icon: Monitor },
+        { id: 'OPTICAL_SALES', label: 'Venda de Óculos', icon: Glasses },
+        { id: 'OPTICAL_LAB', label: 'Lab (Montagem)', icon: Monitor },
       ]
     }] : []),
     ...(activeModules.services ? [{ 

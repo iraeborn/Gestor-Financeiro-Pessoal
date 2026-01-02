@@ -5,7 +5,7 @@ import {
   Contact, Category, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  TransactionStatus, TransactionType, OSItem, AppNotification, OpticalRx
+  TransactionStatus, TransactionType, OSItem, AppNotification, OpticalRx, FinancialGoal
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
@@ -103,7 +103,6 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    // Shared common handlers
     const handleSaveTransaction = async (t: Transaction | Omit<Transaction, 'id'>) => {
         await api.saveTransaction(t as Transaction);
         await loadData(true);
@@ -129,8 +128,17 @@ const App: React.FC = () => {
       case 'FIN_CARDS':
         return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => { await api.saveAccount(a); loadData(true); }} onDeleteAccount={async (id) => { await api.deleteAccount(id); loadData(true); }} onAddTransaction={handleSaveTransaction} />;
 
+      case 'FIN_GOALS':
+        return <GoalsView goals={data.goals} accounts={data.accounts} transactions={data.transactions} onSaveGoal={async (g) => { await api.saveGoal(g); loadData(true); }} onDeleteGoal={async (id) => { await api.deleteGoal(id); loadData(true); }} onAddTransaction={handleSaveTransaction} />;
+
       case 'FIN_REPORTS':
         return <Reports transactions={data.transactions} />;
+
+      case 'FIN_ADVISOR':
+        return <SmartAdvisor data={data} />;
+
+      case 'FIN_CATEGORIES':
+        return <CategoriesView categories={data.categories} onSaveCategory={async (c) => { await api.saveCategory(c); loadData(true); }} onDeleteCategory={async (id) => { await api.deleteCategory(id); loadData(true); }} />;
 
       case 'FIN_CONTACTS':
       case 'SRV_CLIENTS':
@@ -138,26 +146,21 @@ const App: React.FC = () => {
         return <ContactsView contacts={data.contacts} onAddContact={async (c) => { await api.saveContact(c); loadData(true); }} onEditContact={async (c) => { await api.saveContact(c); loadData(true); }} onDeleteContact={async (id) => { await api.deleteContact(id); loadData(true); }} />;
 
       case 'OPTICAL_RX':
-      case 'OPTICAL_SALES':
-      case 'OPTICAL_LAB':
         return <OpticalModule 
-          activeView={currentView as any} 
           opticalRxs={data.opticalRxs || []} 
           contacts={data.contacts} 
-          commercialOrders={data.commercialOrders} 
-          serviceOrders={data.serviceOrders} 
-          serviceItems={data.serviceItems}
           onSaveRx={async (rx) => { await api.saveOpticalRx(rx); await loadData(true); }}
           onDeleteRx={async (id) => { await api.deleteOpticalRx(id); await loadData(true); }}
-          onSaveSale={async (s) => { await api.saveOrder({...s, moduleTag: 'optical'}); await loadData(true); }}
-          onDeleteSale={async (id) => { await api.deleteOrder(id); await loadData(true); }}
-          onSaveOS={async (os) => { await api.saveOS({...os, moduleTag: 'optical'}); await loadData(true); }}
-          onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }}
         />;
 
       case 'SRV_OS':
       case 'SRV_SALES':
+      case 'SRV_PURCHASES':
       case 'SRV_CATALOG':
+      case 'SRV_CONTRACTS':
+      case 'SRV_NF':
+      case 'OPTICAL_SALES':
+      case 'OPTICAL_LAB':
         return <ServicesView 
           currentView={currentView} 
           serviceOrders={data.serviceOrders} 
@@ -166,7 +169,9 @@ const App: React.FC = () => {
           invoices={data.invoices} 
           contacts={data.contacts} 
           accounts={data.accounts} 
-          serviceItems={data.serviceItems} 
+          serviceItems={data.serviceItems}
+          opticalRxs={data.opticalRxs}
+          settings={effectiveSettings}
           onSaveOS={async (os) => { await api.saveOS(os); await loadData(true); }} 
           onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }} 
           onSaveOrder={async (o) => { await api.saveOrder(o); await loadData(true); }} 
@@ -182,27 +187,31 @@ const App: React.FC = () => {
 
       case 'ODONTO_AGENDA':
       case 'ODONTO_PATIENTS':
+      case 'ODONTO_PROCEDURES':
         return <ServiceModule 
             moduleTitle="Odontologia" 
             clientLabel="Paciente" 
             serviceLabel="Procedimento" 
             transactionCategory="Serviços Odontológicos"
-            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : 'CLIENTS'}
+            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'}
             clients={data.serviceClients}
             services={data.serviceItems.filter(i => i.moduleTag === 'odonto')}
             appointments={data.serviceAppointments}
             contacts={data.contacts}
             accounts={data.accounts}
-            onSaveClient={async (c) => { await fetch('/api/modules/clients', { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(c)}); loadData(true); }}
-            onDeleteClient={async (id) => { await fetch(`/api/modules/clients/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}}); loadData(true); }}
+            onSaveClient={async (c) => { await api.saveServiceClient(c); loadData(true); }}
+            onDeleteClient={async (id) => { await api.deleteServiceClient(id); loadData(true); }}
             onSaveService={async (s) => { await api.saveCatalogItem({...s, moduleTag: 'odonto'}); loadData(true); }}
             onDeleteService={async (id) => { await api.deleteCatalogItem(id); loadData(true); }}
-            onSaveAppointment={async (a) => { await fetch('/api/modules/appointments', { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(a)}); loadData(true); }}
-            onDeleteAppointment={async (id) => { await fetch(`/api/modules/appointments/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}}); loadData(true); }}
+            onSaveAppointment={async (a) => { await api.saveAppointment(a); loadData(true); }}
+            onDeleteAppointment={async (id) => { await api.deleteAppointment(id); loadData(true); }}
             onAddTransaction={handleSaveTransaction}
         />;
 
       case 'DIAG_HUB':
+      case 'DIAG_HEALTH':
+      case 'DIAG_RISK':
+      case 'DIAG_INVEST':
         return <DiagnosticView state={data} />;
 
       case 'SYS_ACCESS':
@@ -224,12 +233,11 @@ const App: React.FC = () => {
             onUpdateSettings={async (s) => { await updateSettings(s); checkAuth(); }}
             onOpenCollab={() => setIsCollabModalOpen(true)}
             onSavePJEntity={async (type, payload) => {
-                const endpoint = type === 'company' ? '/api/settings/company' : `/api/pj/${type}`;
-                await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify(payload)});
+                await api.savePJEntity(type, payload);
                 loadData(true);
             }}
             onDeletePJEntity={async (type, id) => {
-                await fetch(`/api/pj/${type}/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`}});
+                await api.deletePJEntity(type, id);
                 loadData(true);
             }}
         />;
@@ -241,6 +249,7 @@ const App: React.FC = () => {
 
   if (!currentUser && !authChecked) return null;
   if (!currentUser) return <Auth onLoginSuccess={() => checkAuth()} />;
+  if (publicToken) return <PublicOrderView token={publicToken} />;
 
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
@@ -249,6 +258,7 @@ const App: React.FC = () => {
         <div className="p-8 w-full">{renderContent()}</div>
       </main>
       <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
+      <LoadingOverlay isVisible={loading} />
     </div>
   );
 };

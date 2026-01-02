@@ -96,12 +96,10 @@ export const getNotificationLogs = async (): Promise<NotificationLog[]> => handl
 export const getPublicOrder = async (token: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}`));
 export const updatePublicOrderStatus = async (token: string, status: string): Promise<any> => handleResponse(await fetch(`${API_URL}/services/public/order/${token}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }));
 
-// Fix: Added missing exported member 'consultCnpj'
 export const consultCnpj = async (cnpj: string): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/consult-cnpj/${cnpj}`, { headers: getHeaders() }));
 };
 
-// Fix: Added missing exported member 'createPagarMeSession'
 export const createPagarMeSession = async (planId: string): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/billing/create-pagarme-session`, {
         method: 'POST',
@@ -110,7 +108,6 @@ export const createPagarMeSession = async (planId: string): Promise<any> => {
     }));
 };
 
-// Fix: Added missing exported member 'createInvite'
 export const createInvite = async (role?: string): Promise<{ code: string }> => {
     return handleResponse(await fetch(`${API_URL}/invites`, {
         method: 'POST',
@@ -119,7 +116,6 @@ export const createInvite = async (role?: string): Promise<{ code: string }> => 
     }));
 };
 
-// Fix: Added missing exported member 'joinFamily'
 export const joinFamily = async (code: string): Promise<User> => {
     const data = await handleResponse(await fetch(`${API_URL}/invites/join`, {
         method: 'POST',
@@ -129,22 +125,18 @@ export const joinFamily = async (code: string): Promise<User> => {
     return data.user;
 };
 
-// Fix: Added missing exported member 'getFamilyMembers'
 export const getFamilyMembers = async (): Promise<Member[]> => {
     return handleResponse(await fetch(`${API_URL}/members`, { headers: getHeaders() }));
 };
 
-// Fix: Added missing exported member 'getAdminStats'
 export const getAdminStats = async (): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() }));
 };
 
-// Fix: Added missing exported member 'getAdminUsers'
 export const getAdminUsers = async (): Promise<any[]> => {
     return handleResponse(await fetch(`${API_URL}/admin/users`, { headers: getHeaders() }));
 };
 
-// Fix: Added missing exported member 'restoreRecord'
 export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/restore`, {
         method: 'POST',
@@ -153,7 +145,6 @@ export const restoreRecord = async (entity: string, entityId: string): Promise<a
     }));
 };
 
-// Fix: Added missing exported member 'revertLogChange'
 export const revertLogChange = async (logId: number): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/revert-log`, {
         method: 'POST',
@@ -162,7 +153,6 @@ export const revertLogChange = async (logId: number): Promise<any> => {
     }));
 };
 
-// Fix: Added missing exported member 'updateMemberRole'
 export const updateMemberRole = async (memberId: string, role: string, permissions: string[]): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
         method: 'PUT',
@@ -171,7 +161,6 @@ export const updateMemberRole = async (memberId: string, role: string, permissio
     }));
 };
 
-// Fix: Added missing exported member 'removeMember'
 export const removeMember = async (memberId: string): Promise<any> => {
     return handleResponse(await fetch(`${API_URL}/members/${memberId}`, {
         method: 'DELETE',
@@ -198,6 +187,12 @@ export const api = {
     saveCatalogItem: async (i: Partial<ServiceItem>) => handleResponse(await fetch(`${API_URL}/modules/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteCatalogItem: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/services/${id}`, { method: 'DELETE', headers: getHeaders() })),
 
+    saveServiceClient: async (c: any) => handleResponse(await fetch(`${API_URL}/modules/clients`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(c) })),
+    deleteServiceClient: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/clients/${id}`, { method: 'DELETE', headers: getHeaders() })),
+    
+    saveAppointment: async (a: any) => handleResponse(await fetch(`${API_URL}/modules/appointments`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(a) })),
+    deleteAppointment: async (id: string) => handleResponse(await fetch(`${API_URL}/modules/appointments/${id}`, { method: 'DELETE', headers: getHeaders() })),
+
     saveOS: async (os: any) => handleResponse(await fetch(`${API_URL}/services/os`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(os) })),
     deleteOS: async (id: string) => handleResponse(await fetch(`${API_URL}/services/os/${id}`, { method: 'DELETE', headers: getHeaders() })),
     saveOrder: async (o: any) => handleResponse(await fetch(`${API_URL}/services/orders`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(o) })),
@@ -207,7 +202,14 @@ export const api = {
     saveInvoice: async (i: any) => handleResponse(await fetch(`${API_URL}/services/invoices`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(i) })),
     deleteInvoice: async (id: string) => handleResponse(await fetch(`${API_URL}/services/invoices/${id}`, { method: 'DELETE', headers: getHeaders() })),
     
-    // Fix: Added missing property 'importInvoiceXml'
+    savePJEntity: async (type: string, payload: any) => {
+        const endpoint = type === 'company' ? '/api/settings/company' : `/api/pj/${type}`;
+        return handleResponse(await fetch(endpoint, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) }));
+    },
+    deletePJEntity: async (type: string, id: string) => {
+        return handleResponse(await fetch(`/api/pj/${type}/${id}`, { method: 'DELETE', headers: getHeaders() }));
+    },
+
     importInvoiceXml: async (xmlFile: File): Promise<any> => {
         const formData = new FormData();
         formData.append('xml', xmlFile);
