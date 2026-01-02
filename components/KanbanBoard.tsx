@@ -17,9 +17,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
   const [scrollLeft, setScrollLeft] = useState(0);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
-  // --- Lógica de Arrastar para Scroll Horizontal ---
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Só inicia o scroll se clicar no fundo do container ou entre as colunas
     const target = e.target as HTMLElement;
     if (target !== containerRef.current && !target.classList.contains('kanban-column')) return;
     
@@ -36,17 +34,15 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
     if (!isScrolling || !containerRef.current) return;
     e.preventDefault();
     const x = e.pageX - (containerRef.current.offsetLeft || 0);
-    const walk = (x - startX) * 1.5; // Velocidade do scroll
+    const walk = (x - startX) * 1.5; 
     containerRef.current.scrollLeft = scrollLeft - walk;
   };
 
-  // --- Lógica de Drag and Drop de Cards ---
   const onDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggedItemId(itemId);
     e.dataTransfer.setData('itemId', itemId);
     e.dataTransfer.effectAllowed = 'move';
     
-    // Pequeno delay para o efeito visual de sumiço do original
     setTimeout(() => {
         (e.target as HTMLElement).style.opacity = '0.4';
     }, 0);
@@ -99,11 +95,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
           return (
             <div 
                 key={column.id} 
+                id={column.id === 'FINALIZADA' ? 'tab-conference' : undefined}
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, column.id)}
                 className="kanban-column flex-shrink-0 w-80 bg-slate-100/60 rounded-xl border border-slate-200/50 flex flex-col max-h-[calc(100vh-200px)] transition-all"
             >
-                {/* Column Header */}
                 <div className="p-5 flex items-center justify-between sticky top-0 z-10">
                     <div className="flex items-center gap-3">
                         <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${column.color}`}></div>
@@ -114,7 +110,6 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
                     </span>
                 </div>
 
-                {/* Column Content */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[200px] scrollbar-thin">
                     {columnItems.map(item => (
                         <div 
@@ -125,7 +120,6 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
                             onClick={() => onItemClick(item.raw || item)}
                             className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing group relative overflow-hidden animate-scale-up"
                         >
-                            {/* Priority Indicator Line */}
                             <div className={`absolute top-0 left-0 bottom-0 w-1 ${getPriorityColor(item.priority)}`}></div>
 
                             <div className="flex justify-between items-start mb-2">

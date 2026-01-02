@@ -6,12 +6,12 @@ import {
     Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, 
     OSPriority, KanbanItem, KanbanColumnConfig, Member, AppSettings, OpticalRx 
 } from '../types';
-// Added Glasses icon to imports
 import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api, getFamilyMembers } from '../services/storageService';
 import KanbanBoard from './KanbanBoard';
+import { useHelp } from './GuidedHelp';
 
 const SERVICE_UNITS = [
     { id: 'UN', label: 'Unidade (UN)' },
@@ -80,6 +80,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
+    const { markStepComplete } = useHelp();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
@@ -352,9 +353,11 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         
         if (isOS) {
             onSaveOS({ ...formData, ...common, totalAmount: pricing.net, items: pricing.resolvedList }, newContactObj);
+            markStepComplete('STEP_LAB');
         } else if (isSales || currentView === 'SRV_PURCHASES') {
             const type = (currentView === 'SRV_SALES' || currentView === 'OPTICAL_SALES') ? 'SALE' : 'PURCHASE';
             onSaveOrder({ ...formData, ...common, type, amount: pricing.net, grossAmount: pricing.gross, discountAmount: pricing.disc, taxAmount: pricing.taxes, items: pricing.resolvedList, date: formData.date || new Date().toISOString().split('T')[0], status: formData.status || 'DRAFT' }, newContactObj);
+            if (type === 'SALE') markStepComplete('STEP_SALE');
         } else if (currentView === 'SRV_CONTRACTS') {
             onSaveContract({ ...formData, ...common, value: Number(formData.value) || 0, startDate: formData.startDate || new Date().toISOString().split('T')[0], status: formData.status || 'ACTIVE' }, newContactObj);
         } else if (currentView === 'SRV_NF') {
@@ -435,9 +438,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
 
         const filtered = rawItems.filter(i => {
-            // Se estamos no contexto de Ótica, mostrar apenas itens com tag optical
             if (isOpticalContext && i.moduleTag !== 'optical') return false;
-            // Se estamos no contexto genérico, omitir itens marcados como Ótica para evitar confusão se o usuário quiser separar
             if (!isOpticalContext && i.moduleTag === 'optical' && (currentView === 'SRV_SALES' || currentView === 'SRV_OS')) return false;
 
             const text = (i.title || i.description || i.name || i.code || i.brand || i.number || '').toLowerCase();
@@ -558,7 +559,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                         </>
                     )}
                     <div className="relative flex-1 md:w-64"><Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" /><input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" /></div>
-                    <button onClick={() => handleOpenModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"><Plus className="w-4 h-4" /> Novo {header.label}</button>
+                    <button id={isSales ? "btn-new-sale" : isOS ? "btn-new-os" : undefined} onClick={() => handleOpenModal()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"><Plus className="w-4 h-4" /> Novo {header.label}</button>
                 </div>
             </div>
 
@@ -602,7 +603,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         </div>
                                     )}
                                     
-                                    {/* Campos Ótica Personalizados (Validação baseada no módulo ativo) */}
                                     {isOpticalModuleActive && (isSales || isOS) && (
                                         <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 space-y-4 animate-fade-in">
                                             <div className="flex items-center gap-2 text-indigo-600 font-black uppercase text-[10px] tracking-widest mb-2">

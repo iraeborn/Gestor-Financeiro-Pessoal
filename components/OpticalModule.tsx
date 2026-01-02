@@ -4,6 +4,7 @@ import { OpticalRx, Contact } from '../types';
 import { Eye, Plus, Search, Trash2, Pencil, User, Calendar } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import OpticalRxModal from './OpticalRxModal';
+import { useHelp } from './GuidedHelp';
 
 interface OpticalModuleProps {
     opticalRxs: OpticalRx[];
@@ -16,6 +17,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
     opticalRxs, contacts, onSaveRx, onDeleteRx
 }) => {
     const { showAlert } = useAlert();
+    const { markStepComplete } = useHelp();
     const [searchTerm, setSearchTerm] = useState('');
     const [isRxModalOpen, setRxModalOpen] = useState(false);
     const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
@@ -28,6 +30,12 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
     const handleOpenRxModal = (rx?: OpticalRx) => {
         setEditingRx(rx || null);
         setRxModalOpen(true);
+    };
+
+    const handleSave = (rx: OpticalRx) => {
+        onSaveRx(rx);
+        markStepComplete('STEP_RX');
+        setRxModalOpen(false);
     };
 
     return (
@@ -47,7 +55,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                         <input type="text" placeholder="Buscar por paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
                     </div>
-                    <button onClick={() => handleOpenRxModal()} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
+                    <button id="btn-new-rx" onClick={() => handleOpenRxModal()} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
                         <Plus className="w-4 h-4" /> Nova Receita
                     </button>
                 </div>
@@ -100,7 +108,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                     onClose={() => setRxModalOpen(false)} 
                     contacts={contacts} 
                     initialData={editingRx} 
-                    onSave={(rx) => { onSaveRx(rx); setRxModalOpen(false); }} 
+                    onSave={handleSave} 
                 />
             )}
         </div>

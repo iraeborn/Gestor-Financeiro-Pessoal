@@ -36,6 +36,7 @@ import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
 import NotificationPanel from './components/NotificationPanel';
 import LoadingOverlay from './components/LoadingOverlay';
+import { HelpProvider } from './components/GuidedHelp';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
@@ -102,7 +103,6 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  // Socket setup para atualizações em tempo real
   useEffect(() => {
     if (currentUser && !publicToken) {
         const socket = io({ transports: ['websocket', 'polling'] }) as any;
@@ -114,7 +114,6 @@ const App: React.FC = () => {
         });
 
         socket.on('DATA_UPDATED', async (payload: any) => {
-            // Se for alteração de configurações ou permissões, atualiza o usuário para refletir no menu
             if (['settings', 'membership', 'user'].includes(payload.entity)) {
                 try {
                     const updatedUser = await refreshUser();
@@ -122,7 +121,6 @@ const App: React.FC = () => {
                     showAlert("Configurações de acesso atualizadas pelo administrador.", "info");
                 } catch (e) { console.error("Erro ao atualizar dados do usuário via socket", e); }
             } else {
-                // Atualiza os dados da tela (transações, etc)
                 loadData(true);
             }
         });
@@ -291,12 +289,14 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
-      <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} notificationCount={notifications.length} />
-      <main className="flex-1 overflow-y-auto relative">
-        <div className="p-8 w-full">{renderContent()}</div>
-      </main>
-      <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
-      <LoadingOverlay isVisible={loading} />
+      <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
+        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} notificationCount={notifications.length} />
+        <main className="flex-1 overflow-y-auto relative">
+            <div className="p-8 w-full">{renderContent()}</div>
+        </main>
+        <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
+        <LoadingOverlay isVisible={loading} />
+      </HelpProvider>
     </div>
   );
 };

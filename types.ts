@@ -1,4 +1,23 @@
 
+// ... (existing types)
+
+export interface HelpStep {
+  id: string;
+  targetId: string; // ID do elemento DOM para destacar
+  title: string;
+  content: string;
+  view: ViewMode;
+  position: 'top' | 'bottom' | 'left' | 'right';
+}
+
+export interface UserProgress {
+  completedSteps: string[];
+  isHelpActive: boolean;
+}
+
+// Extensão do status de OS para incluir o fluxo de conferência e entrega
+export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_RECEBIDO' | 'CONFERIDO' | 'PRONTO_ENTREGA' | 'ENTREGUE' | 'NAO_ENTREGUE';
+
 export enum EntityType {
   PERSONAL = 'PF',
   BUSINESS = 'PJ'
