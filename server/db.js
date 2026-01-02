@@ -43,7 +43,37 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS service_appointments (id TEXT PRIMARY KEY, client_id TEXT, service_id TEXT, tooth INTEGER, teeth JSONB DEFAULT '[]', treatment_items JSONB DEFAULT '[]', date TEXT, status TEXT, notes TEXT, clinical_notes TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, is_locked BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL(15,2), start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL(15,2), issue_date DATE, status TEXT, contact_id TEXT, description TEXT, items JSONB DEFAULT '[]', file_url TEXT, order_id TEXT, service_order_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB)`
+        `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB)`,
+        `CREATE TABLE IF NOT EXISTS optical_rxs (
+            id TEXT PRIMARY KEY,
+            contact_id TEXT REFERENCES contacts(id),
+            professional_name TEXT,
+            rx_date DATE NOT NULL,
+            expiration_date DATE,
+            sphere_od_longe DECIMAL(5,2),
+            cyl_od_longe DECIMAL(5,2),
+            axis_od_longe INTEGER,
+            sphere_od_perto DECIMAL(5,2),
+            cyl_od_perto DECIMAL(5,2),
+            axis_od_perto INTEGER,
+            sphere_oe_longe DECIMAL(5,2),
+            cyl_oe_longe DECIMAL(5,2),
+            axis_oe_longe INTEGER,
+            sphere_oe_perto DECIMAL(5,2),
+            cyl_oe_perto DECIMAL(5,2),
+            axis_oe_perto INTEGER,
+            addition DECIMAL(5,2),
+            dnp_od DECIMAL(5,2),
+            dnp_oe DECIMAL(5,2),
+            height_od DECIMAL(5,2),
+            height_oe DECIMAL(5,2),
+            image_url TEXT,
+            observations TEXT,
+            user_id TEXT REFERENCES users(id),
+            family_id TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            deleted_at TIMESTAMP
+        )`
     ];
     
     try {

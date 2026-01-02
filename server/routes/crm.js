@@ -121,5 +121,58 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
+    // --- OPTICAL RX ---
+    router.post('/optical/rx', authenticateToken, async (req, res) => {
+        const rx = req.body;
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            const id = rx.id || crypto.randomUUID();
+            const existingRes = await pool.query('SELECT id FROM optical_rxs WHERE id = $1', [id]);
+            const isUpdate = existingRes.rows.length > 0;
+
+            await pool.query(
+                `INSERT INTO optical_rxs (
+                    id, contact_id, professional_name, rx_date, expiration_date,
+                    sphere_od_longe, cyl_od_longe, axis_od_longe,
+                    sphere_od_perto, cyl_od_perto, axis_od_perto,
+                    sphere_oe_longe, cyl_oe_longe, axis_oe_longe,
+                    sphere_oe_perto, cyl_oe_perto, axis_oe_perto,
+                    addition, dnp_od, dnp_oe, height_od, height_oe,
+                    image_url, observations, user_id, family_id
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+                ) ON CONFLICT (id) DO UPDATE SET
+                    contact_id=$2, professional_name=$3, rx_date=$4, expiration_date=$5,
+                    sphere_od_longe=$6, cyl_od_longe=$7, axis_od_longe=$8,
+                    sphere_od_perto=$9, cyl_od_perto=$10, axis_od_perto=$11,
+                    sphere_oe_longe=$12, cyl_oe_longe=$13, axis_oe_longe=$14,
+                    sphere_oe_perto=$15, cyl_oe_perto=$16, axis_oe_perto=$17,
+                    addition=$18, dnp_od=$19, dnp_oe=$20, height_od=$21, height_oe=$22,
+                    image_url=$23, observations=$24, deleted_at=NULL`,
+                [
+                    id, rx.contactId, rx.professionalName, rx.rxDate, sanitizeValue(rx.expirationDate),
+                    rx.sphereOdLonge, rx.cylOdLonge, rx.axisOdLonge,
+                    rx.sphereOdPerto, rx.cylOdPerto, rx.axisOdPerto,
+                    rx.sphereOeLonge, rx.cylOeLonge, rx.axisOeLonge,
+                    rx.sphereOePerto, rx.cylOePerto, rx.axisOePerto,
+                    rx.addition, rx.dnpOd, rx.dnpOe, rx.heightOd, rx.heightOe,
+                    rx.imageUrl, rx.observations, req.user.id, familyId
+                ]
+            );
+
+            await logAudit(pool, req.user.id, isUpdate ? 'UPDATE' : 'CREATE', 'optical_rx', id, `Receita: ${rx.contactName}`);
+            res.json({ success: true, id });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    router.delete('/optical/rx/:id', authenticateToken, async (req, res) => {
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query('UPDATE optical_rxs SET deleted_at = NOW() WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', 'optical_rx', req.params.id, 'Receita removida');
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
     return router;
 }
