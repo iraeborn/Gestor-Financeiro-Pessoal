@@ -6,7 +6,7 @@ import {
   Settings, LogOut, Briefcase, ShieldCheck, SmilePlus, 
   ShoppingBag, Wrench, FileText, UserCog, Package, Bell, 
   Glasses, Eye, Activity, ChevronLeft, Menu, X, Share2,
-  Building2, Check, ScrollText, Sparkles, BrainCircuit
+  Building2, Check, ScrollText, Sparkles, BrainCircuit, Store
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -122,6 +122,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       section: 'Configuração', 
       items: [
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
+        { id: 'SYS_BRANCHES', label: 'Filiais & Unidades', icon: Store },
         { id: 'SYS_ACCESS', label: 'Equipe / Usuários', icon: ShieldCheck },
         { id: 'SYS_LOGS', label: 'Auditoria', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
@@ -145,7 +146,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-        {/* Backdrop para Mobile */}
         {isMobileOpen && (
             <div 
                 className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[140] md:hidden transition-opacity duration-300"
@@ -159,7 +159,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             ${isMobileOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'}
             ${isCollapsed ? 'md:w-20' : 'md:w-72'}
         `}>
-            {/* Toggle Button Desktop */}
             <button 
                 onClick={handleToggle}
                 className="hidden md:flex absolute top-14 -right-3 w-7 h-7 bg-white border border-gray-200 rounded-full items-center justify-center text-gray-400 hover:text-indigo-600 shadow-md z-[160] transition-transform"
@@ -168,7 +167,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* Header da Sidebar */}
             <div className={`p-6 flex flex-col items-center gap-4 flex-shrink-0 transition-all border-b border-gray-50/50 mb-2 ${isCollapsed && !isMobileOpen ? 'justify-center' : ''}`}>
                 <div className={`flex items-center w-full transition-all ${isCollapsed && !isMobileOpen ? 'justify-center' : 'justify-between'}`}>
                     <div className="flex items-center gap-3 shrink-0">
@@ -180,7 +178,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                         )}
                     </div>
-                    {/* Botão fechar apenas visível no mobile */}
                     <button onClick={() => setIsMobileOpen(false)} className="md:hidden p-2 text-gray-400 hover:bg-gray-100 rounded-lg">
                         <X className="w-5 h-5" />
                     </button>
@@ -189,7 +186,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <div className={`flex items-center gap-2 ${isCollapsed && !isMobileOpen ? 'hidden' : 'flex'}`}>
                     <button onClick={onOpenNotifications} className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`} title="Notificações">
                         <Bell className="w-5 h-5" />
-                        {notificationCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">{notificationCount}</span>}
+                        {notificationCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">{notificationCount}</span>}
                     </button>
                     <button onClick={handleShareCurrentView} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shrink-0" title="Compartilhar Link desta Página">
                         <Share2 className="w-5 h-5" />
@@ -197,7 +194,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
 
-            {/* Lista de Menu */}
             <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-none">
                 {filteredMenuItems.map((section, idx) => (
                     <div key={idx}>
@@ -223,7 +219,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ))}
             </div>
 
-            {/* Footer Usuário */}
             <div className={`p-4 border-t border-gray-100 bg-gray-50/50 transition-all ${isCollapsed && !isMobileOpen ? 'flex justify-center' : ''} relative`}>
                 <div className="w-full">
                     <button 

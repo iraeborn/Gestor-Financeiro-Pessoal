@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ServiceOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, OSPriority, OSStatus, OSType, OSOrigin, Member } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, RefreshCw, Zap, User, UserCog, Calendar, Clock, Glasses, CheckCircle } from 'lucide-react';
+import { ServiceOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, OSPriority, OSStatus, OSType, OSOrigin, Member, Branch } from '../types';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, RefreshCw, Zap, User, UserCog, Calendar, Clock, Glasses, CheckCircle, Store } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -10,12 +10,13 @@ interface ServiceOrderEditorProps {
     contacts: Contact[];
     serviceItems: ServiceItem[];
     opticalRxs: OpticalRx[];
+    branches: Branch[];
     settings?: AppSettings;
     onSave: (os: ServiceOrder) => void;
     onCancel: () => void;
 }
 
-const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, settings, onSave, onCancel }) => {
+const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, settings, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [teamMembers, setTeamMembers] = useState<Member[]>([]);
     const [formData, setFormData] = useState<Partial<ServiceOrder>>({
@@ -92,6 +93,7 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.title) return showAlert("O título é obrigatório", "warning");
+        if (!formData.branchId) return showAlert("Selecione a filial de origem.", "warning");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -270,11 +272,27 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
                         <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Filial Responsável</label>
+                            <div className="relative">
+                                <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <select 
+                                    value={formData.branchId || ''} 
+                                    onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none"
+                                    required
+                                >
+                                    <option value="">Selecionar Unidade...</option>
+                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status do Fluxo</label>
                             <select 
                                 value={formData.status || 'ABERTA'} 
                                 onChange={e => setFormData({...formData, status: e.target.value as OSStatus})}
-                                className="w-full bg-slate-900 text-white rounded-xl p-4 text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer"
+                                className="w-full bg-gray-50 text-gray-700 rounded-xl p-4 text-sm font-black uppercase tracking-widest outline-none border border-gray-100 cursor-pointer"
                             >
                                 <option value="ABERTA">Backlog / Aberta</option>
                                 <option value="EM_EXECUCAO">Em Execução</option>
@@ -322,13 +340,6 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
                                 </select>
                             </div>
                         )}
-
-                        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-start gap-3">
-                            <Info className="w-5 h-5 text-amber-600 shrink-0" />
-                            <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase">
-                                Ao finalizar a OS, os valores podem ser faturados automaticamente no seu financeiro.
-                            </p>
-                        </div>
                     </div>
                 </div>
             </div>

@@ -1,17 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import { OpticalRx, Contact } from '../types';
-import { ArrowLeft, Save, Eye, Stethoscope, Info } from 'lucide-react';
+import { OpticalRx, Contact, Branch } from '../types';
+import { ArrowLeft, Save, Eye, Stethoscope, Info, Store } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 
 interface OpticalRxEditorProps {
     contacts: Contact[];
+    branches: Branch[];
     initialData?: OpticalRx | null;
     onSave: (rx: OpticalRx) => void;
     onCancel: () => void;
 }
 
-const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, initialData, onSave, onCancel }) => {
+const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, initialData, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [formData, setFormData] = useState<Partial<OpticalRx>>({
         rxDate: new Date().toISOString().split('T')[0],
@@ -26,6 +27,7 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, initialData
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.contactId) { showAlert("Selecione um cliente.", "warning"); return; }
+        if (!formData.branchId) { showAlert("Selecione a unidade de atendimento.", "warning"); return; }
         
         const contact = contacts.find(c => c.id === formData.contactId);
         onSave({
@@ -61,8 +63,8 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, initialData
 
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-10 space-y-10">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <div className="md:col-span-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="lg:col-span-2">
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cliente / Paciente</label>
                             <select 
                                 className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -75,12 +77,29 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, initialData
                             </select>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data da Receita</label>
-                            <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.rxDate} onChange={e => setFormData({...formData, rxDate: e.target.value})} required />
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Exame</label>
+                            <div className="relative">
+                                <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <select 
+                                    className="w-full pl-11 py-4 bg-indigo-50 text-indigo-700 border-none rounded-2xl text-sm font-bold outline-none appearance-none"
+                                    value={formData.branchId || ''}
+                                    onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                    required
+                                >
+                                    <option value="">Onde foi feito?</option>
+                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade</label>
-                            <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
+                        <div className="grid grid-cols-2 gap-4 lg:col-span-1">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data</label>
+                                <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.rxDate} onChange={e => setFormData({...formData, rxDate: e.target.value})} required />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade</label>
+                                <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
+                            </div>
                         </div>
                     </div>
 

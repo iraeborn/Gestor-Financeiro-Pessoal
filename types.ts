@@ -59,11 +59,11 @@ export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export type ViewMode = 
   | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_CONTACT_EDITOR'
-  | 'SRV_OS' | 'SRV_OS_EDITOR' | 'SRV_SALES' | 'SRV_SALE_EDITOR' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS'
+  | 'SRV_OS' | 'SRV_OS_EDITOR' | 'SRV_SALES' | 'SRV_SALE_EDITOR' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS' | 'SRV_BRANCH_SCHEDULE'
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
-  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS';
+  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES';
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
@@ -109,6 +109,7 @@ export interface OpticalRx {
   heightOe?: number;
   imageUrl?: string;
   observations?: string;
+  branchId?: string;
 }
 
 export interface ToothState {
@@ -236,6 +237,7 @@ export interface ServiceOrder {
   assigneeId?: string;
   assigneeName?: string;
   rxId?: string;
+  branchId?: string;
 }
 
 export interface CommercialOrder {
@@ -256,6 +258,7 @@ export interface CommercialOrder {
   assigneeId?: string;
   assigneeName?: string;
   rxId?: string;
+  branchId?: string;
 }
 
 export interface Contract {
@@ -299,6 +302,7 @@ export interface ServiceAppointment {
   clinicalNotes?: string;
   notes?: string;
   isLocked?: boolean;
+  branchId?: string;
 }
 
 export interface User {
@@ -424,7 +428,16 @@ export interface CompanyProfile {
   issuesInvoices?: boolean;
 }
 
-export interface Branch { id: string; name: string; code?: string; }
+export interface Branch { 
+    id: string; 
+    name: string; 
+    code?: string; 
+    city?: string; 
+    address?: string;
+    phone?: string;
+    color?: string;
+    isActive: boolean;
+}
 export interface CostCenter { id: string; name: string; code?: string; }
 export interface Department { id: string; name: string; }
 export interface Project { id: string; name: string; }

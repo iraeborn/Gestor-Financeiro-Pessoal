@@ -5,7 +5,7 @@ import {
   Contact, Category, AppSettings, EntityType, 
   SubscriptionPlan, CompanyProfile,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  AppNotification, OpticalRx, FinancialGoal
+  AppNotification, OpticalRx, FinancialGoal, Branch
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
@@ -37,6 +37,8 @@ import ServiceModule from './components/ServiceModule';
 import OpticalModule from './components/OpticalModule';
 import OpticalRxEditor from './components/OpticalRxEditor';
 import ServicesView from './components/ServicesView';
+import BranchesView from './components/BranchesView';
+import BranchScheduleView from './components/BranchScheduleView';
 import PublicOrderView from './components/PublicOrderView';
 import LoadingOverlay from './components/LoadingOverlay';
 import { HelpProvider } from './components/GuidedHelp';
@@ -67,6 +69,7 @@ const App: React.FC = () => {
   const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
   const [selectedSale, setSelectedSale] = useState<CommercialOrder | null>(null);
   const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
@@ -175,6 +178,7 @@ const App: React.FC = () => {
             contacts={data.contacts}
             serviceItems={data.serviceItems}
             opticalRxs={data.opticalRxs}
+            branches={data.branches}
             settings={effectiveSettings}
             onSave={async (os) => { await api.saveOS(os); await loadData(true); setCurrentView('SRV_OS'); }}
             onCancel={() => setCurrentView('SRV_OS')}
@@ -187,6 +191,7 @@ const App: React.FC = () => {
             contacts={data.contacts}
             serviceItems={data.serviceItems}
             opticalRxs={data.opticalRxs}
+            branches={data.branches}
             settings={effectiveSettings}
             onSave={async (o) => { await api.saveOrder(o); await loadData(true); setCurrentView(prevView); }}
             onCancel={() => setCurrentView(prevView)}
@@ -204,6 +209,7 @@ const App: React.FC = () => {
       case 'OPTICAL_RX_EDITOR':
         return <OpticalRxEditor 
             contacts={data.contacts} 
+            branches={data.branches}
             initialData={selectedRx} 
             onSave={async (rx) => { await api.saveOpticalRx(rx); await loadData(true); showAlert("Receita salva!", "success"); setCurrentView('OPTICAL_RX'); }} 
             onCancel={() => setCurrentView('OPTICAL_RX')} 
@@ -243,6 +249,24 @@ const App: React.FC = () => {
           onAddTransaction={handleSaveTransaction} 
           onSaveCatalogItem={async (i) => { await api.saveCatalogItem(i); await loadData(true); }} 
           onDeleteCatalogItem={async (id) => { await api.deleteCatalogItem(id); await loadData(true); }} 
+        />;
+
+      case 'SYS_BRANCHES':
+        return <BranchesView
+            branches={data.branches}
+            onSaveBranch={async (b) => { await api.savePJEntity('branch', b); await loadData(true); }}
+            onDeleteBranch={async (id) => { await api.deletePJEntity('branch', id); await loadData(true); }}
+            onManageSchedule={(b) => { setSelectedBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }}
+        />;
+
+      case 'SRV_BRANCH_SCHEDULE':
+        return <BranchScheduleView
+            branch={selectedBranch!}
+            appointments={data.serviceAppointments}
+            clients={data.serviceClients}
+            onSaveAppointment={async (a) => { await api.saveAppointment(a); await loadData(true); }}
+            onDeleteAppointment={async (id) => { await api.deleteAppointment(id); await loadData(true); }}
+            onBack={() => setCurrentView('SYS_BRANCHES')}
         />;
 
       case 'ODONTO_AGENDA':
@@ -316,7 +340,6 @@ const App: React.FC = () => {
         />
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            {/* Header Mobile - Apenas visível quando o menu está fechado no Mobile */}
             <div className="flex md:hidden items-center justify-between p-4 bg-white border-b border-gray-100 shrink-0">
                 <button 
                     onClick={() => setIsMobileMenuOpen(true)}
@@ -328,7 +351,7 @@ const App: React.FC = () => {
                     <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-white text-[10px] font-black">F</div>
                     <span className="font-black text-sm text-gray-800 uppercase tracking-tighter">FinManager</span>
                 </div>
-                <div className="w-10"></div> {/* Spacer for symmetry */}
+                <div className="w-10"></div>
             </div>
 
             <div className="flex-1 overflow-y-auto relative scroll-smooth">

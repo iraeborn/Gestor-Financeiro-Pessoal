@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt } from 'lucide-react';
+import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch } from '../types';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -10,12 +10,13 @@ interface SaleEditorProps {
     contacts: Contact[];
     serviceItems: ServiceItem[];
     opticalRxs: OpticalRx[];
+    branches: Branch[];
     settings?: AppSettings;
     onSave: (o: CommercialOrder) => void;
     onCancel: () => void;
 }
 
-const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, settings, onSave, onCancel }) => {
+const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, settings, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [teamMembers, setTeamMembers] = useState<Member[]>([]);
     const [formData, setFormData] = useState<Partial<CommercialOrder>>({
@@ -95,6 +96,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
+        if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -256,6 +258,22 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
                         <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Venda</label>
+                            <div className="relative">
+                                <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <select 
+                                    value={formData.branchId || ''} 
+                                    onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none"
+                                    required
+                                >
+                                    <option value="">Selecionar Filial...</option>
+                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Total (R$)</label>
                             <div className="relative">
                                 <Tag className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
@@ -263,7 +281,6 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                     type="number" 
                                     step="0.01"
                                     value={formData.discountAmount || ''} 
-                                    // Fix: Cast string input to number to match formData type definition
                                     onChange={e => setFormData({...formData, discountAmount: Number(e.target.value)})}
                                     className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-black outline-none"
                                     placeholder="0,00"
