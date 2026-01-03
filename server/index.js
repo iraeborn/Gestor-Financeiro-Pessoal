@@ -63,15 +63,13 @@ const rootPath = process.cwd();
 const distPath = path.join(rootPath, 'dist');
 const publicPath = path.join(rootPath, 'public');
 
-// Middleware para servir arquivos estáticos com MIME type correto para TS/TSX
 const staticOptions = {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         }
-        // Garante que arquivos JSON e o Service Worker tenham headers adequados
         if (filePath.endsWith('.json')) {
-            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
         }
         if (filePath.endsWith('sw.js')) {
             res.setHeader('Content-Type', 'application/javascript');
@@ -80,7 +78,7 @@ const staticOptions = {
     }
 };
 
-// Servir de múltiplas pastas para cobrir diferentes estruturas de build
+// Ordem de busca: 1. Compilados (dist), 2. Públicos, 3. Raiz
 app.use(express.static(distPath, staticOptions));
 app.use(express.static(publicPath, staticOptions));
 app.use(express.static(rootPath, staticOptions));
@@ -95,12 +93,17 @@ const renderIndex = (req, res) => {
 
     if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        // Fallback para o Client ID do Google caso a variável não esteja no ambiente
-        const googleId = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
+        
+        // Garante que o Client ID seja injetado corretamente ou use um fallback funcional
+        let googleId = process.env.GOOGLE_CLIENT_ID;
+        if (!googleId || googleId === "" || googleId.includes("__GOOGLE_CLIENT_ID__")) {
+            googleId = "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
+        }
         
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         content = content.replace("__API_KEY__", process.env.API_KEY || "");
-        content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "");
+        content = content.replace("__PAGARME_ENC_KEY__", process.env.PAGARME_ENC_KEY || "");
+        
         res.send(content);
     } else {
         res.status(404).send('Aguardando inicialização do sistema (index.html não encontrado)...');
@@ -111,14 +114,13 @@ app.get('/', renderIndex);
 
 app.get('*', (req, res) => {
     const isApiRequest = req.path.startsWith('/api/');
-    // Se tem extensão e não foi pego pelos express.static acima, é 404 real
     const hasExtension = path.extname(req.path) !== '';
 
+    // Se pedir um arquivo com extensão que não foi pego no static, é 404
     if (isApiRequest || hasExtension) {
         return res.status(404).end();
     }
     
-    // Fallback para SPA (index.html) para rotas de navegação
     renderIndex(req, res);
 });
 

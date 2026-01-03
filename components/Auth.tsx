@@ -30,7 +30,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleReady, setGoogleReady] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<'IDLE' | 'LOADING' | 'READY' | 'ERROR'>('LOADING');
   
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const isGoogleInitialized = useRef(false);
@@ -42,14 +42,22 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
 
   useEffect(() => {
     const win = window as any;
-    const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" ? win.GOOGLE_CLIENT_ID : "";
+    const rawId = win.GOOGLE_CLIENT_ID;
+    const clientId = (rawId && rawId !== "__GOOGLE_CLIENT_ID__" && rawId !== "") ? rawId : null;
     
     if (!clientId) {
-      console.warn("Google Client ID não configurado no servidor.");
+      console.warn("Google Client ID inválido ou ausente.");
+      setGoogleStatus('ERROR');
       return;
     }
 
     let intervalId: any;
+    const timeoutId = setTimeout(() => {
+        if (googleStatus === 'LOADING') {
+            setGoogleStatus('ERROR');
+            if (intervalId) clearInterval(intervalId);
+        }
+    }, 6000); // 6 segundos de tolerância
 
     const tryInit = () => {
       if (win.google?.accounts?.id && googleBtnRef.current) {
@@ -70,19 +78,23 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             width: 350, 
             text: mode === 'LOGIN' ? "signin_with" : "signup_with" 
           });
-          setGoogleReady(true);
+          setGoogleStatus('READY');
           if (intervalId) clearInterval(intervalId);
+          clearTimeout(timeoutId);
         } catch (e) {
           console.error("Falha na renderização do Google Button:", e);
+          setGoogleStatus('ERROR');
         }
       }
     };
 
-    // Tenta inicializar imediatamente e depois a cada 1s se o script ainda não carregou
     tryInit();
-    intervalId = setInterval(tryInit, 1000);
+    intervalId = setInterval(tryInit, 800);
 
-    return () => { if (intervalId) clearInterval(intervalId); };
+    return () => { 
+        if (intervalId) clearInterval(intervalId); 
+        clearTimeout(timeoutId);
+    };
   }, [mode]);
 
   const handleGoogleCallback = async (response: any) => {
@@ -204,8 +216,9 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                         </div>
                         
                         <div className="flex flex-col items-center gap-2 min-h-[50px]">
-                            <div ref={googleBtnRef} className="transition-opacity duration-500"></div>
-                            {!googleReady && <p className="text-[10px] text-gray-400 animate-pulse uppercase font-black tracking-widest">Iniciando Google Identity...</p>}
+                            <div ref={googleBtnRef} className={`${googleStatus === 'READY' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-500`}></div>
+                            {googleStatus === 'LOADING' && <p className="text-[10px] text-gray-400 animate-pulse uppercase font-black tracking-widest">Iniciando Google Identity...</p>}
+                            {googleStatus === 'ERROR' && <p className="text-[10px] text-rose-400 font-bold uppercase tracking-widest">O login social está temporariamente indisponível.</p>}
                         </div>
                         
                         <div className="text-center mt-6">
@@ -245,8 +258,9 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             </div>
             
             <div className="mt-6 flex flex-col items-center gap-3">
-                <div ref={googleBtnRef} className="transition-opacity duration-500"></div>
-                {!googleReady && <Loader2 className="w-6 h-6 text-indigo-200 animate-spin" />}
+                <div ref={googleBtnRef} className={`${googleStatus === 'READY' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-500`}></div>
+                {googleStatus === 'LOADING' && <Loader2 className="w-6 h-6 text-indigo-200 animate-spin" />}
+                {googleStatus === 'ERROR' && <span className="text-[10px] text-gray-400 font-medium">Google indisponível</span>}
             </div>
           </div>
 
