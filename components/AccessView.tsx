@@ -13,54 +13,52 @@ const PERMISSION_GROUPS = [
     {
         name: 'Financeiro',
         items: [
-            { id: 'FIN_DASHBOARD', label: 'Visão Geral' },
-            { id: 'FIN_TRANSACTIONS', label: 'Lançamentos' },
-            { id: 'FIN_CALENDAR', label: 'Calendário' },
+            { id: 'FIN_DASHBOARD', label: 'Dashboard' },
+            { id: 'FIN_TRANSACTIONS', label: 'Extrato' },
             { id: 'FIN_ACCOUNTS', label: 'Contas' },
             { id: 'FIN_CARDS', label: 'Cartões' },
             { id: 'FIN_GOALS', label: 'Metas' },
-            { id: 'FIN_REPORTS', label: 'Relatórios' },
-            { id: 'FIN_CATEGORIES', label: 'Categorias' },
-            { id: 'FIN_CONTACTS', label: 'Contatos & Favorecidos' },
         ]
     },
     {
-        name: 'Inteligência (IA Gemini)',
+        name: 'Inteligência',
         requiredModule: 'intelligence',
         items: [
-            { id: 'DIAG_HUB', label: 'Gestor de Elite (Diagnósticos)' },
-            { id: 'FIN_ADVISOR', label: 'Consultor IA (Chat)' },
+            { id: 'DIAG_HUB', label: 'Estrategista IA' },
+            { id: 'FIN_ADVISOR', label: 'Consultor IA' },
+        ]
+    },
+    {
+        name: 'Operacional',
+        requiredModule: 'services',
+        items: [
+            { id: 'SRV_OS', label: 'Laboratório / Ordens de Serviço' },
+            { id: 'SRV_SALES', label: 'Vendas / Orçamentos' },
+            { id: 'SRV_CATALOG', label: 'Estoque' },
+        ]
+    },
+    {
+        name: 'Ótica',
+        requiredModule: 'optical',
+        items: [
+            { id: 'OPTICAL_RX', label: 'Receitas RX' },
         ]
     },
     {
         name: 'Odontologia',
         requiredModule: 'odonto',
         items: [
-            { id: 'ODONTO_AGENDA', label: 'Agenda' },
-            { id: 'ODONTO_PATIENTS', label: 'Pacientes' },
-            { id: 'ODONTO_PROCEDURES', label: 'Procedimentos' },
+            { id: 'ODONTO_AGENDA', label: 'Agenda Clínica' },
+            { id: 'ODONTO_PATIENTS', label: 'Prontuários' },
         ]
     },
     {
-        name: 'Serviços & Vendas',
-        requiredModule: 'services',
+        name: 'Configuração',
         items: [
-            { id: 'SRV_OS', label: 'Ordens de Serviço' },
-            { id: 'SRV_SALES', label: 'Vendas' },
-            { id: 'SRV_PURCHASES', label: 'Compras' },
-            { id: 'SRV_CATALOG', label: 'Catálogo de Itens' },
-            { id: 'SRV_CONTRACTS', label: 'Contratos' },
-            { id: 'SRV_NF', label: 'Notas Fiscais' },
-            { id: 'SRV_CLIENTS', label: 'Gestão de Clientes' },
-        ]
-    },
-    {
-        name: 'Gestão',
-        items: [
-            { id: 'SYS_CONTACTS', label: 'Todos Contatos' },
-            { id: 'SYS_ACCESS', label: 'Acesso & Equipe' },
-            { id: 'SYS_LOGS', label: 'Logs & Auditoria' },
-            { id: 'SYS_SETTINGS', label: 'Configurações' },
+            { id: 'FIN_CONTACTS', label: 'Contatos' },
+            { id: 'SYS_ACCESS', label: 'Equipe / Usuários' },
+            { id: 'SYS_LOGS', label: 'Auditoria' },
+            { id: 'SYS_SETTINGS', label: 'Ajustes' },
         ]
     }
 ];
@@ -71,27 +69,21 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // Invite Generation State
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [generatingInvite, setGeneratingInvite] = useState(false);
 
-    // Join State
     const [joinCode, setJoinCode] = useState('');
     const [joining, setJoining] = useState(false);
     
-    // Edit Permissions Modal State
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [editRole, setEditRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
     const [selectedProfileId, setSelectedProfileId] = useState<string>('CUSTOM');
     const [editPermissions, setEditPermissions] = useState<string[]>([]);
 
     const isPJ = currentUser.entityType === EntityType.BUSINESS;
-    
-    // Check if current user is admin of the current workspace
     const workspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
     const isAdmin = workspace?.role === 'ADMIN';
 
-    // Helper para normalizar permissões que podem vir como string JSON do banco
     const normalizePermissions = (perms: string[] | string | undefined): string[] => {
         if (!perms) return [];
         if (typeof perms === 'string') {
@@ -185,7 +177,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
     const availableRoles = ROLE_DEFINITIONS.filter(r => {
         if (r.id === 'ADMIN') return false; 
         if (r.requiredModule) {
-            const activeModules = currentUser.settings?.activeModules as any;
+            const activeModules = (workspace?.ownerSettings || currentUser.settings)?.activeModules as any;
             if (!activeModules?.[r.requiredModule]) return false;
         }
         return true;
@@ -239,7 +231,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
 
     const filteredPermissionGroups = PERMISSION_GROUPS.filter(group => {
         if (!group.requiredModule) return true;
-        const activeModules = currentUser.settings?.activeModules as any;
+        const activeModules = (workspace?.ownerSettings || currentUser.settings)?.activeModules as any;
         return activeModules?.[group.requiredModule] === true;
     });
 
