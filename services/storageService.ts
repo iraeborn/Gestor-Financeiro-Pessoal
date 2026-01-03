@@ -110,17 +110,14 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
 };
 
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
-    // Current server implementation doesn't provide this endpoint, returning empty array
     return [];
 };
 
 export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
-    // Placeholder for future implementation
     return { success: true };
 };
 
 export const revertLogChange = async (logId: number): Promise<any> => {
-    // Placeholder for future implementation
     return { success: true };
 };
 
@@ -300,5 +297,3 @@ export const api = {
         return api.deleteLocallyAndQueue(storeMap[type], id);
     },
 };
-
-export { logout, refreshUser, login, register, loginWithGoogle, switchContext, updateSettings, updateProfile, getAuditLogs, getNotificationLogs, getPublicOrder, updatePublicOrderStatus, consultCnpj, createPagarMeSession, createInvite, joinFamily, getFamilyMembers, getAdminStats, getAdminUsers, restoreRecord, revertLogChange, updateMemberRole, removeMember };
