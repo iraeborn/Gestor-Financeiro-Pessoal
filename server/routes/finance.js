@@ -59,7 +59,6 @@ export default function(logAudit) {
     };
 
     router.get('/initial-data', authenticateToken, async (req, res) => {
-        console.log(`[API] Carregando initial-data para o usuário ${req.user.id}`);
         try {
             const familyId = await getFamilyId(req.user.id);
             
@@ -98,10 +97,8 @@ export default function(logAudit) {
                 }
             });
 
-            console.log(`[API] Initial-data mapeado e enviado com sucesso.`);
             res.json(results);
         } catch (err) {
-            console.error("❌ [API ERROR] Erro fatal em initial-data:", err);
             res.status(500).json({ error: "Erro de sincronização: " + err.message });
         }
     });
@@ -189,6 +186,73 @@ export default function(logAudit) {
             const familyId = await getFamilyId(req.user.id);
             await pool.query('UPDATE accounts SET deleted_at = NOW() WHERE id = $1 AND family_id = $2', [req.params.id, familyId]);
             await logAudit(pool, req.user.id, 'DELETE', 'account', req.params.id, 'Conta removida');
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // --- PJ ENTITIES (BRANCH, COST CENTER, etc) ---
+    router.post('/pj/:type', authenticateToken, async (req, res) => {
+        const { type } = req.params;
+        const payload = req.body;
+        const userId = req.user.id;
+        
+        const tableMap = {
+            branch: { table: 'branches', fields: ['name', 'code', 'city', 'phone', 'color', 'is_active'] },
+            costCenter: { table: 'cost_centers', fields: ['name', 'code'] },
+            department: { table: 'departments', fields: ['name'] },
+            project: { table: 'projects', fields: ['name'] }
+        };
+
+        const config = tableMap[type];
+        if (!config) return res.status(400).json({ error: 'Tipo de entidade inválido' });
+
+        try {
+            const familyId = await getFamilyId(userId);
+            const id = payload.id || crypto.randomUUID();
+            
+            // Construção dinâmica da query baseada nos campos definidos no mapa
+            const fields = ['id', 'family_id', ...config.fields];
+            const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
+            const updateSet = config.fields.map((f, i) => `${f} = $${i + 3}`).join(', ');
+
+            const values = [
+                id, familyId,
+                ...config.fields.map(f => {
+                    // Converter camelCase do body para snake_case se necessário para acessar o payload
+                    const bodyKey = f.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
+                    return sanitizeValue(payload[bodyKey]);
+                })
+            ];
+
+            const query = `
+                INSERT INTO ${config.table} (${fields.join(', ')})
+                VALUES (${placeholders})
+                ON CONFLICT (id) DO UPDATE SET ${updateSet}, deleted_at = NULL
+            `;
+
+            await pool.query(query, values);
+            await logAudit(pool, userId, payload.id ? 'UPDATE' : 'CREATE', type, id, payload.name);
+            res.json({ success: true, id });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.delete('/pj/:type/:id', authenticateToken, async (req, res) => {
+        const { type, id } = req.params;
+        const tableMap = {
+            branch: 'branches',
+            costCenter: 'cost_centers',
+            department: 'departments',
+            project: 'projects'
+        };
+        const table = tableMap[type];
+        if (!table) return res.status(400).json({ error: 'Tipo inválido' });
+
+        try {
+            const familyId = await getFamilyId(req.user.id);
+            await pool.query(`UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [id, familyId]);
+            await logAudit(pool, req.user.id, 'DELETE', type, id, 'Remoção de entidade PJ');
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
