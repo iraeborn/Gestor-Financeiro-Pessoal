@@ -67,7 +67,7 @@ const ConfirmModal: React.FC<{
   const isDanger = options.variant === 'danger';
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden scale-100 transition-transform">
         <div className={`px-6 py-4 border-b flex items-center gap-3 ${isDanger ? 'bg-rose-50 border-rose-100' : 'bg-gray-50 border-gray-100'}`}>
           <div className={`p-2 rounded-full ${isDanger ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -125,6 +125,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }, 4000);
   }, []);
 
+  // Fix: Added 'prev.' to filter call to correctly reference the state array
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
@@ -154,7 +155,7 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       {children}
       
       {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-[110] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed top-4 right-4 z-[1100] flex flex-col gap-2 pointer-events-none">
         {toasts.map((toast) => (
           <div key={toast.id} className="pointer-events-auto">
             <ToastItem toast={toast} onClose={removeToast} />

@@ -10,6 +10,7 @@ import {
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
 import { io } from 'socket.io-client';
+import { Menu as Hamburger } from 'lucide-react';
 
 // Componentes
 import Auth from './components/Auth';
@@ -23,6 +24,8 @@ import Reports from './components/Reports';
 import CategoriesView from './components/CategoriesView';
 import ContactsView from './components/ContactsView';
 import ContactEditor from './components/ContactEditor';
+import ServiceOrderEditor from './components/ServiceOrderEditor';
+import SaleEditor from './components/SaleEditor';
 import SmartAdvisor from './components/SmartAdvisor';
 import DiagnosticView from './components/DiagnosticView';
 import AccessView from './components/AccessView';
@@ -42,6 +45,7 @@ const App: React.FC = () => {
   const { showAlert } = useAlert();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const urlParams = new URLSearchParams(window.location.search);
   const publicToken = urlParams.get('orderToken');
@@ -57,8 +61,13 @@ const App: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState<ViewMode>(viewFromUrl || 'FIN_DASHBOARD');
+  
+  // Estados de Seleção para Editores
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
+  const [selectedSale, setSelectedSale] = useState<CommercialOrder | null>(null);
   const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
+  
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
   useEffect(() => {
@@ -160,6 +169,29 @@ const App: React.FC = () => {
             onCancel={() => setCurrentView('FIN_CONTACTS')} 
         />;
 
+      case 'SRV_OS_EDITOR':
+        return <ServiceOrderEditor
+            initialData={selectedOS}
+            contacts={data.contacts}
+            serviceItems={data.serviceItems}
+            opticalRxs={data.opticalRxs}
+            settings={effectiveSettings}
+            onSave={async (os) => { await api.saveOS(os); await loadData(true); setCurrentView('SRV_OS'); }}
+            onCancel={() => setCurrentView('SRV_OS')}
+        />;
+
+      case 'SRV_SALE_EDITOR':
+        const prevView = currentView.includes('OPTICAL') ? 'OPTICAL_SALES' : 'SRV_SALES';
+        return <SaleEditor
+            initialData={selectedSale}
+            contacts={data.contacts}
+            serviceItems={data.serviceItems}
+            opticalRxs={data.opticalRxs}
+            settings={effectiveSettings}
+            onSave={async (o) => { await api.saveOrder(o); await loadData(true); setCurrentView(prevView); }}
+            onCancel={() => setCurrentView(prevView)}
+        />;
+
       case 'OPTICAL_RX':
         return <OpticalModule 
           opticalRxs={data.opticalRxs || []} 
@@ -196,6 +228,10 @@ const App: React.FC = () => {
           serviceItems={data.serviceItems}
           opticalRxs={data.opticalRxs}
           settings={effectiveSettings}
+          onAddOS={() => { setSelectedOS(null); setCurrentView('SRV_OS_EDITOR'); }}
+          onEditOS={(os) => { setSelectedOS(os); setCurrentView('SRV_OS_EDITOR'); }}
+          onAddSale={() => { setSelectedSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
+          onEditSale={(sale) => { setSelectedSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
           onSaveOS={async (os) => { await api.saveOS(os); await loadData(true); }} 
           onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }} 
           onSaveOrder={async (o) => { await api.saveOrder(o); await loadData(true); }} 
@@ -269,10 +305,39 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden">
       <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
-        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} notificationCount={0} />
-        <main className="flex-1 overflow-y-auto relative">
-            <div className="p-4 md:p-8 max-w-[1600px] mx-auto">{renderContent()}</div>
+        <Sidebar 
+            currentView={currentView} 
+            onChangeView={setCurrentView} 
+            currentUser={currentUser} 
+            onUserUpdate={setCurrentUser} 
+            notificationCount={0} 
+            isMobileOpen={isMobileMenuOpen}
+            setIsMobileOpen={setIsMobileMenuOpen}
+        />
+        
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            {/* Header Mobile - Apenas visível quando o menu está fechado no Mobile */}
+            <div className="flex md:hidden items-center justify-between p-4 bg-white border-b border-gray-100 shrink-0">
+                <button 
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                    <Hamburger className="w-6 h-6" />
+                </button>
+                <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-white text-[10px] font-black">F</div>
+                    <span className="font-black text-sm text-gray-800 uppercase tracking-tighter">FinManager</span>
+                </div>
+                <div className="w-10"></div> {/* Spacer for symmetry */}
+            </div>
+
+            <div className="flex-1 overflow-y-auto relative scroll-smooth">
+                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+                    {renderContent()}
+                </div>
+            </div>
         </main>
+
         <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
         <LoadingOverlay isVisible={loading} />
       </HelpProvider>
