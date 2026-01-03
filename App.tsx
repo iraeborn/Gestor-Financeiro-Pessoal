@@ -242,7 +242,7 @@ const App: React.FC = () => {
         return <AccessView currentUser={currentUser!} />;
 
       case 'SYS_LOGS':
-        return <LogsView />;
+        return <LogsView currentUser={currentUser!} />;
 
       case 'SYS_SETTINGS':
         return <SettingsView 

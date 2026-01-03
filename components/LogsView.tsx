@@ -1,21 +1,31 @@
 
 import React, { useEffect, useState } from 'react';
-import { AuditLog, NotificationLog } from '../types';
+import { AuditLog, NotificationLog, User as UserType } from '../types';
 import { getAuditLogs, getNotificationLogs, restoreRecord, revertLogChange } from '../services/storageService';
-import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight, MessageSquare, Mail, AlertCircle, Pencil } from 'lucide-react';
+import { ScrollText, RefreshCw, RotateCcw, Clock, User, FileText, CheckCircle, History, AlertTriangle, ArrowRight, MessageSquare, Mail, AlertCircle, Pencil, ShieldCheck, EyeOff, Lock } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
-const LogsView: React.FC = () => {
+interface LogsViewProps {
+    currentUser: UserType;
+}
+
+const SENSITIVE_FIELDS = [
+    'amount', 'balance', 'creditLimit', 'credit_limit', 
+    'pixKey', 'pix_key', 'document', 'phone', 'email',
+    'grossAmount', 'discountAmount', 'taxAmount', 'totalAmount'
+];
+
+const LogsView: React.FC<LogsViewProps> = ({ currentUser }) => {
   const { showAlert } = useAlert();
   const { showConfirm } = useConfirm();
   
   const [activeTab, setActiveTab] = useState<'AUDIT' | 'NOTIFICATIONS'>('AUDIT');
-  
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [notifications, setNotifications] = useState<NotificationLog[]>([]);
-  
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
+
+  const isAdmin = currentUser.role === 'ADMIN' || currentUser.id === currentUser.familyId;
 
   useEffect(() => {
     if (activeTab === 'AUDIT') loadAuditLogs();
@@ -49,7 +59,7 @@ const LogsView: React.FC = () => {
   const handleRestore = async (log: AuditLog) => {
       const isTransaction = log.entity === 'transaction';
       const msg = `Deseja restaurar este registro: "${log.details}"?` + 
-                  (isTransaction ? " O saldo da conta será ajustado automaticamente para refletir esta transação." : "");
+                  (isTransaction ? " O saldo da conta será ajustado automaticamente." : "");
       
       const confirm = await showConfirm({
           title: "Restaurar Registro",
@@ -72,10 +82,7 @@ const LogsView: React.FC = () => {
   };
 
   const handleRevert = async (log: AuditLog) => {
-      const isTransaction = log.entity === 'transaction';
-      const msg = `Deseja desfazer as alterações deste registro? O estado anterior será reaplicado.` +
-                  (isTransaction ? " O sistema tentará ajustar a diferença de valores no saldo da conta, se aplicável." : "");
-
+      const msg = `Deseja desfazer as alterações deste registro? O estado anterior será reaplicado.`;
       const confirm = await showConfirm({
           title: "Reverter Alteração",
           message: msg,
@@ -107,26 +114,16 @@ const LogsView: React.FC = () => {
       }
   };
 
-  const getActionLabel = (action: string) => {
-      switch (action) {
-          case 'CREATE': return 'CRIAÇÃO';
-          case 'UPDATE': return 'EDIÇÃO';
-          case 'DELETE': return 'EXCLUSÃO';
-          case 'RESTORE': return 'RESTAURAÇÃO';
-          case 'REVERT': return 'REVERSÃO';
-          default: return action;
-      }
-  }
+  const maskValue = (key: string, value: any) => {
+      if (isAdmin) return String(value);
+      if (SENSITIVE_FIELDS.includes(key)) return '••••••';
+      return String(value);
+  };
 
-  const getEntityLabel = (entity: string) => {
-      switch(entity) {
-          case 'transaction': return 'Transação';
-          case 'account': return 'Conta';
-          case 'contact': return 'Contato';
-          case 'category': return 'Categoria';
-          case 'user': return 'Usuário';
-          default: return entity;
-      }
+  const filterSensitiveText = (text: string) => {
+      if (isAdmin) return text;
+      // Regex simples para mascarar padrões monetários (Ex: R$ 1.200,00) em textos
+      return text.replace(/R\$\s?(\d{1,3}(\.\d{3})*|\d+)(,\d{2})?/g, 'R$ ••••••');
   };
 
   const formatFieldName = (key: string) => {
@@ -141,39 +138,41 @@ const LogsView: React.FC = () => {
           name: 'Nome',
           balance: 'Saldo',
           contactId: 'Contato',
+          creditLimit: 'Limite',
+          pixKey: 'Chave PIX'
       };
       return map[key] || key;
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                     <ScrollText className="w-6 h-6 text-indigo-600" />
                     Auditoria & Logs
                 </h1>
-                <p className="text-gray-500">Histórico de alterações e notificações do sistema.</p>
+                <p className="text-gray-500">Rastreamento de integridade e conformidade de dados.</p>
             </div>
             
             <div className="flex items-center gap-2">
-                <div className="flex bg-gray-100 p-1 rounded-lg">
+                <div className="flex bg-gray-100 p-1 rounded-xl shadow-sm">
                     <button 
                         onClick={() => setActiveTab('AUDIT')}
-                        className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${activeTab === 'AUDIT' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'AUDIT' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                        Alterações de Dados
+                        Alterações
                     </button>
                     <button 
                         onClick={() => setActiveTab('NOTIFICATIONS')}
-                        className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${activeTab === 'NOTIFICATIONS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`px-5 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'NOTIFICATIONS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                        Histórico de Envios
+                        Envios
                     </button>
                 </div>
                 <button 
                     onClick={activeTab === 'AUDIT' ? loadAuditLogs : loadNotificationLogs} 
-                    className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors shadow-sm ml-2"
+                    className="p-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600 transition-colors shadow-sm ml-2"
                     title="Atualizar Logs"
                 >
                     <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -181,166 +180,129 @@ const LogsView: React.FC = () => {
             </div>
         </div>
 
-        {activeTab === 'AUDIT' && (
-            <>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-                    <p className="text-sm text-amber-800">
-                        <strong>Atenção:</strong> Reverter ou Restaurar transações antigas afeta o saldo atual das contas. O sistema tentará ajustar automaticamente, mas recomendamos conferir seus saldos após realizar estas operações.
+        {/* Banner de Privacidade */}
+        <div className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${isAdmin ? 'bg-indigo-50 border-indigo-100 text-indigo-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+            <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${isAdmin ? 'bg-indigo-600 text-white' : 'bg-amber-600 text-white'}`}>
+                    <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                    <p className="text-sm font-black uppercase tracking-tight">
+                        {isAdmin ? 'Acesso Total de Auditoria' : 'Privacidade de Dados Ativa'}
+                    </p>
+                    <p className="text-xs opacity-80">
+                        {isAdmin 
+                            ? 'Você está visualizando todos os valores históricos brutos conforme registrado no banco.' 
+                            : 'Valores financeiros e dados sensíveis foram ofuscados para sua segurança.'}
                     </p>
                 </div>
-
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    {loading && logs.length === 0 ? (
-                        <div className="p-8 text-center text-gray-400">Carregando histórico...</div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
-                                    <tr>
-                                        <th className="px-6 py-4">Ação</th>
-                                        <th className="px-6 py-4">Registro</th>
-                                        <th className="px-6 py-4">Detalhes da Alteração</th>
-                                        <th className="px-6 py-4">Usuário / Data</th>
-                                        <th className="px-6 py-4 text-right">Opções</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {logs.map(log => (
-                                        <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-4 w-24">
-                                                <span className={`px-2 py-1 rounded-md text-xs font-bold ${getActionColor(log.action)}`}>
-                                                    {getActionLabel(log.action)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 w-48">
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold text-gray-800 truncate max-w-[200px]" title={log.details}>{log.details || 'Sem detalhes'}</span>
-                                                    <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                                                        <FileText className="w-3 h-3" /> {getEntityLabel(log.entity)}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {log.changes ? (
-                                                    <div className="space-y-1">
-                                                        {/* Fix: Assert type for val to resolve unknown property access error */}
-                                                        {Object.entries(log.changes as Record<string, any>).map(([key, val]) => (
-                                                            <div key={key} className="flex items-center gap-2 text-xs">
-                                                                <span className="font-semibold text-gray-500 w-20 truncate">{formatFieldName(key)}:</span>
-                                                                <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">{String(val.old)}</span>
-                                                                <ArrowRight className="w-3 h-3 text-gray-400" />
-                                                                <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">{String(val.new)}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400 text-xs italic">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-2 text-gray-600">
-                                                        <User className="w-3 h-3 text-gray-400" />
-                                                        {log.userName}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-gray-500 text-xs">
-                                                        <Clock className="w-3 h-3 text-gray-300" />
-                                                        {new Date(log.timestamp).toLocaleString('pt-BR')}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                {log.action === 'DELETE' && log.isDeleted && (
-                                                    <button 
-                                                        onClick={() => handleRestore(log)}
-                                                        disabled={processingId === log.id}
-                                                        className="inline-flex items-center gap-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                                                    >
-                                                        {processingId === log.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                                                        Restaurar
-                                                    </button>
-                                                )}
-                                                
-                                                {log.action === 'UPDATE' && log.previousState && !log.isDeleted && (
-                                                    <button 
-                                                        onClick={() => handleRevert(log)}
-                                                        disabled={processingId === log.id}
-                                                        className="inline-flex items-center gap-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                                                    >
-                                                        {processingId === log.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <History className="w-3.5 h-3.5" />}
-                                                        Desfazer
-                                                    </button>
-                                                )}
-
-                                                {log.action === 'RESTORE' && <span className="text-emerald-600 text-xs flex items-center justify-end gap-1"><CheckCircle className="w-3.5 h-3.5" /> Restaurado</span>}
-                                                {log.action === 'REVERT' && <span className="text-purple-600 text-xs flex items-center justify-end gap-1"><RotateCcw className="w-3.5 h-3.5" /> Revertido</span>}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {logs.length === 0 && (
-                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Nenhum registro de auditoria encontrado.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+            </div>
+            {!isAdmin && (
+                <div className="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-lg border border-amber-200/50">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">LGPD Compliance</span>
                 </div>
-            </>
-        )}
+            )}
+        </div>
 
-        {activeTab === 'NOTIFICATIONS' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {loading && notifications.length === 0 ? (
-                    <div className="p-8 text-center text-gray-400">Carregando notificações...</div>
+        {activeTab === 'AUDIT' && (
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                {loading && logs.length === 0 ? (
+                    <div className="p-20 text-center flex flex-col items-center gap-4">
+                        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+                        <p className="text-gray-400 font-medium">Sincronizando trilha de auditoria...</p>
+                    </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] tracking-widest border-b border-gray-100">
                                 <tr>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4">Canal</th>
-                                    <th className="px-6 py-4">Destinatário</th>
-                                    <th className="px-6 py-4">Mensagem</th>
-                                    <th className="px-6 py-4">Enviado por</th>
+                                    <th className="px-6 py-5">Ação</th>
+                                    <th className="px-6 py-5">Registro</th>
+                                    <th className="px-6 py-5">Trilha de Valores</th>
+                                    <th className="px-6 py-5">Autor & Data</th>
+                                    {isAdmin && <th className="px-6 py-5 text-right">Controle</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {notifications.map(notif => (
-                                    <tr key={notif.id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="px-6 py-4 w-24">
-                                            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-bold ${notif.status === 'SENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                {notif.status === 'SENT' ? <CheckCircle className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
-                                                {notif.status === 'SENT' ? 'ENVIADO' : 'FALHA'}
+                                {logs.map(log => (
+                                    <tr key={log.id} className="hover:bg-gray-50/50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter shadow-sm border ${getActionColor(log.action)}`}>
+                                                {log.action}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 text-gray-600 font-medium">
-                                                {notif.channel === 'EMAIL' ? <Mail className="w-4 h-4 text-blue-500"/> : <MessageSquare className="w-4 h-4 text-emerald-500"/>}
-                                                {notif.channel}
+                                            <div className="flex flex-col max-w-[250px]">
+                                                <span className="font-bold text-gray-800 truncate" title={log.details}>
+                                                    {filterSensitiveText(log.details || 'Sem detalhes')}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 font-black uppercase flex items-center gap-1 mt-1">
+                                                    <FileText className="w-3 h-3" /> {log.entity}
+                                                </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-600">{notif.recipient}</td>
-                                        <td className="px-6 py-4 max-w-xs">
-                                            <p className="font-medium text-gray-800 truncate" title={notif.subject}>{notif.subject}</p>
-                                            <p className="text-xs text-gray-400 truncate" title={notif.content}>{notif.content}</p>
+                                        <td className="px-6 py-4">
+                                            {log.changes ? (
+                                                <div className="space-y-1.5 py-1">
+                                                    {Object.entries(log.changes as Record<string, any>).map(([key, val]) => (
+                                                        <div key={key} className="flex items-center gap-2 text-[11px]">
+                                                            <span className="font-black text-gray-400 uppercase tracking-tighter w-20 truncate">{formatFieldName(key)}:</span>
+                                                            <div className="flex items-center gap-1 bg-white border border-gray-100 rounded-lg px-2 py-0.5 shadow-sm">
+                                                                <span className="text-rose-400 line-through opacity-60 font-medium">{maskValue(key, val.old)}</span>
+                                                                <ArrowRight className="w-3 h-3 text-gray-300" />
+                                                                <span className="text-emerald-600 font-black">{maskValue(key, val.new)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-300 text-xs italic tracking-widest font-bold">HISTÓRICO ESTÁTICO</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2 text-gray-600">
-                                                    <User className="w-3 h-3 text-gray-400" />
-                                                    {notif.userName}
+                                                <div className="flex items-center gap-2 text-gray-700 font-bold">
+                                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px]">{log.userName?.charAt(0)}</div>
+                                                    {log.userName}
                                                 </div>
-                                                <div className="flex items-center gap-2 text-gray-500 text-xs">
-                                                    <Clock className="w-3 h-3 text-gray-300" />
-                                                    {new Date(notif.createdAt).toLocaleString('pt-BR')}
+                                                <div className="flex items-center gap-2 text-gray-400 text-[10px] font-medium ml-8">
+                                                    <Clock className="w-3 h-3" />
+                                                    {new Date(log.timestamp).toLocaleString('pt-BR')}
                                                 </div>
                                             </div>
                                         </td>
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {log.action === 'DELETE' && log.isDeleted && (
+                                                        <button 
+                                                            onClick={() => handleRestore(log)}
+                                                            disabled={processingId === log.id}
+                                                            className="flex items-center gap-1.5 text-amber-600 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border border-amber-200"
+                                                        >
+                                                            {processingId === log.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                                                            Restaurar
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {log.action === 'UPDATE' && log.previousState && !log.isDeleted && (
+                                                        <button 
+                                                            onClick={() => handleRevert(log)}
+                                                            disabled={processingId === log.id}
+                                                            className="flex items-center gap-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border border-blue-200"
+                                                        >
+                                                            {processingId === log.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
+                                                            Desfazer
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
-                                {notifications.length === 0 && (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Nenhum envio registrado.</td></tr>
+                                {logs.length === 0 && (
+                                    <tr><td colSpan={5} className="px-6 py-20 text-center text-gray-300 font-bold uppercase tracking-widest text-xs italic">Nenhum rastro de auditoria encontrado.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -348,8 +310,67 @@ const LogsView: React.FC = () => {
                 )}
             </div>
         )}
+
+        {activeTab === 'NOTIFICATIONS' && (
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] tracking-widest border-b border-gray-100">
+                            <tr>
+                                <th className="px-6 py-5">Status</th>
+                                <th className="px-6 py-5">Canal</th>
+                                <th className="px-6 py-5">Destinatário</th>
+                                <th className="px-6 py-5">Mensagem</th>
+                                <th className="px-6 py-5">Autor</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {notifications.map(notif => (
+                                <tr key={notif.id} className="hover:bg-gray-50/50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <span className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter border ${notif.status === 'SENT' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                            {notif.status === 'SENT' ? <CheckCircle className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
+                                            {notif.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2 text-gray-600 font-black text-[10px] uppercase">
+                                            {notif.channel === 'EMAIL' ? <Mail className="w-4 h-4 text-blue-500"/> : <MessageSquare className="w-4 h-4 text-emerald-500"/>}
+                                            {notif.channel}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-gray-600 font-medium">{isAdmin ? notif.recipient : '••••••'}</td>
+                                    <td className="px-6 py-4 max-w-xs">
+                                        <p className="font-bold text-gray-800 truncate">{notif.subject}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium truncate mt-1">{filterSensitiveText(notif.content)}</p>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2 text-gray-700 font-bold">
+                                                <User className="w-3.5 h-3.5 text-gray-300" />
+                                                {notif.userName}
+                                            </div>
+                                            <div className="text-[10px] text-gray-400 ml-5 font-medium">
+                                                {new Date(notif.createdAt).toLocaleString('pt-BR')}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {notifications.length === 0 && (
+                                <tr><td colSpan={5} className="px-6 py-20 text-center text-gray-300 font-bold uppercase tracking-widest text-xs italic">Nenhum envio registrado.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
+
+const Loader2 = ({ className }: { className?: string }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+);
 
 export default LogsView;
