@@ -56,7 +56,7 @@ app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
-app.use('/api/billing', billingRoutes(logAudit));
+app.use('/api', billingRoutes(logAudit));
 
 // --- Static Files Logic ---
 const rootPath = process.cwd();
@@ -78,11 +78,6 @@ const staticOptions = {
     }
 };
 
-// Ordem de busca: 1. Compilados (dist), 2. Públicos, 3. Raiz
-app.use(express.static(distPath, staticOptions));
-app.use(express.static(publicPath, staticOptions));
-app.use(express.static(rootPath, staticOptions));
-
 const renderIndex = (req, res) => {
     const pathsToTry = [
         path.join(distPath, 'index.html'),
@@ -100,23 +95,36 @@ const renderIndex = (req, res) => {
             googleId = "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
         }
         
-        content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
-        content = content.replace("__API_KEY__", process.env.API_KEY || "");
-        content = content.replace("__PAGARME_ENC_KEY__", process.env.PAGARME_ENC_KEY || "");
+        content = content.replace(/__GOOGLE_CLIENT_ID__/g, googleId);
+        content = content.replace(/__API_KEY__/g, process.env.API_KEY || "");
+        content = content.replace(/__PAGARME_ENC_KEY__/g, process.env.PAGARME_ENC_KEY || "");
         
+        // Forçar cabeçalhos de não-cache para o index.html para evitar IDs antigos no navegador
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Content-Type': 'text/html; charset=utf-8'
+        });
+
         res.send(content);
     } else {
         res.status(404).send('Aguardando inicialização do sistema (index.html não encontrado)...');
     }
 };
 
+// Rota raiz e rotas de navegação devem vir ANTES do static para o index.html
 app.get('/', renderIndex);
+
+// Servir arquivos estáticos (exceto index.html que já tratamos)
+app.use(express.static(distPath, { ...staticOptions, index: false }));
+app.use(express.static(publicPath, { ...staticOptions, index: false }));
+app.use(express.static(rootPath, { ...staticOptions, index: false }));
 
 app.get('*', (req, res) => {
     const isApiRequest = req.path.startsWith('/api/');
     const hasExtension = path.extname(req.path) !== '';
 
-    // Se pedir um arquivo com extensão que não foi pego no static, é 404
     if (isApiRequest || hasExtension) {
         return res.status(404).end();
     }

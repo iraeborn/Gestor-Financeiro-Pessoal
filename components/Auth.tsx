@@ -43,10 +43,14 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   useEffect(() => {
     const win = window as any;
     const rawId = win.GOOGLE_CLIENT_ID;
+    
+    // Debug Log para o desenvolvedor ver no console do navegador (F12)
+    console.log("[Google Auth] Client ID detectado na Window:", rawId);
+
     const clientId = (rawId && rawId !== "__GOOGLE_CLIENT_ID__" && rawId !== "") ? rawId : null;
     
     if (!clientId) {
-      console.warn("Google Client ID inválido ou ausente.");
+      console.error("[Google Auth] Client ID inválido ou ausente. O botão não carregará.");
       setGoogleStatus('ERROR');
       return;
     }
@@ -54,15 +58,17 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     let intervalId: any;
     const timeoutId = setTimeout(() => {
         if (googleStatus === 'LOADING') {
+            console.warn("[Google Auth] Timeout ao carregar SDK. Verifique conectividade ou script no index.html");
             setGoogleStatus('ERROR');
             if (intervalId) clearInterval(intervalId);
         }
-    }, 6000); // 6 segundos de tolerância
+    }, 8000); // 8 segundos para ser generoso com conexões lentas
 
     const tryInit = () => {
       if (win.google?.accounts?.id && googleBtnRef.current) {
         try {
           if (!isGoogleInitialized.current) {
+            console.log("[Google Auth] Inicializando SDK com ID:", clientId);
             win.google.accounts.id.initialize({
               client_id: clientId,
               callback: handleGoogleCallback,
@@ -78,11 +84,12 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             width: 350, 
             text: mode === 'LOGIN' ? "signin_with" : "signup_with" 
           });
+          
           setGoogleStatus('READY');
           if (intervalId) clearInterval(intervalId);
           clearTimeout(timeoutId);
         } catch (e) {
-          console.error("Falha na renderização do Google Button:", e);
+          console.error("[Google Auth] Falha na renderização:", e);
           setGoogleStatus('ERROR');
         }
       }
