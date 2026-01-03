@@ -8,12 +8,13 @@ import {
   AppNotification, OpticalRx, FinancialGoal, Branch
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
+import { localDb } from './services/localDb';
+import { syncService } from './services/syncService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { io } from 'socket.io-client';
-import { Menu as Hamburger } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
-// Componentes
-import Auth from './components/Auth';
+// UI Components Imports
+import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import TransactionsView from './components/TransactionsView';
 import CalendarView from './components/CalendarView';
@@ -21,26 +22,19 @@ import AccountsView from './components/AccountsView';
 import CreditCardsView from './components/CreditCardsView';
 import GoalsView from './components/GoalsView';
 import Reports from './components/Reports';
-import CategoriesView from './components/CategoriesView';
-import ContactsView from './components/ContactsView';
-import ContactEditor from './components/ContactEditor';
-import ServiceOrderEditor from './components/ServiceOrderEditor';
-import SaleEditor from './components/SaleEditor';
 import SmartAdvisor from './components/SmartAdvisor';
 import DiagnosticView from './components/DiagnosticView';
+import CategoriesView from './components/CategoriesView';
+import ContactsView from './components/ContactsView';
 import AccessView from './components/AccessView';
 import LogsView from './components/LogsView';
 import SettingsView from './components/SettingsView';
-import Sidebar from './components/Sidebar';
-import CollaborationModal from './components/CollaborationModal';
-import ServiceModule from './components/ServiceModule';
 import OpticalModule from './components/OpticalModule';
-import OpticalRxEditor from './components/OpticalRxEditor';
-import ServicesView from './components/ServicesView';
-import BranchesView from './components/BranchesView';
-import BranchScheduleView from './components/BranchScheduleView';
-import PublicOrderView from './components/PublicOrderView';
+import ServiceModule from './components/ServiceModule';
+import Auth from './components/Auth';
+import LandingPage from './components/LandingPage';
 import LoadingOverlay from './components/LoadingOverlay';
+import PublicOrderView from './components/PublicOrderView';
 import { HelpProvider } from './components/GuidedHelp';
 
 const App: React.FC = () => {
@@ -48,283 +42,105 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'syncing' | 'online' | 'offline'>(navigator.onLine ? 'online' : 'offline');
   
-  const urlParams = new URLSearchParams(window.location.search);
-  const publicToken = urlParams.get('orderToken');
-  const viewFromUrl = urlParams.get('view') as ViewMode;
+  // Fix: Defined missing state variables
+  const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
+  const [state, setState] = useState<AppState | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [data, setData] = useState<AppState>({
-    accounts: [], transactions: [], goals: [], contacts: [], categories: [],
-    branches: [], costCenters: [], departments: [], projects: [],
-    serviceClients: [], serviceItems: [], serviceAppointments: [],
-    serviceOrders: [], commercialOrders: [], contracts: [], invoices: [],
-    opticalRxs: []
-  });
-  
-  const [loading, setLoading] = useState(false);
-  const [currentView, setCurrentView] = useState<ViewMode>(viewFromUrl || 'FIN_DASHBOARD');
-  
-  // Estados de Seleção para Editores
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
-  const [selectedSale, setSelectedSale] = useState<CommercialOrder | null>(null);
-  const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
-  
-  const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
+  // Fix: Defined missing publicToken helper
+  const publicToken = new URLSearchParams(window.location.search).get('orderToken');
 
-  useEffect(() => {
-    if (!publicToken) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', currentView);
-      window.history.pushState({}, '', url);
-    }
-  }, [currentView, publicToken]);
-
-  const loadData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const initialData = await loadInitialData();
-      if (initialData) setData(initialData);
-      return initialData;
-    } catch (e) {
-      return null;
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
-
+  // Fix: Defined missing checkAuth function
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
-    if (token) {
-      setLoading(true);
-      try {
-        const user = await refreshUser();
-        setCurrentUser(user);
-        await loadData(true);
-      } catch (e) {
-        localStorage.removeItem('token');
-      } finally {
+    if (!token) {
+        setAuthChecked(true);
         setLoading(false);
-      }
+        return;
     }
-    setAuthChecked(true);
+    try {
+        const { user } = await refreshUser();
+        setCurrentUser(user);
+        const data = await loadInitialData();
+        setState(data);
+    } catch (e) {
+        localStorage.removeItem('token');
+        setCurrentUser(null);
+    } finally {
+        setAuthChecked(true);
+        setLoading(false);
+    }
   };
 
-  useEffect(() => { if (!publicToken) checkAuth(); }, []);
+  useEffect(() => {
+    const initApp = async () => {
+        await localDb.init();
+        
+        // Listeners de Conectividade
+        window.addEventListener('online', () => syncService.triggerSync());
+        window.addEventListener('offline', () => setSyncStatus('offline'));
+        
+        syncService.onStatusChange(status => setSyncStatus(status));
 
-  const effectiveSettings = useMemo(() => {
-    if (!currentUser) return undefined;
-    const familyId = currentUser.familyId;
-    const ws = currentUser.workspaces?.find(w => w.id === familyId);
-    return ws?.ownerSettings || currentUser.settings;
-  }, [currentUser]);
+        if (!publicToken) {
+            await checkAuth();
+        } else {
+            setAuthChecked(true);
+            setLoading(false);
+        }
+    };
+    initApp();
+  }, [publicToken]);
 
-  const handleSaveTransaction = async (t: any) => {
-      await api.saveTransaction(t);
-      await loadData(true);
+  const handleUpdateStatus = async (t: Transaction) => {
+    const newStatus = t.status === 'PAID' ? 'PENDING' : 'PAID';
+    await api.saveTransaction({ ...t, status: newStatus as any });
+    const data = await loadInitialData();
+    setState(data);
   };
 
+  // Fix: Defined missing renderContent function to handle view switching
   const renderContent = () => {
+    if (!state || !currentUser) return null;
+
+    const commonProps = {
+        state,
+        settings: currentUser.settings,
+        currentUser,
+        onAddTransaction: (t: any) => api.saveTransaction(t).then(() => loadInitialData().then(setState)),
+        onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(() => loadInitialData().then(setState)),
+        onEditTransaction: (t: any) => api.saveTransaction(t).then(() => loadInitialData().then(setState)),
+        onUpdateStatus: handleUpdateStatus,
+        onChangeView: setCurrentView
+    };
+
     switch (currentView) {
-      case 'FIN_DASHBOARD':
-        return <Dashboard state={data} settings={effectiveSettings} currentUser={currentUser || undefined} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
-      
-      case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser?.entityType} branches={data.branches} costCenters={data.costCenters} departments={data.departments} projects={data.projects} onDelete={async id => { await api.deleteTransaction(id); loadData(true); }} onEdit={handleSaveTransaction} onToggleStatus={handleSaveTransaction} onAdd={handleSaveTransaction} />;
-
-      case 'FIN_CALENDAR':
-        return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleSaveTransaction} onEdit={handleSaveTransaction} />;
-
-      case 'FIN_ACCOUNTS':
-        return <AccountsView accounts={data.accounts} onSaveAccount={async (a) => { await api.saveAccount(a); loadData(true); }} onDeleteAccount={async (id) => { await api.deleteAccount(id); loadData(true); }} />;
-
-      case 'FIN_CARDS':
-        return <CreditCardsView accounts={data.accounts} transactions={data.transactions} contacts={data.contacts} categories={data.categories} onSaveAccount={async (a) => { await api.saveAccount(a); loadData(true); }} onDeleteAccount={async (id) => { await api.deleteAccount(id); loadData(true); }} onAddTransaction={handleSaveTransaction} />;
-
-      case 'FIN_GOALS':
-        return <GoalsView goals={data.goals} accounts={data.accounts} transactions={data.transactions} onSaveGoal={async (g) => { await api.saveGoal(g); loadData(true); }} onDeleteGoal={async (id) => { await api.deleteGoal(id); loadData(true); }} onAddTransaction={handleSaveTransaction} />;
-
-      case 'FIN_REPORTS':
-        return <Reports transactions={data.transactions} />;
-
-      case 'FIN_ADVISOR':
-        return <SmartAdvisor data={data} />;
-
-      case 'FIN_CATEGORIES':
-        return <CategoriesView categories={data.categories} onSaveCategory={async (c) => { await api.saveCategory(c); loadData(true); }} onDeleteCategory={async (id) => { await api.deleteCategory(id); loadData(true); }} />;
-
-      case 'FIN_CONTACTS':
-      case 'SRV_CLIENTS':
-      case 'SYS_CONTACTS':
-        return <ContactsView 
-          contacts={data.contacts} 
-          onAddContact={() => { setSelectedContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} 
-          onEditContact={(c) => { setSelectedContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} 
-          onDeleteContact={async (id) => { await api.deleteContact(id); loadData(true); }} 
-        />;
-
-      case 'FIN_CONTACT_EDITOR':
-        return <ContactEditor 
-            initialData={selectedContact} 
-            settings={effectiveSettings}
-            onSave={async (c) => { await api.saveContact(c); await loadData(true); setCurrentView('FIN_CONTACTS'); }} 
-            onCancel={() => setCurrentView('FIN_CONTACTS')} 
-        />;
-
-      case 'SRV_OS_EDITOR':
-        return <ServiceOrderEditor
-            initialData={selectedOS}
-            contacts={data.contacts}
-            serviceItems={data.serviceItems}
-            opticalRxs={data.opticalRxs}
-            branches={data.branches}
-            settings={effectiveSettings}
-            onSave={async (os) => { await api.saveOS(os); await loadData(true); setCurrentView('SRV_OS'); }}
-            onCancel={() => setCurrentView('SRV_OS')}
-        />;
-
-      case 'SRV_SALE_EDITOR':
-        const prevView = currentView.includes('OPTICAL') ? 'OPTICAL_SALES' : 'SRV_SALES';
-        return <SaleEditor
-            initialData={selectedSale}
-            contacts={data.contacts}
-            serviceItems={data.serviceItems}
-            opticalRxs={data.opticalRxs}
-            branches={data.branches}
-            settings={effectiveSettings}
-            onSave={async (o) => { await api.saveOrder(o); await loadData(true); setCurrentView(prevView); }}
-            onCancel={() => setCurrentView(prevView)}
-        />;
-
-      case 'OPTICAL_RX':
-        return <OpticalModule 
-          opticalRxs={data.opticalRxs || []} 
-          contacts={data.contacts} 
-          onAddRx={() => { setSelectedRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }}
-          onEditRx={(rx) => { setSelectedRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }}
-          onDeleteRx={async (id) => { await api.deleteOpticalRx(id); await loadData(true); }}
-        />;
-
-      case 'OPTICAL_RX_EDITOR':
-        return <OpticalRxEditor 
-            contacts={data.contacts} 
-            branches={data.branches}
-            initialData={selectedRx} 
-            onSave={async (rx) => { await api.saveOpticalRx(rx); await loadData(true); showAlert("Receita salva!", "success"); setCurrentView('OPTICAL_RX'); }} 
-            onCancel={() => setCurrentView('OPTICAL_RX')} 
-        />;
-
-      case 'SRV_OS':
-      case 'SRV_SALES':
-      case 'SRV_PURCHASES':
-      case 'SRV_CATALOG':
-      case 'SRV_CONTRACTS':
-      case 'SRV_NF':
-      case 'OPTICAL_SALES':
-      case 'OPTICAL_LAB':
-        return <ServicesView 
-          currentView={currentView} 
-          serviceOrders={data.serviceOrders} 
-          commercialOrders={data.commercialOrders} 
-          contracts={data.contracts} 
-          invoices={data.invoices} 
-          contacts={data.contacts} 
-          accounts={data.accounts} 
-          serviceItems={data.serviceItems}
-          opticalRxs={data.opticalRxs}
-          settings={effectiveSettings}
-          onAddOS={() => { setSelectedOS(null); setCurrentView('SRV_OS_EDITOR'); }}
-          onEditOS={(os) => { setSelectedOS(os); setCurrentView('SRV_OS_EDITOR'); }}
-          onAddSale={() => { setSelectedSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
-          onEditSale={(sale) => { setSelectedSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
-          onSaveOS={async (os) => { await api.saveOS(os); await loadData(true); }} 
-          onDeleteOS={async (id) => { await api.deleteOS(id); await loadData(true); }} 
-          onSaveOrder={async (o) => { await api.saveOrder(o); await loadData(true); }} 
-          onDeleteOrder={async (id) => { await api.deleteOrder(id); await loadData(true); }} 
-          onSaveContract={async (c) => { await api.saveContract(c); await loadData(true); }} 
-          onDeleteContract={async (id) => { await api.deleteContract(id); await loadData(true); }} 
-          onSaveInvoice={async (i) => { await api.saveInvoice(i); await loadData(true); }} 
-          onDeleteInvoice={async (id) => { await api.deleteInvoice(id); await loadData(true); }} 
-          onAddTransaction={handleSaveTransaction} 
-          onSaveCatalogItem={async (i) => { await api.saveCatalogItem(i); await loadData(true); }} 
-          onDeleteCatalogItem={async (id) => { await api.deleteCatalogItem(id); await loadData(true); }} 
-        />;
-
-      case 'SYS_BRANCHES':
-        return <BranchesView
-            branches={data.branches}
-            onSaveBranch={async (b) => { await api.savePJEntity('branch', b); await loadData(true); }}
-            onDeleteBranch={async (id) => { await api.deletePJEntity('branch', id); await loadData(true); }}
-            onManageSchedule={(b) => { setSelectedBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }}
-        />;
-
-      case 'SRV_BRANCH_SCHEDULE':
-        return <BranchScheduleView
-            branch={selectedBranch!}
-            appointments={data.serviceAppointments}
-            clients={data.serviceClients}
-            onSaveAppointment={async (a) => { await api.saveAppointment(a); await loadData(true); }}
-            onDeleteAppointment={async (id) => { await api.deleteAppointment(id); await loadData(true); }}
-            onBack={() => setCurrentView('SYS_BRANCHES')}
-        />;
-
-      case 'ODONTO_AGENDA':
-      case 'ODONTO_PATIENTS':
-      case 'ODONTO_PROCEDURES':
-        return <ServiceModule 
-            moduleTitle="Odontologia" 
-            clientLabel="Paciente" 
-            serviceLabel="Procedimento" 
-            transactionCategory="Serviços Odontológicos"
-            activeSection={currentView === 'ODONTO_AGENDA' ? 'CALENDAR' : currentView === 'ODONTO_PATIENTS' ? 'CLIENTS' : 'SERVICES'}
-            clients={data.serviceClients}
-            services={data.serviceItems.filter(i => i.moduleTag === 'odonto')}
-            appointments={data.serviceAppointments}
-            contacts={data.contacts}
-            accounts={data.accounts}
-            onSaveClient={async (c) => { await api.saveServiceClient(c); loadData(true); }}
-            onDeleteClient={async (id) => { await api.deleteServiceClient(id); loadData(true); }}
-            onSaveService={async (s) => { await api.saveCatalogItem({...s, moduleTag: 'odonto'}); loadData(true); }}
-            onDeleteService={async (id) => { await api.deleteCatalogItem(id); loadData(true); }}
-            onSaveAppointment={async (a) => { await api.saveAppointment(a); loadData(true); }}
-            onDeleteAppointment={async (id) => { await api.deleteAppointment(id); loadData(true); }}
-            onAddTransaction={handleSaveTransaction}
-        />;
-
-      case 'DIAG_HUB':
-      case 'DIAG_HEALTH':
-      case 'DIAG_RISK':
-      case 'DIAG_INVEST':
-        return <DiagnosticView state={data} />;
-
-      case 'SYS_ACCESS':
-        return <AccessView currentUser={currentUser!} />;
-
-      case 'SYS_LOGS':
-        return <LogsView currentUser={currentUser!} />;
-
-      case 'SYS_SETTINGS':
-        return <SettingsView 
-            user={currentUser!} 
-            pjData={{
-                companyProfile: data.companyProfile,
-                branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects
-            }}
-            onUpdateSettings={async (s) => { await updateSettings(s); checkAuth(); }}
-            onOpenCollab={() => setIsCollabModalOpen(true)}
-            onSavePJEntity={async (type, payload) => { await api.savePJEntity(type, payload); loadData(true); }}
-            onDeletePJEntity={async (type, id) => { await api.deletePJEntity(type, id); loadData(true); }}
-        />;
-
-      default:
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
+      case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
+      case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onEditTransaction} onToggleStatus={handleUpdateStatus} />;
+      case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts} onSaveAccount={(a) => api.saveAccount(a).then(() => loadInitialData().then(setState))} onDeleteAccount={(id) => api.deleteAccount(id).then(() => loadInitialData().then(setState))} />;
+      case 'FIN_ADVISOR': return <SmartAdvisor data={state} />;
+      case 'DIAG_HUB': return <DiagnosticView state={state} />;
+      case 'FIN_CARDS': return <CreditCardsView accounts={state.accounts} transactions={state.transactions} contacts={state.contacts} categories={state.categories} onSaveAccount={(a) => api.saveAccount(a).then(() => loadInitialData().then(setState))} onDeleteAccount={(id) => api.deleteAccount(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
+      case 'FIN_GOALS': return <GoalsView goals={state.goals} accounts={state.accounts} transactions={state.transactions} onSaveGoal={(g) => api.saveGoal(g).then(() => loadInitialData().then(setState))} onDeleteGoal={(id) => api.deleteGoal(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
+      case 'FIN_REPORTS': return <Reports transactions={state.transactions} />;
+      case 'FIN_CATEGORIES': return <CategoriesView categories={state.categories} onSaveCategory={(c) => api.saveCategory(c).then(() => loadInitialData().then(setState))} onDeleteCategory={(id) => api.deleteCategory(id).then(() => loadInitialData().then(setState))} />;
+      case 'FIN_CONTACTS': return <ContactsView contacts={state.contacts} onAddContact={() => {}} onEditContact={() => {}} onDeleteContact={(id) => api.deleteContact(id).then(() => loadInitialData().then(setState))} />;
+      case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: state.costCenters, departments: state.departments, projects: state.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(() => loadInitialData().then(setState))} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(() => loadInitialData().then(setState))} />;
+      case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
+      case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
+      case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} onAddRx={() => {}} onEditRx={() => {}} onDeleteRx={(id) => api.deleteOpticalRx(id).then(() => loadInitialData().then(setState))} />;
+      case 'ODONTO_AGENDA': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CALENDAR" clients={state.serviceClients} services={state.serviceItems} appointments={state.serviceAppointments} contacts={state.contacts} accounts={state.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(() => loadInitialData().then(setState))} onDeleteClient={(id) => api.deleteServiceClient(id).then(() => loadInitialData().then(setState))} onSaveService={(s) => api.saveCatalogItem(s).then(() => loadInitialData().then(setState))} onDeleteService={(id) => api.deleteCatalogItem(id).then(() => loadInitialData().then(setState))} onSaveAppointment={(a) => api.saveAppointment(a).then(() => loadInitialData().then(setState))} onDeleteAppointment={(id) => api.deleteAppointment(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
+      default: return <Dashboard {...commonProps} />;
     }
   };
 
-  if (!currentUser && !authChecked) return null;
-  if (!currentUser) return <Auth onLoginSuccess={() => checkAuth()} />;
+  if (!authChecked) return <LoadingOverlay isVisible={true} />;
+  
   if (publicToken) return <PublicOrderView token={publicToken} />;
+  
+  if (!currentUser) return <LandingPage onGetStarted={() => {}} onLogin={() => {}} />;
 
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden">
@@ -334,24 +150,20 @@ const App: React.FC = () => {
             onChangeView={setCurrentView} 
             currentUser={currentUser} 
             onUserUpdate={setCurrentUser} 
-            notificationCount={0} 
             isMobileOpen={isMobileMenuOpen}
             setIsMobileOpen={setIsMobileMenuOpen}
         />
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            <div className="flex md:hidden items-center justify-between p-4 bg-white border-b border-gray-100 shrink-0">
-                <button 
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                    <Hamburger className="w-6 h-6" />
-                </button>
-                <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-white text-[10px] font-black">F</div>
-                    <span className="font-black text-sm text-gray-800 uppercase tracking-tighter">FinManager</span>
-                </div>
-                <div className="w-10"></div>
+            {/* Sync Bar */}
+            <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
+                syncStatus === 'offline' ? 'bg-rose-500 text-white' : 
+                syncStatus === 'syncing' ? 'bg-indigo-600 text-white' : 
+                'bg-emerald-500 text-white'
+            }`}>
+                {syncStatus === 'offline' && <><WifiOff className="w-3 h-3" /> Modo Offline Ativo</>}
+                {syncStatus === 'syncing' && <><RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando Dados...</>}
+                {syncStatus === 'online' && <><Wifi className="w-3 h-3" /> Sistema Sincronizado</>}
             </div>
 
             <div className="flex-1 overflow-y-auto relative scroll-smooth">
@@ -360,9 +172,6 @@ const App: React.FC = () => {
                 </div>
             </div>
         </main>
-
-        <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
-        <LoadingOverlay isVisible={loading} />
       </HelpProvider>
     </div>
   );
