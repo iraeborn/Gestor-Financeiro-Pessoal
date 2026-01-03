@@ -22,30 +22,21 @@ const numericFields = [
 
 /**
  * Converte um objeto com chaves snake_case para camelCase
- * e garante que campos decimais sejam números.
  */
 const mapToFrontend = (row) => {
     if (!row) return row;
     const newRow = {};
-    
     for (const key in row) {
-        // Converte snake_case para camelCase
         const camelKey = key.replace(/([-_][a-z])/ig, ($1) => {
             return $1.toUpperCase().replace('-', '').replace('_', '');
         });
-
         let value = row[key];
-
-        // Trata campos numéricos (DECIMAL no PG vem como string)
         if (numericFields.includes(key)) {
             value = value === null ? 0 : Number(value);
         }
-
-        // Trata datas para string limpa YYYY-MM-DD se necessário
         if (value instanceof Date) {
             value = value.toISOString().split('T')[0];
         }
-
         newRow[camelKey] = value;
     }
     return newRow;
@@ -58,10 +49,134 @@ export default function(logAudit) {
         return res.rows[0]?.family_id || userId;
     };
 
+    // --- ENDPOINT DE SINCRONIZAÇÃO (PWA) ---
+    router.post('/sync/process', authenticateToken, async (req, res) => {
+        const { action, store, payload } = req.body;
+        const userId = req.user.id;
+        const client = await pool.connect();
+        
+        try {
+            const familyId = await getFamilyId(userId);
+            await client.query('BEGIN');
+
+            const tableMap = {
+                'accounts': 'accounts',
+                'transactions': 'transactions',
+                'goals': 'goals',
+                'contacts': 'contacts',
+                'categories': 'categories',
+                'branches': 'branches',
+                'costCenters': 'cost_centers',
+                'departments': 'departments',
+                'projects': 'projects',
+                'serviceClients': 'service_clients',
+                'serviceItems': 'module_services',
+                'serviceAppointments': 'service_appointments',
+                'serviceOrders': 'service_orders',
+                'commercialOrders': 'commercial_orders',
+                'contracts': 'contracts',
+                'invoices': 'invoices',
+                'opticalRxs': 'optical_rxs'
+            };
+
+            const tableName = tableMap[store];
+            if (!tableName) throw new Error(`Store ${store} não mapeado no servidor.`);
+
+            if (action === 'DELETE') {
+                await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
+                // Se for transação, precisamos reverter o saldo
+                if (store === 'transactions') {
+                    const tRes = await client.query('SELECT * FROM transactions WHERE id = $1', [payload.id]);
+                    const t = tRes.rows[0];
+                    if (t && t.status === 'PAID') {
+                        await updateAccountBalance(client, t.account_id, t.amount, t.type, true);
+                        if (t.type === 'TRANSFER' && t.destination_account_id) {
+                            await updateAccountBalance(client, t.destination_account_id, t.amount, 'INCOME', true);
+                        }
+                    }
+                }
+            } else if (action === 'SAVE') {
+                if (store === 'transactions') {
+                    // Lógica específica de transação para manter integridade do saldo
+                    const id = payload.id;
+                    const existingRes = await client.query('SELECT * FROM transactions WHERE id = $1', [id]);
+                    const oldT = existingRes.rows[0];
+
+                    // Se já existia e era paga, reverte o saldo antigo antes de aplicar o novo
+                    if (oldT && oldT.status === 'PAID') {
+                        await updateAccountBalance(client, oldT.account_id, oldT.amount, oldT.type, true);
+                        if (oldT.type === 'TRANSFER' && oldT.destination_account_id) {
+                            await updateAccountBalance(client, oldT.destination_account_id, oldT.amount, 'INCOME', true);
+                        }
+                    }
+
+                    await client.query(
+                        `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, goal_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date, receipt_urls, branch_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                         ON CONFLICT (id) DO UPDATE SET 
+                            description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, 
+                            account_id=$8, destination_account_id=$9, contact_id=$10, goal_id=$11, 
+                            family_id=$13, is_recurring=$14, recurrence_frequency=$15, recurrence_end_date=$16, receipt_urls=$17, branch_id=$18, deleted_at=NULL`,
+                        [
+                            id, payload.description, payload.amount, payload.type, payload.category, payload.date, payload.status, 
+                            payload.accountId, sanitizeValue(payload.destinationAccountId), sanitizeValue(payload.contactId), 
+                            sanitizeValue(payload.goalId), userId, familyId, payload.isRecurring || false,
+                            sanitizeValue(payload.recurrenceFrequency), sanitizeValue(payload.recurrenceEndDate),
+                            JSON.stringify(payload.receiptUrls || []), sanitizeValue(payload.branchId)
+                        ]
+                    );
+
+                    // Se a nova versão é paga, aplica o saldo
+                    if (payload.status === 'PAID') {
+                        await updateAccountBalance(client, payload.accountId, payload.amount, payload.type);
+                        if (payload.type === 'TRANSFER' && payload.destinationAccountId) {
+                            await updateAccountBalance(client, payload.destinationAccountId, payload.amount, 'INCOME');
+                        }
+                    }
+                } else if (store === 'accounts') {
+                    await client.query(
+                        `INSERT INTO accounts (id, name, type, balance, credit_limit, closing_day, due_day, user_id, family_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                         ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4, credit_limit=$5, closing_day=$6, due_day=$7, deleted_at=NULL`,
+                        [payload.id, payload.name, payload.type, payload.balance, payload.creditLimit, payload.closingDay, payload.dueDay, userId, familyId]
+                    );
+                } else {
+                    // Upsert genérico para outros stores simples
+                    // Nota: Para stores complexos (OS, Orders) o ideal é ter rotas específicas, 
+                    // mas o sync_queue tenta ser genérico.
+                    const fields = Object.keys(payload).filter(k => k !== 'id' && !k.startsWith('_'));
+                    const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
+                    
+                    const query = `
+                        INSERT INTO ${tableName} (id, family_id, ${snakeFields.join(', ')})
+                        VALUES ($1, $2, ${fields.map((_, i) => `$${i + 3}`).join(', ')})
+                        ON CONFLICT (id) DO UPDATE SET 
+                        ${snakeFields.map((f, i) => `${f} = $${i + 3}`).join(', ')},
+                        deleted_at = NULL
+                    `;
+                    
+                    const values = [payload.id, familyId, ...fields.map(f => {
+                        const val = payload[f];
+                        return (typeof val === 'object') ? JSON.stringify(val) : sanitizeValue(val);
+                    })];
+                    
+                    await client.query(query, values);
+                }
+            }
+
+            await client.query('COMMIT');
+            res.json({ success: true });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            res.status(500).json({ error: err.message });
+        } finally {
+            client.release();
+        }
+    });
+
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
-            
             const queryDefs = {
                 accounts: ['SELECT * FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
@@ -79,12 +194,12 @@ export default function(logAudit) {
                 serviceOrders: ['SELECT * FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC', [familyId]],
                 commercialOrders: ['SELECT o.*, c.name as contact_name FROM commercial_orders o LEFT JOIN contacts c ON o.contact_id = c.id WHERE o.family_id = $1 AND o.deleted_at IS NULL ORDER BY o.date DESC', [familyId]],
                 contracts: ['SELECT ct.*, c.name as contact_name FROM contracts ct LEFT JOIN contacts c ON ct.contact_id = c.id WHERE ct.family_id = $1 AND ct.deleted_at IS NULL', [familyId]],
-                invoices: ['SELECT i.*, c.name as contact_name FROM invoices i LEFT JOIN contacts c ON i.contact_id = c.id WHERE i.family_id = $1 AND i.deleted_at IS NULL ORDER BY i.issue_date DESC', [familyId]]
+                invoices: ['SELECT i.*, c.name as contact_name FROM invoices i LEFT JOIN contacts c ON i.contact_id = c.id WHERE i.family_id = $1 AND i.deleted_at IS NULL ORDER BY i.issue_date DESC', [familyId]],
+                opticalRxs: ['SELECT * FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
             };
 
             const results = {};
             const keys = Object.keys(queryDefs);
-            
             const promises = keys.map(key => pool.query(queryDefs[key][0], queryDefs[key][1]));
             const settledResults = await Promise.all(promises);
 
@@ -190,65 +305,37 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // --- PJ ENTITIES (BRANCH, COST CENTER, etc) ---
     router.post('/pj/:type', authenticateToken, async (req, res) => {
         const { type } = req.params;
         const payload = req.body;
         const userId = req.user.id;
-        
         const tableMap = {
             branch: { table: 'branches', fields: ['name', 'code', 'city', 'phone', 'color', 'is_active'] },
             costCenter: { table: 'cost_centers', fields: ['name', 'code'] },
             department: { table: 'departments', fields: ['name'] },
             project: { table: 'projects', fields: ['name'] }
         };
-
         const config = tableMap[type];
         if (!config) return res.status(400).json({ error: 'Tipo de entidade inválido' });
-
         try {
             const familyId = await getFamilyId(userId);
             const id = payload.id || crypto.randomUUID();
-            
-            // Construção dinâmica da query baseada nos campos definidos no mapa
             const fields = ['id', 'family_id', ...config.fields];
             const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
             const updateSet = config.fields.map((f, i) => `${f} = $${i + 3}`).join(', ');
-
-            const values = [
-                id, familyId,
-                ...config.fields.map(f => {
-                    // Converter camelCase do body para snake_case se necessário para acessar o payload
-                    const bodyKey = f.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
-                    return sanitizeValue(payload[bodyKey]);
-                })
-            ];
-
-            const query = `
-                INSERT INTO ${config.table} (${fields.join(', ')})
-                VALUES (${placeholders})
-                ON CONFLICT (id) DO UPDATE SET ${updateSet}, deleted_at = NULL
-            `;
-
+            const values = [id, familyId, ...config.fields.map(f => sanitizeValue(payload[f.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''))]))];
+            const query = `INSERT INTO ${config.table} (${fields.join(', ')}) VALUES (${placeholders}) ON CONFLICT (id) DO UPDATE SET ${updateSet}, deleted_at = NULL`;
             await pool.query(query, values);
             await logAudit(pool, userId, payload.id ? 'UPDATE' : 'CREATE', type, id, payload.name);
             res.json({ success: true, id });
-        } catch (err) {
-            res.status(500).json({ error: err.message });
-        }
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     router.delete('/pj/:type/:id', authenticateToken, async (req, res) => {
         const { type, id } = req.params;
-        const tableMap = {
-            branch: 'branches',
-            costCenter: 'cost_centers',
-            department: 'departments',
-            project: 'projects'
-        };
+        const tableMap = { branch: 'branches', costCenter: 'cost_centers', department: 'departments', project: 'projects' };
         const table = tableMap[type];
         if (!table) return res.status(400).json({ error: 'Tipo inválido' });
-
         try {
             const familyId = await getFamilyId(req.user.id);
             await pool.query(`UPDATE ${table} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [id, familyId]);
@@ -305,9 +392,7 @@ export default function(logAudit) {
         try {
             const urls = await uploadFiles(req.files, req.user.id);
             res.json({ urls });
-        } catch (err) { 
-            res.status(500).json({ error: err.message }); 
-        }
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     return router;
