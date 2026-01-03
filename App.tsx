@@ -44,15 +44,19 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'online' | 'offline'>(navigator.onLine ? 'online' : 'offline');
   
-  // Fix: Defined missing state variables
+  // View States
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fix: Defined missing publicToken helper
+  // Auth Navigation States
+  const [showAuth, setShowAuth] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
+  const [initialEntityType, setInitialEntityType] = useState<EntityType>(EntityType.PERSONAL);
+  const [initialPlan, setInitialPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
+
   const publicToken = new URLSearchParams(window.location.search).get('orderToken');
 
-  // Fix: Defined missing checkAuth function
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -78,7 +82,6 @@ const App: React.FC = () => {
     const initApp = async () => {
         await localDb.init();
         
-        // Listeners de Conectividade
         window.addEventListener('online', () => syncService.triggerSync());
         window.addEventListener('offline', () => setSyncStatus('offline'));
         
@@ -101,7 +104,13 @@ const App: React.FC = () => {
     setState(data);
   };
 
-  // Fix: Defined missing renderContent function to handle view switching
+  const handleLoginSuccess = async (user: User) => {
+      setCurrentUser(user);
+      setShowAuth(false);
+      const data = await loadInitialData();
+      setState(data);
+  };
+
   const renderContent = () => {
     if (!state || !currentUser) return null;
 
@@ -140,7 +149,40 @@ const App: React.FC = () => {
   
   if (publicToken) return <PublicOrderView token={publicToken} />;
   
-  if (!currentUser) return <LandingPage onGetStarted={() => {}} onLogin={() => {}} />;
+  if (!currentUser) {
+      if (showAuth) {
+          return (
+              <div className="relative">
+                  <button 
+                    onClick={() => setShowAuth(false)}
+                    className="fixed top-6 left-6 z-50 bg-white p-2 rounded-full shadow-lg border border-gray-100 text-gray-400 hover:text-indigo-600 transition-all"
+                  >
+                      <ArrowLeft className="w-6 h-6" />
+                  </button>
+                  <Auth 
+                    onLoginSuccess={handleLoginSuccess} 
+                    initialMode={authInitialMode}
+                    initialEntityType={initialEntityType}
+                    initialPlan={initialPlan}
+                  />
+              </div>
+          );
+      }
+      return (
+        <LandingPage 
+            onGetStarted={(type, plan) => {
+                setInitialEntityType(type);
+                setInitialPlan(plan);
+                setAuthInitialMode('REGISTER');
+                setShowAuth(true);
+            }} 
+            onLogin={() => {
+                setAuthInitialMode('LOGIN');
+                setShowAuth(true);
+            }} 
+        />
+      );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden">
@@ -155,7 +197,6 @@ const App: React.FC = () => {
         />
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            {/* Sync Bar */}
             <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
                 syncStatus === 'offline' ? 'bg-rose-500 text-white' : 
                 syncStatus === 'syncing' ? 'bg-indigo-600 text-white' : 
@@ -176,5 +217,9 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+const ArrowLeft = ({ className }: { className?: string }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+);
 
 export default App;
