@@ -6,7 +6,7 @@ import {
   Settings, LogOut, Briefcase, ShieldCheck, SmilePlus, 
   ShoppingBag, Wrench, FileText, UserCog, Package, Bell, 
   Glasses, Eye, Activity, ChevronLeft, Menu, X, Share2,
-  Building2, Check
+  Building2, Check, ScrollText, Sparkles, BrainCircuit
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import ProfileModal from './ProfileModal';
@@ -31,12 +31,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // No mobile, começa contraído mas permite expansão total
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setIsCollapsed(true);
-      }
+      if (window.innerWidth < 768) setIsCollapsed(true);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -61,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (id === familyId) return;
     try {
         await switchContext(id);
-        window.location.reload(); // Recarrega para aplicar o novo contexto financeiro
+        window.location.reload();
     } catch (e) {
         showAlert("Erro ao trocar de negócio.", "error");
     }
@@ -70,14 +67,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleShareCurrentView = () => {
     const url = new URL(window.location.origin);
     url.searchParams.set('view', currentView);
-    
     navigator.clipboard.writeText(url.toString())
-      .then(() => {
-        showAlert("Link da página copiado! Envie para o suporte ou colega.", "success");
-      })
-      .catch(() => {
-        showAlert("Erro ao copiar link.", "error");
-      });
+      .then(() => showAlert("Link da página copiado!", "success"))
+      .catch(() => showAlert("Erro ao copiar link.", "error"));
   };
 
   const menuSections = [
@@ -87,6 +79,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'FIN_TRANSACTIONS', label: 'Extrato', icon: List },
         { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
+        { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
+        { id: 'FIN_GOALS', label: 'Metas', icon: Check },
+      ]
+    },
+    {
+      section: 'Inteligência',
+      enabled: !!activeModules.intelligence,
+      items: [
+        { id: 'DIAG_HUB', label: 'Estrategista IA', icon: BrainCircuit },
+        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: Sparkles },
       ]
     },
     { 
@@ -110,7 +112,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     { 
       section: 'Configuração', 
       items: [
-        { id: 'SYS_ACCESS', label: 'Equipe', icon: ShieldCheck },
+        { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
+        { id: 'SYS_ACCESS', label: 'Equipe / Usuários', icon: ShieldCheck },
+        { id: 'SYS_LOGS', label: 'Auditoria', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
       ]
     }
@@ -132,8 +136,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className={`flex flex-col h-full bg-white border-r border-gray-100 shadow-sm overflow-hidden transition-all duration-300 ease-in-out relative z-[100] ${isCollapsed ? 'w-20' : 'w-72'}`}>
-        
-        {/* Toggle - Desktop & Smartphone */}
         <button 
             onClick={handleToggle}
             className="absolute top-14 -right-3 w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-indigo-600 shadow-md z-[110] transition-transform"
@@ -142,7 +144,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* Header - Notificação Mantida Visível */}
         <div className={`p-6 flex flex-col items-center gap-4 flex-shrink-0 transition-all border-b border-gray-50/50 mb-2 ${isCollapsed ? 'justify-center' : ''}`}>
             <div className={`flex items-center w-full transition-all ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
                 <div className="flex items-center gap-3 shrink-0">
@@ -155,32 +156,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                     )}
                 </div>
             </div>
-            
             <div className="flex items-center gap-2">
-              <button 
-                  onClick={onOpenNotifications} 
-                  className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
-                  title="Notificações"
-              >
+              <button onClick={onOpenNotifications} className={`relative p-2.5 rounded-xl transition-all border shrink-0 ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`} title="Notificações">
                   <Bell className="w-5 h-5" />
-                  {notificationCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">
-                          {notificationCount}
-                      </span>
-                  )}
+                  {notificationCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-white rounded-full flex items-center justify-center text-[8px] font-black text-white">{notificationCount}</span>}
               </button>
-
-              <button 
-                  onClick={handleShareCurrentView} 
-                  className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shrink-0"
-                  title="Compartilhar Link desta Página"
-              >
+              <button onClick={handleShareCurrentView} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shrink-0" title="Compartilhar Link desta Página">
                   <Share2 className="w-5 h-5" />
               </button>
             </div>
         </div>
 
-        {/* Menu Items */}
         <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-none">
             {filteredMenuItems.map((section, idx) => (
                 <div key={idx}>
@@ -206,16 +192,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             ))}
         </div>
 
-        {/* User Area & Workspace Switcher */}
         <div className={`p-4 border-t border-gray-100 bg-gray-50/50 transition-all ${isCollapsed ? 'flex justify-center' : ''}`}>
              <div className="relative w-full">
-                <button 
-                    onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)} 
-                    className={`flex items-center gap-3 w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left ${isCollapsed ? 'justify-center' : ''}`}
-                >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">
-                        {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
-                    </div>
+                <button onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)} className={`flex items-center gap-3 w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left ${isCollapsed ? 'justify-center' : ''}`}>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">{currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}</div>
                     {!isCollapsed && (
                         <div className="flex-1 overflow-hidden animate-fade-in">
                             <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name || 'Usuário'}</p>
@@ -223,7 +203,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                     )}
                 </button>
-
                 {isWorkspaceDropdownOpen && (
                     <div className={`absolute bottom-full mb-2 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[120] transition-all overflow-hidden ${isCollapsed ? 'left-0 w-64' : 'left-0 right-0'}`}>
                         {workspaces.length > 1 && (
@@ -231,22 +210,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 <p className="px-4 py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Alternar Negócio</p>
                                 <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-none">
                                     {workspaces.map(ws => (
-                                        <button 
-                                            key={ws.id}
-                                            onClick={() => handleSwitchWorkspace(ws.id)}
-                                            className={`w-full text-left px-4 py-3 text-sm rounded-xl flex items-center justify-between transition-all ${ws.id === familyId ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
-                                        >
-                                            <div className="flex items-center gap-3 truncate">
-                                                <Building2 className={`w-4 h-4 shrink-0 ${ws.id === familyId ? 'text-indigo-600' : 'text-gray-400'}`} />
-                                                <span className="truncate">{ws.name}</span>
-                                            </div>
+                                        <button key={ws.id} onClick={() => handleSwitchWorkspace(ws.id)} className={`w-full text-left px-4 py-3 text-sm rounded-xl flex items-center justify-between transition-all ${ws.id === familyId ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                            <div className="flex items-center gap-3 truncate"><Building2 className={`w-4 h-4 shrink-0 ${ws.id === familyId ? 'text-indigo-600' : 'text-gray-400'}`} /><span className="truncate">{ws.name}</span></div>
                                             {ws.id === familyId && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         )}
-                        
                         <div className="space-y-1">
                             <button onClick={() => {setIsProfileModalOpen(true); setIsWorkspaceDropdownOpen(false);}} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 rounded-xl flex items-center gap-3 font-medium text-gray-700"><UserCog className="w-4 h-4 text-gray-400" /> Perfil</button>
                             <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-3 font-medium"><LogOut className="w-4 h-4" /> Sair</button>
@@ -255,7 +226,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
              </div>
         </div>
-
         <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} currentUser={currentUser} onUserUpdate={onUserUpdate} />
     </div>
   );

@@ -243,7 +243,7 @@ const App: React.FC = () => {
         />;
 
       default:
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} currentUser={currentUser || undefined} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
     }
   };
 

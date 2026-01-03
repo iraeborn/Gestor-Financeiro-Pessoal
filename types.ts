@@ -212,6 +212,7 @@ export interface OSItem {
   estimatedDuration?: number;
   technician?: string;
   realDuration?: number;
+  cost_price?: number;
   costPrice?: number;
 }
 
