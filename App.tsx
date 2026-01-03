@@ -22,6 +22,7 @@ import GoalsView from './components/GoalsView';
 import Reports from './components/Reports';
 import CategoriesView from './components/CategoriesView';
 import ContactsView from './components/ContactsView';
+import ContactEditor from './components/ContactEditor';
 import SmartAdvisor from './components/SmartAdvisor';
 import DiagnosticView from './components/DiagnosticView';
 import AccessView from './components/AccessView';
@@ -56,6 +57,7 @@ const App: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState<ViewMode>(viewFromUrl || 'FIN_DASHBOARD');
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
 
@@ -143,7 +145,20 @@ const App: React.FC = () => {
       case 'FIN_CONTACTS':
       case 'SRV_CLIENTS':
       case 'SYS_CONTACTS':
-        return <ContactsView contacts={data.contacts} onAddContact={async (c) => { await api.saveContact(c); loadData(true); }} onEditContact={async (c) => { await api.saveContact(c); loadData(true); }} onDeleteContact={async (id) => { await api.deleteContact(id); loadData(true); }} />;
+        return <ContactsView 
+          contacts={data.contacts} 
+          onAddContact={() => { setSelectedContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} 
+          onEditContact={(c) => { setSelectedContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} 
+          onDeleteContact={async (id) => { await api.deleteContact(id); loadData(true); }} 
+        />;
+
+      case 'FIN_CONTACT_EDITOR':
+        return <ContactEditor 
+            initialData={selectedContact} 
+            settings={effectiveSettings}
+            onSave={async (c) => { await api.saveContact(c); await loadData(true); setCurrentView('FIN_CONTACTS'); }} 
+            onCancel={() => setCurrentView('FIN_CONTACTS')} 
+        />;
 
       case 'OPTICAL_RX':
         return <OpticalModule 
@@ -243,7 +258,7 @@ const App: React.FC = () => {
         />;
 
       default:
-        return <Dashboard state={data} settings={effectiveSettings} currentUser={currentUser || undefined} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
     }
   };
 

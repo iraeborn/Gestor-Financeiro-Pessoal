@@ -58,7 +58,7 @@ export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO' | 'VENDA_OTICA';
 export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export type ViewMode = 
-  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS'
+  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_CONTACT_EDITOR'
   | 'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS'
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
@@ -346,6 +346,12 @@ export interface Contact {
   creditLimit?: number;
   defaultPaymentMethod?: string;
   defaultPaymentTerm?: number;
+  // Campos Ótica
+  opticalNotes?: string;
+  brandPreference?: string;
+  lastConsultationDate?: string;
+  yearsOfUse?: number;
+  opticalCategory?: 'NORMAL' | 'PREMIUM' | 'KIDS' | 'SPORT';
 }
 
 export interface Account {
