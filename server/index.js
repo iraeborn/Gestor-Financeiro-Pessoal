@@ -61,6 +61,7 @@ app.use('/api/billing', billingRoutes(logAudit));
 // --- Static Files Logic ---
 const rootPath = process.cwd();
 const distPath = path.join(rootPath, 'dist');
+const publicPath = path.join(rootPath, 'public');
 
 // Middleware para servir arquivos estáticos com MIME type correto para TS/TSX
 const staticOptions = {
@@ -68,11 +69,15 @@ const staticOptions = {
         if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         }
+        // Garante que o Service Worker não seja cacheado agressivamente pelo browser
+        if (filePath.endsWith('sw.js')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        }
     }
 };
 
-// Ordem de prioridade para busca de arquivos estáticos
 app.use(express.static(distPath, staticOptions));
+app.use(express.static(publicPath, staticOptions));
 app.use(express.static(rootPath, staticOptions));
 
 const renderIndex = (req, res) => {
@@ -85,7 +90,9 @@ const renderIndex = (req, res) => {
 
     if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        content = content.replace("__GOOGLE_CLIENT_ID__", process.env.GOOGLE_CLIENT_ID || "");
+        const googleId = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
+        
+        content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
         content = content.replace("__API_KEY__", process.env.API_KEY || "");
         content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "");
         res.send(content);
@@ -96,7 +103,6 @@ const renderIndex = (req, res) => {
 
 app.get('/', renderIndex);
 
-// Fallback para SPA: Se não for API e não for um arquivo estático (com extensão), serve o index.html
 app.get('*', (req, res) => {
     const isApiRequest = req.path.startsWith('/api/');
     const hasExtension = path.extname(req.path) !== '';

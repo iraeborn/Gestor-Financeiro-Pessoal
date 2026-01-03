@@ -30,6 +30,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const isGoogleInitialized = useRef(false);
 
   const registrationContext = useRef({ entityType, cnpj, companyData });
   useEffect(() => { registrationContext.current = { entityType, cnpj, companyData }; }, [entityType, cnpj, companyData]);
@@ -38,30 +39,45 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     const win = window as any;
     const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" ? win.GOOGLE_CLIENT_ID : "";
     
+    let attempts = 0;
+    const maxAttempts = 10;
+
     const initGoogle = () => {
       if (win.google?.accounts?.id && clientId) {
         try {
-          win.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleGoogleCallback,
-            auto_select: false,
-            cancel_on_tap_outside: true
-          });
-          renderGoogleButtons();
+          if (!isGoogleInitialized.current) {
+            win.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: handleGoogleCallback,
+              auto_select: false,
+              cancel_on_tap_outside: true
+            });
+            isGoogleInitialized.current = true;
+          }
+          
+          // Aguarda o próximo frame para garantir que as divs do React existam no DOM
+          requestAnimationFrame(() => renderGoogleButtons());
         } catch (e) {
           console.error("Erro ao inicializar Google Login:", e);
         }
-      } else {
-        // Tenta novamente em 500ms caso o script da Google ainda esteja carregando
+      } else if (attempts < maxAttempts && clientId) {
+        attempts++;
         setTimeout(initGoogle, 500);
+      } else if (!clientId) {
+        console.warn("Google Client ID não configurado. Login social indisponível.");
       }
     };
 
     const renderGoogleButtons = () => {
         const loginDiv = document.getElementById("googleSignInDiv");
         const registerDiv = document.getElementById("googleSignUpDiv");
-        if (loginDiv) win.google.accounts.id.renderButton(loginDiv, { theme: "outline", size: "large", width: 350, text: "signin_with" });
-        if (registerDiv) win.google.accounts.id.renderButton(registerDiv, { theme: "outline", size: "large", width: 350, text: "signup_with" });
+        
+        if (loginDiv && mode === 'LOGIN') {
+            win.google.accounts.id.renderButton(loginDiv, { theme: "outline", size: "large", width: 350, text: "signin_with" });
+        }
+        if (registerDiv && (mode === 'REGISTER' || mode === 'CHECKOUT')) {
+            win.google.accounts.id.renderButton(registerDiv, { theme: "outline", size: "large", width: 350, text: "signup_with" });
+        }
     };
 
     initGoogle();
@@ -169,16 +185,16 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                 {companyData.legalName && <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">{companyData.legalName}</p>}
                             </div>
                         )}
-                        <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nome Completo" />
-                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="seu@email.com" />
-                        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha" />
+                        <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-all" placeholder="Nome Completo" />
+                        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-all" placeholder="seu@email.com" />
+                        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-all" placeholder="Senha" />
                         {error && <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
                         <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
                             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
                             {loading ? 'Processando...' : 'Finalizar e Começar Agora'}
                         </button>
                         <div className="py-4 flex items-center gap-4"><div className="h-px bg-gray-100 flex-1"></div><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ou use sua rede social</span><div className="h-px bg-gray-100 flex-1"></div></div>
-                        <div className="flex justify-center min-h-[50px]" id="googleSignUpDiv"></div>
+                        <div className="flex justify-center min-h-[50px] transition-opacity" id="googleSignUpDiv"></div>
                         <div className="text-center mt-4"><button type="button" onClick={() => setMode('LOGIN')} className="text-sm text-indigo-600 hover:underline">Já tenho conta</button></div>
                     </form>
                 </div>
@@ -195,12 +211,12 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             <p className="text-gray-500 mt-2">Bem-vindo de volta</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="seu@email.com" />
-            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha" />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-all" placeholder="seu@email.com" />
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-all" placeholder="Senha" />
             {error && <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
             <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold shadow-lg">{loading ? 'Entrando...' : 'Entrar'}</button>
           </form>
-          <div className="mt-6"><div className="relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div><div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-gray-500">Ou continue com</span></div></div><div className="mt-6 flex justify-center min-h-[50px]" id="googleSignInDiv"></div></div>
+          <div className="mt-6"><div className="relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div><div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-gray-500">Ou continue com</span></div></div><div className="mt-6 flex justify-center min-h-[50px] transition-opacity" id="googleSignInDiv"></div></div>
           <div className="mt-6 text-center"><button onClick={() => setMode('REGISTER')} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Não tem conta? Cadastre-se grátis</button></div>
       </div>
     </div>
