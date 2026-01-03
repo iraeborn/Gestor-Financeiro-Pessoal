@@ -78,47 +78,32 @@ export const initDb = async () => {
     ];
     
     try {
-        for (const q of queries) {
-            await pool.query(q);
-        }
+        for (const q of queries) { await pool.query(q); }
 
         const migrations = [
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`,
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS odontogram JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS anamnesis JSONB DEFAULT '{}'`,
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS prescriptions JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_clients ADD COLUMN IF NOT EXISTS treatment_plans JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS clinical_notes TEXT`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS tooth INTEGER`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS teeth JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS treatment_items JSONB DEFAULT '[]'`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE`,
-            `ALTER TABLE service_appointments ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
-            `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS assignee_name TEXT`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
-            `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS assignee_name TEXT`,
-            `ALTER TABLE branches ADD COLUMN IF NOT EXISTS city TEXT`,
-            `ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone TEXT`,
-            `ALTER TABLE branches ADD COLUMN IF NOT EXISTS color TEXT`,
-            `ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`,
             `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS branch_id TEXT`,
             `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cost_center_id TEXT`,
             `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS department_id TEXT`,
-            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT`
+            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT`,
+            // Índices de Segurança Multi-tenant
+            `CREATE INDEX IF NOT EXISTS idx_users_family ON users(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_acc_family ON accounts(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_trans_family ON transactions(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_contacts_family ON contacts(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_so_family ON service_orders(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_co_family ON commercial_orders(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_rx_family ON optical_rxs(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_sc_family ON service_clients(family_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_sa_family ON service_appointments(family_id)`
         ];
 
         for (const m of migrations) {
             try { await pool.query(m); } catch (e) {}
         }
 
-        console.log("✅ [DATABASE] Estrutura Sincronizada.");
+        console.log("✅ [DATABASE] Estrutura Multi-tenant Protegida.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }

@@ -109,26 +109,22 @@ const renderIndex = (req, res) => {
 
         res.send(content);
     } else {
-        res.status(404).send('Aguardando inicialização do sistema (index.html não encontrado)...');
+        res.status(404).send('Sistema em inicialização...');
     }
 };
 
-// Rota raiz e rotas de navegação devem vir ANTES do static para o index.html
+// Rota raiz dinâmica antes dos estáticos
 app.get('/', renderIndex);
 
-// Servir arquivos estáticos (exceto index.html que já tratamos)
+// Servir arquivos estáticos (Vite Assets)
 app.use(express.static(distPath, { ...staticOptions, index: false }));
 app.use(express.static(publicPath, { ...staticOptions, index: false }));
 app.use(express.static(rootPath, { ...staticOptions, index: false }));
 
+// Fallback para SPA
 app.get('*', (req, res) => {
     const isApiRequest = req.path.startsWith('/api/');
-    const hasExtension = path.extname(req.path) !== '';
-
-    if (isApiRequest || hasExtension) {
-        return res.status(404).end();
-    }
-    
+    if (isApiRequest) return res.status(404).end();
     renderIndex(req, res);
 });
 
@@ -139,6 +135,6 @@ initDb().then(() => {
         console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
     });
 }).catch(err => {
-    console.error("❌ [SERVER] Falha ao iniciar banco de dados:", err);
+    console.error("❌ [SERVER] Falha fatal:", err);
     process.exit(1);
 });
