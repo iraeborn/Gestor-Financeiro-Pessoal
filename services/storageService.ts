@@ -88,7 +88,8 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     if (!res.ok) throw new Error('Falha ao trocar contexto');
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    // Limpamos o cache local para garantir que o PWA puxe os dados do novo contexto
+    
+    // Limpamos o cache local para garantir que o PWA puxe os dados do novo contexto (isolamento total)
     const stores = [
         'accounts', 'transactions', 'contacts', 'serviceClients', 
         'serviceItems', 'serviceAppointments', 'goals', 'categories', 
@@ -285,7 +286,7 @@ export const api = {
     deleteAccount: async (id: string) => api.deleteLocallyAndQueue('accounts', id),
     
     saveGoal: async (g: FinancialGoal) => api.saveLocallyAndQueue('goals', g),
-    deleteGoal: async (id: string) => api.deleteGoal(id),
+    deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
     
     saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
     deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),

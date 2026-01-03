@@ -5,7 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Landmark, Receipt, AlertCircle, BarChart3, Scale, Eye, Glasses, Monitor, Heart, Activity, Stethoscope, SmilePlus } from 'lucide-center';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Landmark, Receipt, AlertCircle, BarChart3, Scale, Eye, Glasses, Monitor, Heart, Activity, Stethoscope, SmilePlus } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 
@@ -53,8 +53,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     const firstDay = now.toISOString().split('T')[0].substring(0, 8) + '01';
     const accounts = state.accounts || [];
     
-    // FILTRO DE SEGURANÇA MULTI-TENANT (Layer 2)
-    // Garante que mesmo que o IndexedDB tenha lixo de outra conta, o Dashboard não o mostre
+    // FILTRO DE SEGURANÇA MULTI-TENANT
+    // Garante que o Dashboard só mostre dados vinculados à família ativa do usuário
     const transactions = (state.transactions || []).filter(t => {
         const tid = (t as any).familyId || (t as any).family_id;
         return tid === activeFamilyId;
@@ -65,7 +65,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         .filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PAID && t.date >= firstDay)
         .reduce((acc, t) => acc + t.amount, 0);
     
-    // Métricas de Laboratório e Ótica (Filtradas por familyId via state.serviceOrders já carregado corretamente)
     const opticalStats = {
         labPendentes: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
         rxNovas: state.opticalRxs?.filter(rx => rx.rxDate >= firstDay).length || 0,
@@ -75,7 +74,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
   }, [state, activeFamilyId]);
 
-  // Transações ordenadas para a lista "do dia"
   const recentTransactions = useMemo(() => {
       return [...metrics.currentTransactions]
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
