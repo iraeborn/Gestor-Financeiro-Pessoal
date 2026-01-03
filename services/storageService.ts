@@ -26,8 +26,19 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     return data;
 };
 
-export const logout = () => {
+export const logout = async () => {
     localStorage.removeItem('token');
+    // Limpa o banco de dados local para evitar vazamento de dados em máquinas compartilhadas
+    const stores = [
+        'accounts', 'transactions', 'contacts', 'serviceClients', 
+        'serviceItems', 'serviceAppointments', 'goals', 'categories', 
+        'branches', 'costCenters', 'departments', 'projects', 
+        'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
+        'opticalRxs', 'companyProfile'
+    ];
+    for (const store of stores) {
+        await localDb.clearStore(store);
+    }
 };
 
 export const refreshUser = async (): Promise<{ user: User }> => {
@@ -77,6 +88,17 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     if (!res.ok) throw new Error('Falha ao trocar contexto');
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    // Limpamos o cache local para garantir que o PWA puxe os dados do novo contexto
+    const stores = [
+        'accounts', 'transactions', 'contacts', 'serviceClients', 
+        'serviceItems', 'serviceAppointments', 'goals', 'categories', 
+        'branches', 'costCenters', 'departments', 'projects', 
+        'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
+        'opticalRxs', 'companyProfile'
+    ];
+    for (const store of stores) {
+        await localDb.clearStore(store);
+    }
     return data;
 };
 
@@ -263,7 +285,7 @@ export const api = {
     deleteAccount: async (id: string) => api.deleteLocallyAndQueue('accounts', id),
     
     saveGoal: async (g: FinancialGoal) => api.saveLocallyAndQueue('goals', g),
-    deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
+    deleteGoal: async (id: string) => api.deleteGoal(id),
     
     saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
     deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),

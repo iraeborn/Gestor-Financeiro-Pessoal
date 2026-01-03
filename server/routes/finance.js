@@ -39,7 +39,6 @@ export default function(logAudit) {
         return res.rows[0]?.family_id || userId;
     };
 
-    // --- ENDPOINT DE SINCRONIZAÇÃO PWA ---
     router.post('/sync/process', authenticateToken, async (req, res) => {
         const { action, store, payload } = req.body;
         const userId = req.user.id;
@@ -62,7 +61,7 @@ export default function(logAudit) {
             const tableName = tableMap[store];
             if (!tableName) throw new Error(`Loja ${store} não suportada.`);
 
-            // SEGURANÇA: Verifica propriedade se o ID existir
+            // SEGURANÇA: Verifica propriedade se o ID existir no banco para evitar sobrescrita cross-tenant
             if (payload.id) {
                 const ownership = await client.query(`SELECT family_id FROM ${tableName} WHERE id = $1`, [payload.id]);
                 if (ownership.rows.length > 0 && ownership.rows[0].family_id !== familyId) {
@@ -175,7 +174,6 @@ export default function(logAudit) {
             await client.query('BEGIN');
             const id = t.id || crypto.randomUUID();
             
-            // Check ownership on update
             const existing = await client.query('SELECT family_id FROM transactions WHERE id = $1', [id]);
             if (existing.rows.length > 0 && existing.rows[0].family_id !== familyId) throw new Error("Acesso negado.");
 

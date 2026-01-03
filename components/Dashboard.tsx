@@ -5,7 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Landmark, Receipt, AlertCircle, BarChart3, Scale, Eye, Glasses, Monitor, Heart, Activity, Stethoscope, SmilePlus } from 'lucide-react';
+import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Landmark, Receipt, AlertCircle, BarChart3, Scale, Eye, Glasses, Monitor, Heart, Activity, Stethoscope, SmilePlus } from 'lucide-center';
 import { getManagerDiagnostic } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 
@@ -31,6 +31,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const activeModules = settings?.activeModules || {};
   const isOptical = activeModules.optical === true;
 
+  const activeFamilyId = useMemo(() => currentUser?.familyId || (currentUser as any)?.family_id, [currentUser]);
+
   useEffect(() => {
     const fetchDiag = async () => {
       const showIntelligence = activeModules.intelligence && (currentUser?.role === 'ADMIN' || currentUser?.role === 'FIN_MANAGER');
@@ -48,24 +50,37 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const metrics = useMemo(() => {
     const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const firstDay = now.toISOString().split('T')[0].substring(0, 8) + '01';
     const accounts = state.accounts || [];
-    const transactions = state.transactions || [];
+    
+    // FILTRO DE SEGURANÇA MULTI-TENANT (Layer 2)
+    // Garante que mesmo que o IndexedDB tenha lixo de outra conta, o Dashboard não o mostre
+    const transactions = (state.transactions || []).filter(t => {
+        const tid = (t as any).familyId || (t as any).family_id;
+        return tid === activeFamilyId;
+    });
 
     const saldoReal = accounts.reduce((acc, a) => acc + a.balance, 0);
     const entradasMes = transactions
         .filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PAID && t.date >= firstDay)
         .reduce((acc, t) => acc + t.amount, 0);
     
-    // Métricas de Laboratório e Ótica
+    // Métricas de Laboratório e Ótica (Filtradas por familyId via state.serviceOrders já carregado corretamente)
     const opticalStats = {
         labPendentes: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
         rxNovas: state.opticalRxs?.filter(rx => rx.rxDate >= firstDay).length || 0,
         osAtrasadas: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && o.endDate && o.endDate < now.toISOString().split('T')[0] && o.status !== 'FINALIZADA').length || 0
     };
 
-    return { saldoReal, entradasMes, opticalStats };
-  }, [state]);
+    return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
+  }, [state, activeFamilyId]);
+
+  // Transações ordenadas para a lista "do dia"
+  const recentTransactions = useMemo(() => {
+      return [...metrics.currentTransactions]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 10);
+  }, [metrics.currentTransactions]);
 
   if (!state) return null;
 
@@ -141,14 +156,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               <Activity className="w-5 h-5 text-emerald-500" />
               Fluxo de Caixa Operacional
           </h3>
-          <CashFlowChart transactions={state.transactions} />
+          <CashFlowChart transactions={metrics.currentTransactions} />
         </div>
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
           <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
               <Receipt className="w-5 h-5 text-indigo-500" />
               Gastos por Categoria
           </h3>
-          <ExpensesByCategory transactions={state.transactions} />
+          <ExpensesByCategory transactions={metrics.currentTransactions} />
         </div>
       </div>
 
@@ -158,7 +173,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Histórico Completo <ArrowRight className="w-4 h-4" /></button>
         </div>
         <TransactionList 
-            transactions={state.transactions.slice(0, 8)} 
+            transactions={recentTransactions} 
             accounts={state.accounts} 
             contacts={state.contacts || []} 
             onDelete={onDeleteTransaction}

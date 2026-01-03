@@ -79,14 +79,30 @@ class SyncService {
             });
             const data = await response.json();
             
-            // Atualiza cada store localmente
+            // CRÍTICO: Limpa stores locais antes de repopular para evitar dados conflitantes de outras contas/sessões
+            const storesToClear = [
+                'accounts', 'transactions', 'contacts', 'serviceClients', 
+                'serviceItems', 'serviceAppointments', 'goals', 'categories', 
+                'branches', 'costCenters', 'departments', 'projects', 
+                'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
+                'opticalRxs', 'companyProfile'
+            ];
+
+            for (const storeName of storesToClear) {
+                try {
+                    await localDb.clearStore(storeName);
+                } catch (e) {
+                    console.warn(`Could not clear store ${storeName}`);
+                }
+            }
+
+            // Atualiza cada store localmente com os dados frescos do servidor
             for (const [storeName, items] of Object.entries(data)) {
                 if (Array.isArray(items)) {
                     for (const item of items) {
                         await localDb.put(storeName, item);
                     }
                 } else if (items) {
-                   // Perfil de empresa ou objeto único
                    await localDb.put(storeName, items);
                 }
             }
