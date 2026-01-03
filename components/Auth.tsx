@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Lock, LogIn, AlertCircle, Briefcase, User as UserIcon, CheckCircle, Search, Rocket, Loader2 } from 'lucide-react';
-import { login, register, loginWithGoogle, consultCnpj, createPagarMeSession } from '../services/storageService';
+import { login, register, loginWithGoogle, consultCnpj } from '../services/storageService';
 import { User, EntityType, SubscriptionPlan, TaxRegime } from '../types';
 import { useAlert } from './AlertSystem';
 
@@ -37,6 +37,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
   useEffect(() => {
     const win = window as any;
     const clientId = win.GOOGLE_CLIENT_ID && win.GOOGLE_CLIENT_ID !== "__GOOGLE_CLIENT_ID__" ? win.GOOGLE_CLIENT_ID : "";
+    
     const initGoogle = () => {
       if (win.google?.accounts?.id && clientId) {
         try {
@@ -47,15 +48,22 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
             cancel_on_tap_outside: true
           });
           renderGoogleButtons();
-        } catch (e) {}
-      } else setTimeout(initGoogle, 500);
+        } catch (e) {
+          console.error("Erro ao inicializar Google Login:", e);
+        }
+      } else {
+        // Tenta novamente em 500ms caso o script da Google ainda esteja carregando
+        setTimeout(initGoogle, 500);
+      }
     };
+
     const renderGoogleButtons = () => {
         const loginDiv = document.getElementById("googleSignInDiv");
         const registerDiv = document.getElementById("googleSignUpDiv");
         if (loginDiv) win.google.accounts.id.renderButton(loginDiv, { theme: "outline", size: "large", width: 350, text: "signin_with" });
         if (registerDiv) win.google.accounts.id.renderButton(registerDiv, { theme: "outline", size: "large", width: 350, text: "signup_with" });
     };
+
     initGoogle();
   }, [mode]);
 
@@ -73,8 +81,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
     try {
         const pjPayload = currentType === EntityType.BUSINESS ? { ...currentPJ, cnpj: currentCnpj } : undefined;
         const data = await loginWithGoogle(response.credential, currentType, pjPayload);
-        
-        // No modo grátis, pulamos o redirect de pagamento e entramos direto
         onLoginSuccess(data.user);
     } catch (err: any) {
         setError(err.message || 'Erro ao processar login com Google.');
@@ -117,8 +123,6 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
       } else {
         const pjPayload = entityType === EntityType.BUSINESS ? { ...companyData, cnpj } : undefined;
         const data = await register(name, email, password, entityType, plan, pjPayload);
-        
-        // No modo Registro Grátis, ignoramos a criação de sessão de pagamento por enquanto
         onLoginSuccess(data.user);
         showAlert("Conta criada! Você tem 15 dias de teste grátis.", "success");
       }
@@ -141,12 +145,10 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                                 <p className="text-lg font-bold text-indigo-400">{entityType === EntityType.PERSONAL ? 'Pessoa Física' : 'Pessoa Jurídica'}</p>
                                 <p className="text-sm text-gray-300">15 Dias de Teste Grátis</p>
                             </div>
-                            
                             <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
                                 <p className="text-xs text-emerald-400 font-bold uppercase mb-1">Promoção de Lançamento</p>
                                 <p className="text-sm text-gray-200">Acesso total liberado sem cartão de crédito.</p>
                             </div>
-
                             <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle className="w-4 h-4" /><span>Garantia de segurança</span></div>
                         </div>
                     </div>
@@ -171,12 +173,10 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
                         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="seu@email.com" />
                         <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Senha" />
                         {error && <div className="text-rose-600 text-sm bg-rose-50 p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}
-                        
                         <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
                             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
                             {loading ? 'Processando...' : 'Finalizar e Começar Agora'}
                         </button>
-                        
                         <div className="py-4 flex items-center gap-4"><div className="h-px bg-gray-100 flex-1"></div><span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ou use sua rede social</span><div className="h-px bg-gray-100 flex-1"></div></div>
                         <div className="flex justify-center min-h-[50px]" id="googleSignUpDiv"></div>
                         <div className="text-center mt-4"><button type="button" onClick={() => setMode('LOGIN')} className="text-sm text-indigo-600 hover:underline">Já tenho conta</button></div>
@@ -189,7 +189,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, initialMode = 'LOGIN', init
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-md overflow-hidden p-8 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-8 animate-fade-in">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-900">FinManager</h1>
             <p className="text-gray-500 mt-2">Bem-vindo de volta</p>

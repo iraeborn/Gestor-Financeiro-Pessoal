@@ -59,44 +59,52 @@ app.use('/api', servicesRoutes(logAudit));
 app.use('/api/billing', billingRoutes(logAudit));
 
 // --- Static Files Logic ---
-const rootPath = path.resolve(__dirname, '..');
-const distPath = path.resolve(__dirname, '../dist');
+const rootPath = process.cwd();
+const distPath = path.join(rootPath, 'dist');
 
 // Middleware para servir arquivos estáticos com MIME type correto para TS/TSX
 const staticOptions = {
     setHeaders: (res, filePath) => {
         if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-            res.setHeader('Content-Type', 'application/javascript');
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         }
     }
 };
 
-app.use(express.static(rootPath, staticOptions));
+// Ordem de prioridade para busca de arquivos estáticos
 app.use(express.static(distPath, staticOptions));
+app.use(express.static(rootPath, staticOptions));
 
 const renderIndex = (req, res) => {
-    const indexPath = fs.existsSync(path.join(distPath, 'index.html')) 
-        ? path.join(distPath, 'index.html') 
-        : path.join(rootPath, 'index.html');
+    const pathsToTry = [
+        path.join(distPath, 'index.html'),
+        path.join(rootPath, 'index.html')
+    ];
+    
+    let indexPath = pathsToTry.find(p => fs.existsSync(p));
 
-    if (fs.existsSync(indexPath)) {
+    if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
         content = content.replace("__GOOGLE_CLIENT_ID__", process.env.GOOGLE_CLIENT_ID || "");
         content = content.replace("__API_KEY__", process.env.API_KEY || "");
         content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "");
         res.send(content);
     } else {
-        res.status(404).send('Aguardando inicialização do sistema...');
+        res.status(404).send('Aguardando inicialização do sistema (index.html não encontrado)...');
     }
 };
 
 app.get('/', renderIndex);
+
+// Fallback para SPA: Se não for API e não for um arquivo estático (com extensão), serve o index.html
 app.get('*', (req, res) => {
-    // Se a requisição for por um arquivo específico que não foi encontrado
-    if (req.path.includes('.')) {
+    const isApiRequest = req.path.startsWith('/api/');
+    const hasExtension = path.extname(req.path) !== '';
+
+    if (isApiRequest || hasExtension) {
         return res.status(404).end();
     }
-    // Caso contrário, serve o index.html (SPA Fallback)
+    
     renderIndex(req, res);
 });
 
