@@ -11,7 +11,7 @@ import { refreshUser, loadInitialData, api, updateSettings } from './services/st
 import { localDb } from './services/localDb';
 import { syncService } from './services/syncService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Wifi, WifiOff, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, ArrowLeft, Menu as MenuIcon } from 'lucide-react';
 
 // UI Components Imports
 import Sidebar from './components/Sidebar';
@@ -163,7 +163,6 @@ const App: React.FC = () => {
         onChangeView: setCurrentView
     };
 
-    // Fix: Added companyProfile to safeState to ensure it exists for use in child views like SettingsView
     const safeState = {
         accounts: state.accounts || [],
         transactions: state.transactions || [],
@@ -369,10 +368,24 @@ const App: React.FC = () => {
         />
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            {/* Header Mobile - Visível apenas em telas menores que MD */}
+            <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-40">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg">F</div>
+                    <span className="font-black text-sm text-gray-800 tracking-tighter">FinManager</span>
+                </div>
+                <button 
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg"
+                >
+                    <MenuIcon className="w-6 h-6" />
+                </button>
+            </div>
+
             <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
-                syncStatus === 'offline' ? 'bg-rose-50 text-white' : 
+                syncStatus === 'offline' ? 'bg-rose-500 text-white' : 
                 syncStatus === 'syncing' ? 'bg-indigo-600 text-white' : 
-                'bg-emerald-50 text-white'
+                'bg-emerald-500 text-white'
             }`}>
                 {syncStatus === 'offline' && <><WifiOff className="w-3 h-3" /> Modo Offline Ativo</>}
                 {syncStatus === 'syncing' && <><RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando Dados...</>}

@@ -58,24 +58,40 @@ app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 app.use('/api/billing', billingRoutes(logAudit));
 
+// --- Static Files Logic ---
+// Priorizamos a raiz do projeto e a pasta dist para servir index.tsx e assets corretamente
+const rootPath = path.join(__dirname, '..');
 const distPath = path.join(__dirname, '../dist');
+
 const renderIndex = (req, res) => {
-    const indexPath = path.join(distPath, 'index.html');
+    const indexPath = fs.existsSync(path.join(distPath, 'index.html')) 
+        ? path.join(distPath, 'index.html') 
+        : path.join(rootPath, 'index.html');
+
     if (fs.existsSync(indexPath)) {
         let content = fs.readFileSync(indexPath, 'utf8');
         content = content.replace("__GOOGLE_CLIENT_ID__", process.env.GOOGLE_CLIENT_ID || "");
         content = content.replace("__API_KEY__", process.env.API_KEY || "");
-        // Injetar Stripe Pub Key
-        content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "pk_test_51STLRbLAvFlsDMQOwt5oI5CYByQ6NAHFAtVa6zAVI0EymayKr5PTxc9qPBeJYKHquPrJ82vFCJI91njENOkumf9v00FQimrTRe");
+        content = content.replace("__STRIPE_PUB_KEY__", process.env.STRIPE_PUB_KEY || "");
         res.send(content);
     } else {
-        res.status(404).send('Aguardando build...');
+        res.status(404).send('Aguardando inicialização do sistema...');
     }
 };
 
-app.get('/', renderIndex);
+// Serve arquivos estáticos da raiz (necessário para index.tsx e módulos em dev/sandbox)
+app.use(express.static(rootPath));
 app.use(express.static(distPath));
-app.get('*', renderIndex);
+
+app.get('/', renderIndex);
+app.get('*', (req, res, next) => {
+    // Se a requisição for por um arquivo (tem extensão), e não foi encontrado pelo static, retorna 404
+    if (path.extname(req.path)) {
+        return res.status(404).end();
+    }
+    // Caso contrário, serve o index.html para o roteamento do React (SPA)
+    renderIndex(req, res);
+});
 
 const PORT = process.env.PORT || 8080;
 
