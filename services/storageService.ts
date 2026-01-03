@@ -275,7 +275,7 @@ export const api = {
     deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
 
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
-    deleteCatalogItem: async (id: string) => api.deleteCatalogItem(id),
+    deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
 
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
     deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),
