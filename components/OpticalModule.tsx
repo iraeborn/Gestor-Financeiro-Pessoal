@@ -3,40 +3,25 @@ import React, { useState } from 'react';
 import { OpticalRx, Contact } from '../types';
 import { Eye, Plus, Search, Trash2, Pencil, User, Calendar } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
-import OpticalRxModal from './OpticalRxModal';
 import { useHelp } from './GuidedHelp';
 
 interface OpticalModuleProps {
     opticalRxs: OpticalRx[];
     contacts: Contact[];
-    onSaveRx: (rx: OpticalRx) => void;
+    onAddRx: () => void;
+    onEditRx: (rx: OpticalRx) => void;
     onDeleteRx: (id: string) => void;
 }
 
 const OpticalModule: React.FC<OpticalModuleProps> = ({ 
-    opticalRxs, contacts, onSaveRx, onDeleteRx
+    opticalRxs, contacts, onAddRx, onEditRx, onDeleteRx
 }) => {
-    const { showAlert } = useAlert();
-    const { markStepComplete } = useHelp();
     const [searchTerm, setSearchTerm] = useState('');
-    const [isRxModalOpen, setRxModalOpen] = useState(false);
-    const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
 
     const filteredRxs = opticalRxs.filter(rx => 
         (rx.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    const handleOpenRxModal = (rx?: OpticalRx) => {
-        setEditingRx(rx || null);
-        setRxModalOpen(true);
-    };
-
-    const handleSave = (rx: OpticalRx) => {
-        onSaveRx(rx);
-        markStepComplete('STEP_RX');
-        setRxModalOpen(false);
-    };
 
     return (
         <div className="space-y-6 animate-fade-in pb-20">
@@ -55,7 +40,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                         <input type="text" placeholder="Buscar por paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
                     </div>
-                    <button id="btn-new-rx" onClick={() => handleOpenRxModal()} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
+                    <button id="btn-new-rx" onClick={onAddRx} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95 whitespace-nowrap">
                         <Plus className="w-4 h-4" /> Nova Receita
                     </button>
                 </div>
@@ -68,7 +53,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         <p className="font-bold">Nenhuma receita encontrada.</p>
                     </div>
                 ) : filteredRxs.map(rx => (
-                    <div key={rx.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition-all group">
+                    <div key={rx.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-xl transition-all group">
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold">
@@ -80,7 +65,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                                 </div>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenRxModal(rx)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
+                                <button onClick={() => onEditRx(rx)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
                                 <button onClick={() => onDeleteRx(rx.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                             </div>
                         </div>
@@ -96,21 +81,11 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         </div>
                         <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
                             <span className="text-[10px] font-black text-gray-400 uppercase">Validade: {rx.expirationDate ? new Date(rx.expirationDate).toLocaleDateString() : '---'}</span>
-                            <button onClick={() => showAlert("Venda iniciada com sucesso. (Simulação)", "success")} className="text-indigo-600 hover:underline text-[10px] font-black uppercase tracking-widest">Vincular Venda</button>
+                            <button className="text-indigo-600 hover:underline text-[10px] font-black uppercase tracking-widest">Vincular Venda</button>
                         </div>
                     </div>
                 ))}
             </div>
-
-            {isRxModalOpen && (
-                <OpticalRxModal 
-                    isOpen={isRxModalOpen} 
-                    onClose={() => setRxModalOpen(false)} 
-                    contacts={contacts} 
-                    initialData={editingRx} 
-                    onSave={handleSave} 
-                />
-            )}
         </div>
     );
 };

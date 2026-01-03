@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, AppSettings, EntityType, 
-  SubscriptionPlan, CompanyProfile, Branch, CostCenter, Department, Project,
+  SubscriptionPlan, CompanyProfile,
   ServiceClient, ServiceItem, ServiceAppointment, ServiceOrder, CommercialOrder, Contract, Invoice,
-  TransactionStatus, TransactionType, OSItem, AppNotification, OpticalRx, FinancialGoal
+  AppNotification, OpticalRx, FinancialGoal
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings } from './services/storageService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Menu, X } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 
+// Componentes
 import Auth from './components/Auth';
-import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import TransactionsView from './components/TransactionsView';
 import CalendarView from './components/CalendarView';
@@ -31,20 +31,17 @@ import Sidebar from './components/Sidebar';
 import CollaborationModal from './components/CollaborationModal';
 import ServiceModule from './components/ServiceModule';
 import OpticalModule from './components/OpticalModule';
+import OpticalRxEditor from './components/OpticalRxEditor';
 import ServicesView from './components/ServicesView';
 import PublicOrderView from './components/PublicOrderView';
-import NotificationPanel from './components/NotificationPanel';
 import LoadingOverlay from './components/LoadingOverlay';
 import { HelpProvider } from './components/GuidedHelp';
 
 const App: React.FC = () => {
   const { showAlert } = useAlert();
-  const { showConfirm } = useConfirm();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [showLanding, setShowLanding] = useState(true);
   
-  const socketRef = useRef<Socket | null>(null);
   const urlParams = new URLSearchParams(window.location.search);
   const publicToken = urlParams.get('orderToken');
   const viewFromUrl = urlParams.get('view') as ViewMode;
@@ -56,14 +53,12 @@ const App: React.FC = () => {
     serviceOrders: [], commercialOrders: [], contracts: [], invoices: [],
     opticalRxs: []
   });
+  
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState<ViewMode>(viewFromUrl || 'FIN_DASHBOARD');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
   const [isCollabModalOpen, setIsCollabModalOpen] = useState(false);
-  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Sincroniza a View com a URL sem recarregar
   useEffect(() => {
     if (!publicToken) {
       const url = new URL(window.location.href);
@@ -71,13 +66,6 @@ const App: React.FC = () => {
       window.history.pushState({}, '', url);
     }
   }, [currentView, publicToken]);
-
-  const effectiveSettings = useMemo(() => {
-    if (!currentUser) return undefined;
-    const familyId = currentUser.familyId || (currentUser as any).family_id;
-    const ws = currentUser.workspaces?.find(w => w.id === familyId);
-    return ws?.ownerSettings || currentUser.settings;
-  }, [currentUser]);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -99,7 +87,6 @@ const App: React.FC = () => {
       try {
         const user = await refreshUser();
         setCurrentUser(user);
-        setShowLanding(false);
         await loadData(true);
       } catch (e) {
         localStorage.removeItem('token');
@@ -112,58 +99,25 @@ const App: React.FC = () => {
 
   useEffect(() => { if (!publicToken) checkAuth(); }, []);
 
-  useEffect(() => {
-    if (currentUser && !publicToken) {
-        // Fix: Pass empty string as URI and cast options to any to resolve ambiguous overload resolution in socket.io-client
-        const socket = io({ transports: ['websocket', 'polling'] } as any) as any;
-        socketRef.current = socket;
-        
-        const familyId = currentUser.familyId || (currentUser as any).family_id;
-        socket.on('connect', () => {
-            socket.emit('join_family', familyId);
-        });
+  const effectiveSettings = useMemo(() => {
+    if (!currentUser) return undefined;
+    const familyId = currentUser.familyId;
+    const ws = currentUser.workspaces?.find(w => w.id === familyId);
+    return ws?.ownerSettings || currentUser.settings;
+  }, [currentUser]);
 
-        socket.on('DATA_UPDATED', async (payload: any) => {
-            if (['settings', 'membership', 'user'].includes(payload.entity)) {
-                try {
-                    const updatedUser = await refreshUser();
-                    setCurrentUser(updatedUser);
-                    showAlert("Configurações de acesso atualizadas pelo administrador.", "info");
-                } catch (e) { console.error("Erro ao atualizar dados do usuário via socket", e); }
-            } else {
-                loadData(true);
-            }
-        });
-
-        return () => { socket.disconnect(); };
-    }
-  }, [currentUser?.id, currentUser?.familyId]);
+  const handleSaveTransaction = async (t: any) => {
+      await api.saveTransaction(t);
+      await loadData(true);
+  };
 
   const renderContent = () => {
-    const handleSaveTransaction = async (t: Transaction | Omit<Transaction, 'id'>) => {
-        await api.saveTransaction(t as Transaction);
-        await loadData(true);
-    };
-    const handleDeleteTransaction = async (id: string) => {
-        await api.deleteTransaction(id);
-        await loadData(true);
-    };
-
     switch (currentView) {
       case 'FIN_DASHBOARD':
-        return <Dashboard 
-          state={data} 
-          settings={effectiveSettings} 
-          currentUser={currentUser || undefined}
-          onAddTransaction={handleSaveTransaction} 
-          onDeleteTransaction={handleDeleteTransaction} 
-          onEditTransaction={handleSaveTransaction} 
-          onUpdateStatus={handleSaveTransaction} 
-          onChangeView={setCurrentView} 
-        />;
+        return <Dashboard state={data} settings={effectiveSettings} currentUser={currentUser || undefined} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
       
       case 'FIN_TRANSACTIONS':
-        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser?.entityType} onDelete={handleDeleteTransaction} onEdit={handleSaveTransaction} onToggleStatus={handleSaveTransaction} onAdd={handleSaveTransaction} />;
+        return <TransactionsView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} settings={effectiveSettings} userEntity={currentUser?.entityType} branches={data.branches} costCenters={data.costCenters} departments={data.departments} projects={data.projects} onDelete={async id => { await api.deleteTransaction(id); loadData(true); }} onEdit={handleSaveTransaction} onToggleStatus={handleSaveTransaction} onAdd={handleSaveTransaction} />;
 
       case 'FIN_CALENDAR':
         return <CalendarView transactions={data.transactions} accounts={data.accounts} contacts={data.contacts} categories={data.categories} onAdd={handleSaveTransaction} onEdit={handleSaveTransaction} />;
@@ -195,8 +149,17 @@ const App: React.FC = () => {
         return <OpticalModule 
           opticalRxs={data.opticalRxs || []} 
           contacts={data.contacts} 
-          onSaveRx={async (rx) => { await api.saveOpticalRx(rx); await loadData(true); }}
+          onAddRx={() => { setSelectedRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }}
+          onEditRx={(rx) => { setSelectedRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }}
           onDeleteRx={async (id) => { await api.deleteOpticalRx(id); await loadData(true); }}
+        />;
+
+      case 'OPTICAL_RX_EDITOR':
+        return <OpticalRxEditor 
+            contacts={data.contacts} 
+            initialData={selectedRx} 
+            onSave={async (rx) => { await api.saveOpticalRx(rx); await loadData(true); showAlert("Receita salva!", "success"); setCurrentView('OPTICAL_RX'); }} 
+            onCancel={() => setCurrentView('OPTICAL_RX')} 
         />;
 
       case 'SRV_OS':
@@ -271,25 +234,16 @@ const App: React.FC = () => {
             user={currentUser!} 
             pjData={{
                 companyProfile: data.companyProfile,
-                branches: data.branches,
-                costCenters: data.costCenters,
-                departments: data.departments,
-                projects: data.projects
+                branches: data.branches, costCenters: data.costCenters, departments: data.departments, projects: data.projects
             }}
             onUpdateSettings={async (s) => { await updateSettings(s); checkAuth(); }}
             onOpenCollab={() => setIsCollabModalOpen(true)}
-            onSavePJEntity={async (type, payload) => {
-                await api.savePJEntity(type, payload);
-                loadData(true);
-            }}
-            onDeletePJEntity={async (type, id) => {
-                await api.deletePJEntity(type, id);
-                loadData(true);
-            }}
+            onSavePJEntity={async (type, payload) => { await api.savePJEntity(type, payload); loadData(true); }}
+            onDeletePJEntity={async (type, id) => { await api.deletePJEntity(type, id); loadData(true); }}
         />;
 
       default:
-        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
+        return <Dashboard state={data} settings={effectiveSettings} onAddTransaction={handleSaveTransaction} onDeleteTransaction={async id => { await api.deleteTransaction(id); loadData(true); }} onEditTransaction={handleSaveTransaction} onUpdateStatus={handleSaveTransaction} onChangeView={setCurrentView} />;
     }
   };
 
@@ -298,11 +252,11 @@ const App: React.FC = () => {
   if (publicToken) return <PublicOrderView token={publicToken} />;
 
   return (
-    <div className="flex h-screen bg-gray-50 font-inter text-gray-900">
+    <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden">
       <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
-        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} notificationCount={notifications.length} />
+        <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={setCurrentUser} notificationCount={0} />
         <main className="flex-1 overflow-y-auto relative">
-            <div className="p-8 w-full">{renderContent()}</div>
+            <div className="p-4 md:p-8 max-w-[1600px] mx-auto">{renderContent()}</div>
         </main>
         <CollaborationModal isOpen={isCollabModalOpen} onClose={() => setIsCollabModalOpen(false)} currentUser={currentUser} onUserUpdate={setCurrentUser} />
         <LoadingOverlay isVisible={loading} />

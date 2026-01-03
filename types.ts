@@ -1,21 +1,4 @@
 
-// ... (existing types)
-
-export interface HelpStep {
-  id: string;
-  targetId: string; // ID do elemento DOM para destacar
-  title: string;
-  content: string;
-  view: ViewMode;
-  position: 'top' | 'bottom' | 'left' | 'right';
-}
-
-export interface UserProgress {
-  completedSteps: string[];
-  isHelpActive: boolean;
-}
-
-// Extensão do status de OS para incluir o fluxo de conferência e entrega
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_RECEBIDO' | 'CONFERIDO' | 'PRONTO_ENTREGA' | 'ENTREGUE' | 'NAO_ENTREGUE';
 
 export enum EntityType {
@@ -77,7 +60,7 @@ export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 export type ViewMode = 
   | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS'
   | 'SRV_OS' | 'SRV_SALES' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS'
-  | 'OPTICAL_RX' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
+  | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
   | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS';
@@ -97,14 +80,6 @@ export interface AppSettings {
     notifyDueToday: boolean;
     notifyDueTomorrow: boolean;
     notifyOverdue: boolean;
-  };
-  email?: {
-    enabled: boolean;
-    email: string;
-    notifyDueToday: boolean;
-    notifyDueTomorrow: boolean;
-    notifyOverdue: boolean;
-    notifyWeeklyReport: boolean;
   };
 }
 
@@ -140,27 +115,202 @@ export interface ToothState {
   tooth: number;
   condition: 'HEALTHY' | 'CAVITY' | 'FILLING' | 'MISSING' | 'CROWN' | 'ENDO' | 'IMPLANT';
   notes?: string;
-  isDeciduous?: boolean;
 }
 
+// Added missing Anamnesis type for ServiceModule
 export interface Anamnesis {
-  heartProblem: boolean;
-  hypertension: boolean;
-  diabetes: boolean;
-  allergy: boolean;
-  anestheticAllergy: boolean;
-  bleedingProblem: boolean;
-  isPregnant: boolean;
-  bisphosphonates: boolean;
-  medications: string;
-  notes: string;
+  heartProblem?: boolean;
+  hypertension?: boolean;
+  diabetes?: boolean;
+  allergy?: boolean;
+  anestheticAllergy?: boolean;
+  bleedingProblem?: boolean;
+  isPregnant?: boolean;
+  bisphosphonates?: boolean;
+  medications?: string;
+  notes?: string;
 }
 
+// Added missing Prescription type
 export interface Prescription {
   id: string;
   date: string;
-  content: string;
-  type: 'RECEITA' | 'ATESTADO' | 'ORIENTACAO';
+  medications: string;
+}
+
+// Added missing TreatmentItem type
+export interface TreatmentItem {
+  id: string;
+  serviceId: string;
+  serviceName?: string;
+  teeth?: number[];
+  value: number;
+}
+
+// Added missing TreatmentProcedure type
+export interface TreatmentProcedure {
+  id: string;
+  planId: string;
+  serviceId: string;
+  serviceName: string;
+  value: number;
+  discount: number;
+  netValue: number;
+  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  teeth: number[];
+  category?: string;
+}
+
+// Added missing TreatmentPlan type
+export interface TreatmentPlan {
+  id: string;
+  clientId: string;
+  title: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  procedures: TreatmentProcedure[];
+}
+
+export interface ServiceClient {
+  id: string;
+  contactId?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  notes?: string;
+  birthDate?: string;
+  insurance?: string;
+  moduleTag: string;
+  odontogram?: ToothState[];
+  // Added missing clinical data fields
+  anamnesis?: Anamnesis;
+  prescriptions?: Prescription[];
+  attachments?: string[];
+  treatmentPlans?: TreatmentPlan[];
+}
+
+export interface ServiceItem {
+  id: string;
+  name: string; 
+  code?: string;
+  type: 'SERVICE' | 'PRODUCT';
+  defaultPrice: number;
+  moduleTag: string;
+  costPrice?: number;
+  defaultDuration?: number;
+  isComposite?: boolean;
+  items?: OSItem[];
+  // Added missing catalog fields
+  brand?: string;
+  description?: string;
+  imageUrl?: string;
+  unit?: string;
+}
+
+export interface OSItem {
+  id: string;
+  serviceItemId?: string;
+  code?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  isBillable?: boolean;
+  estimatedDuration?: number;
+  // Added technician and cost tracking fields
+  technician?: string;
+  realDuration?: number;
+  costPrice?: number;
+}
+
+export interface ServiceOrder {
+  id: string;
+  number?: number;
+  title: string;
+  contactId?: string;
+  contactName?: string;
+  status: OSStatus;
+  totalAmount: number;
+  openedAt: string;
+  type: OSType;
+  origin: OSOrigin;
+  priority: OSPriority;
+  items: OSItem[];
+  moduleTag?: string;
+  // Added deadline and assignment fields
+  endDate?: string;
+  description?: string;
+  startDate?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  rxId?: string;
+}
+
+export interface CommercialOrder {
+  id: string;
+  type: 'SALE' | 'PURCHASE';
+  description: string;
+  contactId?: string;
+  contactName?: string;
+  amount: number;
+  items: OSItem[];
+  date: string;
+  status: string;
+  moduleTag?: string;
+  // Added pricing breakdown and assignment fields
+  grossAmount?: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  transactionId?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  rxId?: string;
+}
+
+export interface Contract {
+  id: string;
+  title: string;
+  contactId?: string;
+  contactName?: string;
+  value: number;
+  startDate: string;
+  status: string;
+  // Added end date and billing configuration
+  endDate?: string;
+  billingDay?: number;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  amount: number;
+  issueDate: string;
+  status: string;
+  contactName?: string;
+  // Added fiscal and link fields
+  series?: string;
+  type?: string;
+  contactId?: string;
+  description?: string;
+  items?: OSItem[];
+  fileUrl?: string;
+  orderId?: string;
+  serviceOrderId?: string;
+  issue_date?: string;
+}
+
+export interface ServiceAppointment {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  treatmentItems?: TreatmentItem[];
+  date: string;
+  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
+  moduleTag: string;
+  // Added clinical notes and locking
+  clinicalNotes?: string;
+  notes?: string;
+  isLocked?: boolean;
 }
 
 export interface User {
@@ -172,9 +322,9 @@ export interface User {
   role: string;
   entityType: EntityType;
   plan: SubscriptionPlan;
-  status: string;
   googleId?: string;
   workspaces?: Member[];
+  status?: string;
 }
 
 export interface Member {
@@ -183,18 +333,18 @@ export interface Member {
   email: string;
   role: 'ADMIN' | 'MEMBER';
   permissions?: string[] | string;
-  entityType?: EntityType;
   ownerSettings?: AppSettings;
 }
 
 export interface Contact {
   id: string;
   name: string;
-  fantasyName?: string;
   type: 'PF' | 'PJ';
   email?: string;
   phone?: string;
   document?: string;
+  // Added secondary and address fields
+  fantasyName?: string;
   ie?: string;
   im?: string;
   pixKey?: string;
@@ -216,6 +366,7 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
+  // Added credit card specific fields
   creditLimit?: number;
   closingDay?: number;
   dueDay?: number;
@@ -230,13 +381,14 @@ export interface Transaction {
   date: string;
   status: TransactionStatus;
   accountId: string;
-  destinationAccountId?: string;
   contactId?: string;
+  receiptUrls?: string[];
+  createdByName?: string;
+  // Added missing fields for transfers, recurrence and PJ classification
+  destinationAccountId?: string;
   isRecurring?: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEndDate?: string;
-  receiptUrls?: string[];
-  createdByName?: string;
   interestRate?: number;
   goalId?: string;
   branchId?: string;
@@ -257,6 +409,7 @@ export interface FinancialGoal {
   name: string;
   targetAmount: number;
   currentAmount?: number;
+  // Added snake_case version for server-side compatibility
   current_amount?: number;
   deadline: string;
 }
@@ -266,221 +419,27 @@ export interface CompanyProfile {
   tradeName: string;
   legalName: string;
   cnpj: string;
-  taxRegime: TaxRegime;
+  // Added profile details for PJ settings
+  taxRegime?: TaxRegime;
   cnae?: string;
   secondaryCnaes?: string;
-  city?: string;
-  state?: string;
   zipCode?: string;
   street?: string;
   number?: string;
   neighborhood?: string;
+  city?: string;
+  state?: string;
   phone?: string;
   email?: string;
   hasEmployees?: boolean;
   issuesInvoices?: boolean;
 }
 
-export interface Branch {
-  id: string;
-  name: string;
-  code?: string;
-}
-
-export interface CostCenter {
-  id: string;
-  name: string;
-  code?: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-}
-
-export interface TreatmentProcedure {
-    id: string;
-    planId: string;
-    serviceId: string;
-    serviceName: string;
-    category?: 'ORTODONTIA' | 'IMPLANTE' | 'ESTETICA' | 'PERIODONTIA' | 'ENDODONTIA' | 'GERAL';
-    teeth?: number[];
-    value: number;
-    discount: number;
-    netValue: number;
-    responsibleId?: string;
-    responsibleName?: string;
-    status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-    notes?: string;
-    completedAt?: string;
-}
-
-export interface TreatmentPlan {
-    id: string;
-    clientId: string;
-    title: string;
-    status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
-    createdAt: string;
-    procedures: TreatmentProcedure[];
-}
-
-export interface ServiceClient {
-  id: string;
-  contactId?: string;
-  contactName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  notes?: string;
-  birthDate?: string;
-  insurance?: string;
-  insuranceNumber?: string;
-  allergies?: string;
-  legalGuardianName?: string;
-  legalGuardianPhone?: string;
-  moduleTag: string;
-  attachments?: string[];
-  odontogram?: ToothState[];
-  anamnesis?: Anamnesis;
-  prescriptions?: Prescription[];
-  treatmentPlans?: TreatmentPlan[];
-}
-
-export interface ServiceItem {
-  id: string;
-  name: string; 
-  code?: string;
-  type: 'SERVICE' | 'PRODUCT';
-  defaultPrice: number;
-  moduleTag: string;
-  costPrice?: number;
-  defaultDuration?: number;
-  isComposite?: boolean;
-  items?: OSItem[];
-  brand?: string;
-  unit?: string;
-  description?: string;
-  imageUrl?: string;
-  opticalCategory?: 'FRAME' | 'LENS' | 'TREATMENT' | 'CONTACT_LENS' | 'OTHER';
-}
-
-export interface OSItem {
-  id: string;
-  serviceItemId?: string;
-  code?: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  estimatedDuration?: number;
-  realDuration?: number;
-  isBillable?: boolean;
-  technician?: string;
-  costPrice?: number;
-  isFromCatalog?: boolean;
-}
-
-export interface ServiceOrder {
-  id: string;
-  number?: number;
-  title: string;
-  description?: string;
-  contactId?: string;
-  contactName?: string;
-  status: OSStatus;
-  totalAmount: number;
-  startDate?: string;
-  endDate?: string;
-  openedAt: string;
-  type: OSType;
-  origin: OSOrigin;
-  priority: OSPriority;
-  items: OSItem[];
-  assigneeId?: string;
-  assigneeName?: string;
-  createdAt?: string;
-  rxId?: string;
-  moduleTag?: string;
-}
-
-export interface CommercialOrder {
-  id: string;
-  type: 'SALE' | 'PURCHASE';
-  description: string;
-  contactId?: string;
-  contactName?: string;
-  amount: number;
-  grossAmount: number;
-  discountAmount: number;
-  taxAmount: number;
-  items: OSItem[];
-  date: string;
-  status: 'DRAFT' | 'APPROVED' | 'ON_HOLD' | 'CONFIRMED' | 'REJECTED' | 'CANCELADA';
-  transactionId?: string;
-  accessToken?: string;
-  assigneeId?: string;
-  assigneeName?: string;
-  createdAt?: string;
-  rxId?: string;
-  moduleTag?: string;
-}
-
-export interface Contract {
-  id: string;
-  title: string;
-  contactId?: string;
-  contactName?: string;
-  value: number;
-  startDate: string;
-  endDate?: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
-  billingDay?: number;
-  createdAt?: string;
-}
-
-export interface Invoice {
-  id: string;
-  number: string;
-  series: string;
-  type: string;
-  amount: number;
-  issueDate: string;
-  status: 'ISSUED' | 'CANCELLED';
-  contactId?: string;
-  contactName?: string;
-  description: string;
-  items: OSItem[];
-  fileUrl?: string;
-  orderId?: string;
-  serviceOrderId?: string;
-  createdAt?: string;
-}
-
-export interface TreatmentItem {
-    id: string;
-    serviceId: string;
-    serviceName?: string;
-    teeth?: number[];
-    value: number;
-}
-
-export interface ServiceAppointment {
-  id: string;
-  clientId: string;
-  clientName?: string;
-  treatmentItems?: TreatmentItem[];
-  date: string;
-  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
-  notes?: string;
-  clinicalNotes?: string;
-  moduleTag: string;
-  attachments?: string[];
-  isLocked?: boolean;
-}
+// Added Branch, CostCenter, Department, Project missing interfaces
+export interface Branch { id: string; name: string; code?: string; }
+export interface CostCenter { id: string; name: string; code?: string; }
+export interface Department { id: string; name: string; }
+export interface Project { id: string; name: string; }
 
 export interface AppState {
   accounts: Account[];
@@ -503,16 +462,18 @@ export interface AppState {
   companyProfile?: CompanyProfile | null;
 }
 
+// Added AuthResponse interface
 export interface AuthResponse {
   token: string;
   user: User;
 }
 
+// Added AuditLog interface
 export interface AuditLog {
   id: number;
   userId: string;
-  userName: string;
-  action: string;
+  userName?: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT' | 'JOIN';
   entity: string;
   entityId: string;
   details: string;
@@ -520,17 +481,6 @@ export interface AuditLog {
   previousState?: any;
   changes?: any;
   isDeleted?: boolean;
-}
-
-export interface NotificationLog {
-  id: number;
-  status: 'SENT' | 'FAILED';
-  channel: 'EMAIL' | 'WHATSAPP';
-  recipient: string;
-  subject: string;
-  content: string;
-  userName: string;
-  createdAt: string;
 }
 
 export interface AppNotification {
@@ -544,6 +494,9 @@ export interface AppNotification {
     entityId?: string;
 }
 
+// Alias AppNotification to NotificationLog to fix storageService error
+export type NotificationLog = AppNotification;
+
 export interface RoleDefinition {
   id: string;
   label: string;
@@ -556,37 +509,32 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
       id: 'ADMIN',
       label: 'Administrador',
-      description: 'Acesso total ao sistema e gestão de equipe.',
+      description: 'Acesso total ao sistema.',
       defaultPermissions: []
   },
   {
       id: 'FIN_MANAGER',
       label: 'Gerente Financeiro',
-      description: 'Gestão completa de contas, lançamentos e relatórios.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_CALENDAR', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_GOALS', 'FIN_REPORTS', 'FIN_CATEGORIES', 'FIN_CONTACTS']
+      description: 'Gestão completa de contas.',
+      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_REPORTS']
   },
   {
       id: 'SALES_REP',
-      label: 'Vendedor / Comercial',
-      description: 'Foco em orçamentos, vendas e catálogo de itens.',
+      label: 'Vendedor',
+      description: 'Foco em orçamentos e vendas.',
       requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CATALOG', 'SRV_CLIENTS', 'FIN_CONTACTS']
-  },
-  {
-      id: 'OPTICAL_MANAGER',
-      label: 'Gestor de Ótica',
-      description: 'Gestão de receitas, vendas guiadas e laboratório.',
-      requiredModule: 'optical',
-      defaultPermissions: ['FIN_DASHBOARD', 'OPTICAL_RX', 'OPTICAL_SALES', 'OPTICAL_LAB', 'SRV_CATALOG', 'FIN_CONTACTS']
-  },
-  {
-      id: 'ODONTO_MANAGER',
-      label: 'Gestor de Odontologia',
-      description: 'Gestão de prontuários, agenda clínica e tratamentos.',
-      requiredModule: 'odonto',
-      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'ODONTO_PROCEDURES', 'SRV_CATALOG', 'FIN_CONTACTS']
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CLIENTS']
   }
 ];
+
+export interface HelpStep {
+  id: string;
+  targetId: string;
+  title: string;
+  content: string;
+  view: ViewMode;
+  position: 'top' | 'bottom' | 'left' | 'right';
+}
 
 export interface KanbanItem {
   id: string;

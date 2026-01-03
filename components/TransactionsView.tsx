@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, Contact, Category, EntityType } from '../types';
+// Fix: Use corrected types
+import { Transaction, TransactionType, TransactionStatus, Account, AppSettings, Contact, Category, EntityType, Branch, CostCenter, Department, Project } from '../types';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { Search, Plus, CalendarClock, TrendingUp, TrendingDown, Scale, ArrowRight, Filter, User, CreditCard, DollarSign, ListChecks, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
@@ -12,6 +13,11 @@ interface TransactionsViewProps {
   categories: Category[]; 
   settings?: AppSettings;
   userEntity?: EntityType;
+  // Fix: Added missing props passed from App.tsx
+  branches?: Branch[];
+  costCenters?: CostCenter[];
+  departments?: Department[];
+  projects?: Project[];
   onDelete: (id: string) => void;
   onEdit: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onToggleStatus: (t: Transaction) => void;
@@ -19,7 +25,7 @@ interface TransactionsViewProps {
 }
 
 const TransactionsView: React.FC<TransactionsViewProps> = ({ 
-  transactions, accounts, contacts, categories, userEntity, onDelete, onEdit, onToggleStatus, onAdd
+  transactions, accounts, contacts, categories, userEntity, branches = [], costCenters = [], departments = [], projects = [], onDelete, onEdit, onToggleStatus, onAdd
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | TransactionType>('ALL');
@@ -335,6 +341,11 @@ const TransactionsView: React.FC<TransactionsViewProps> = ({
         categories={categories} 
         initialData={editingTransaction} 
         userEntity={userEntity} 
+        // Fix: Added props passed down to TransactionModal
+        branches={branches}
+        costCenters={costCenters}
+        departments={departments}
+        projects={projects}
       />
     </div>
   );
