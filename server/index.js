@@ -69,13 +69,18 @@ const staticOptions = {
         if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         }
-        // Garante que o Service Worker não seja cacheado agressivamente pelo browser
+        // Garante que arquivos JSON e o Service Worker tenham headers adequados
+        if (filePath.endsWith('.json')) {
+            res.setHeader('Content-Type', 'application/json');
+        }
         if (filePath.endsWith('sw.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         }
     }
 };
 
+// Servir de múltiplas pastas para cobrir diferentes estruturas de build
 app.use(express.static(distPath, staticOptions));
 app.use(express.static(publicPath, staticOptions));
 app.use(express.static(rootPath, staticOptions));
@@ -90,6 +95,7 @@ const renderIndex = (req, res) => {
 
     if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
+        // Fallback para o Client ID do Google caso a variável não esteja no ambiente
         const googleId = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
         
         content = content.replace("__GOOGLE_CLIENT_ID__", googleId);
@@ -105,12 +111,14 @@ app.get('/', renderIndex);
 
 app.get('*', (req, res) => {
     const isApiRequest = req.path.startsWith('/api/');
+    // Se tem extensão e não foi pego pelos express.static acima, é 404 real
     const hasExtension = path.extname(req.path) !== '';
 
     if (isApiRequest || hasExtension) {
         return res.status(404).end();
     }
     
+    // Fallback para SPA (index.html) para rotas de navegação
     renderIndex(req, res);
 });
 
