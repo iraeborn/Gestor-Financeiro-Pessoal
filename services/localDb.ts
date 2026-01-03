@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4; // Incrementado para garantir criação do store companyProfile
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -18,7 +18,7 @@ export class LocalDB {
           'serviceItems', 'serviceAppointments', 'goals', 'categories', 
           'branches', 'costCenters', 'departments', 'projects', 
           'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-          'opticalRxs', 'sync_queue'
+          'opticalRxs', 'sync_queue', 'companyProfile' // Adicionado companyProfile
         ];
 
         stores.forEach(store => {
@@ -40,43 +40,61 @@ export class LocalDB {
   async getAll<T>(storeName: string): Promise<T[]> {
     return new Promise((resolve, reject) => {
       if (!this.db) return resolve([]);
-      const transaction = this.db.transaction(storeName, 'readonly');
-      const store = transaction.objectStore(storeName);
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      
+      try {
+        const transaction = this.db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      } catch (e) {
+        console.warn(`Store ${storeName} não encontrado ou erro na transação:`, e);
+        resolve([]); // Fallback para não travar o App
+      }
     });
   }
 
   async put(storeName: string, data: any): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject('DB not initialized');
-      const transaction = this.db.transaction(storeName, 'readwrite');
-      const store = transaction.objectStore(storeName);
-      const request = store.put({ ...data, _updatedAt: Date.now() });
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      try {
+        const transaction = this.db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.put({ ...data, _updatedAt: Date.now() });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 
   async delete(storeName: string, id: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject('DB not initialized');
-      const transaction = this.db.transaction(storeName, 'readwrite');
-      const store = transaction.objectStore(storeName);
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      try {
+        const transaction = this.db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 
   async clearStore(storeName: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject('DB not initialized');
-      const transaction = this.db.transaction(storeName, 'readwrite');
-      const store = transaction.objectStore(storeName);
-      store.clear();
-      transaction.oncomplete = () => resolve();
+      try {
+        const transaction = this.db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        store.clear();
+        transaction.oncomplete = () => resolve();
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 }
