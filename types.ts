@@ -117,7 +117,6 @@ export interface ToothState {
   notes?: string;
 }
 
-// Added missing Anamnesis type for ServiceModule
 export interface Anamnesis {
   heartProblem?: boolean;
   hypertension?: boolean;
@@ -131,14 +130,12 @@ export interface Anamnesis {
   notes?: string;
 }
 
-// Added missing Prescription type
 export interface Prescription {
   id: string;
   date: string;
   medications: string;
 }
 
-// Added missing TreatmentItem type
 export interface TreatmentItem {
   id: string;
   serviceId: string;
@@ -147,7 +144,6 @@ export interface TreatmentItem {
   value: number;
 }
 
-// Added missing TreatmentProcedure type
 export interface TreatmentProcedure {
   id: string;
   planId: string;
@@ -161,7 +157,6 @@ export interface TreatmentProcedure {
   category?: string;
 }
 
-// Added missing TreatmentPlan type
 export interface TreatmentPlan {
   id: string;
   clientId: string;
@@ -182,7 +177,6 @@ export interface ServiceClient {
   insurance?: string;
   moduleTag: string;
   odontogram?: ToothState[];
-  // Added missing clinical data fields
   anamnesis?: Anamnesis;
   prescriptions?: Prescription[];
   attachments?: string[];
@@ -200,7 +194,6 @@ export interface ServiceItem {
   defaultDuration?: number;
   isComposite?: boolean;
   items?: OSItem[];
-  // Added missing catalog fields
   brand?: string;
   description?: string;
   imageUrl?: string;
@@ -217,7 +210,6 @@ export interface OSItem {
   totalPrice: number;
   isBillable?: boolean;
   estimatedDuration?: number;
-  // Added technician and cost tracking fields
   technician?: string;
   realDuration?: number;
   costPrice?: number;
@@ -237,7 +229,6 @@ export interface ServiceOrder {
   priority: OSPriority;
   items: OSItem[];
   moduleTag?: string;
-  // Added deadline and assignment fields
   endDate?: string;
   description?: string;
   startDate?: string;
@@ -257,7 +248,6 @@ export interface CommercialOrder {
   date: string;
   status: string;
   moduleTag?: string;
-  // Added pricing breakdown and assignment fields
   grossAmount?: number;
   discountAmount?: number;
   taxAmount?: number;
@@ -275,7 +265,6 @@ export interface Contract {
   value: number;
   startDate: string;
   status: string;
-  // Added end date and billing configuration
   endDate?: string;
   billingDay?: number;
 }
@@ -287,7 +276,6 @@ export interface Invoice {
   issueDate: string;
   status: string;
   contactName?: string;
-  // Added fiscal and link fields
   series?: string;
   type?: string;
   contactId?: string;
@@ -307,7 +295,6 @@ export interface ServiceAppointment {
   date: string;
   status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
   moduleTag: string;
-  // Added clinical notes and locking
   clinicalNotes?: string;
   notes?: string;
   isLocked?: boolean;
@@ -343,7 +330,6 @@ export interface Contact {
   email?: string;
   phone?: string;
   document?: string;
-  // Added secondary and address fields
   fantasyName?: string;
   ie?: string;
   im?: string;
@@ -366,7 +352,6 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
-  // Added credit card specific fields
   creditLimit?: number;
   closingDay?: number;
   dueDay?: number;
@@ -384,7 +369,6 @@ export interface Transaction {
   contactId?: string;
   receiptUrls?: string[];
   createdByName?: string;
-  // Added missing fields for transfers, recurrence and PJ classification
   destinationAccountId?: string;
   isRecurring?: boolean;
   recurrenceFrequency?: RecurrenceFrequency;
@@ -409,7 +393,6 @@ export interface FinancialGoal {
   name: string;
   targetAmount: number;
   currentAmount?: number;
-  // Added snake_case version for server-side compatibility
   current_amount?: number;
   deadline: string;
 }
@@ -419,7 +402,6 @@ export interface CompanyProfile {
   tradeName: string;
   legalName: string;
   cnpj: string;
-  // Added profile details for PJ settings
   taxRegime?: TaxRegime;
   cnae?: string;
   secondaryCnaes?: string;
@@ -435,7 +417,6 @@ export interface CompanyProfile {
   issuesInvoices?: boolean;
 }
 
-// Added Branch, CostCenter, Department, Project missing interfaces
 export interface Branch { id: string; name: string; code?: string; }
 export interface CostCenter { id: string; name: string; code?: string; }
 export interface Department { id: string; name: string; }
@@ -462,13 +443,11 @@ export interface AppState {
   companyProfile?: CompanyProfile | null;
 }
 
-// Added AuthResponse interface
 export interface AuthResponse {
   token: string;
   user: User;
 }
 
-// Added AuditLog interface
 export interface AuditLog {
   id: number;
   userId: string;
@@ -494,8 +473,16 @@ export interface AppNotification {
     entityId?: string;
 }
 
-// Alias AppNotification to NotificationLog to fix storageService error
-export type NotificationLog = AppNotification;
+export interface NotificationLog {
+  id: number;
+  status: 'SENT' | 'FAILED';
+  channel: 'EMAIL' | 'WHATSAPP';
+  recipient: string;
+  subject: string;
+  content: string;
+  userName: string;
+  createdAt: string;
+}
 
 export interface RoleDefinition {
   id: string;
