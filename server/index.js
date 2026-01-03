@@ -59,9 +59,20 @@ app.use('/api', servicesRoutes(logAudit));
 app.use('/api/billing', billingRoutes(logAudit));
 
 // --- Static Files Logic ---
-// Priorizamos a raiz do projeto e a pasta dist para servir index.tsx e assets corretamente
-const rootPath = path.join(__dirname, '..');
-const distPath = path.join(__dirname, '../dist');
+const rootPath = path.resolve(__dirname, '..');
+const distPath = path.resolve(__dirname, '../dist');
+
+// Middleware para servir arquivos estáticos com MIME type correto para TS/TSX
+const staticOptions = {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        }
+    }
+};
+
+app.use(express.static(rootPath, staticOptions));
+app.use(express.static(distPath, staticOptions));
 
 const renderIndex = (req, res) => {
     const indexPath = fs.existsSync(path.join(distPath, 'index.html')) 
@@ -79,17 +90,13 @@ const renderIndex = (req, res) => {
     }
 };
 
-// Serve arquivos estáticos da raiz (necessário para index.tsx e módulos em dev/sandbox)
-app.use(express.static(rootPath));
-app.use(express.static(distPath));
-
 app.get('/', renderIndex);
-app.get('*', (req, res, next) => {
-    // Se a requisição for por um arquivo (tem extensão), e não foi encontrado pelo static, retorna 404
-    if (path.extname(req.path)) {
+app.get('*', (req, res) => {
+    // Se a requisição for por um arquivo específico que não foi encontrado
+    if (req.path.includes('.')) {
         return res.status(404).end();
     }
-    // Caso contrário, serve o index.html para o roteamento do React (SPA)
+    // Caso contrário, serve o index.html (SPA Fallback)
     renderIndex(req, res);
 });
 
