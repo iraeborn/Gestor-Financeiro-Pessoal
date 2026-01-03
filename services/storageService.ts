@@ -215,7 +215,11 @@ export const updatePublicOrderStatus = async (token: string, status: string): Pr
 
 export const loadInitialData = async (): Promise<AppState> => {
     if (navigator.onLine) {
-        await syncService.pullFromServer();
+        try {
+            await syncService.pullFromServer();
+        } catch (e) {
+            console.error("Sync pull failed:", e);
+        }
     }
 
     const stores = [
@@ -228,7 +232,7 @@ export const loadInitialData = async (): Promise<AppState> => {
 
     const results: any = {};
     for (const store of stores) {
-        results[store] = await localDb.getAll(store);
+        results[store] = await localDb.getAll(store) || [];
     }
     
     const companyProfiles = await localDb.getAll('companyProfile');
@@ -271,7 +275,7 @@ export const api = {
     deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
 
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
-    deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
+    deleteCatalogItem: async (id: string) => api.deleteCatalogItem(id),
 
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
     deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),

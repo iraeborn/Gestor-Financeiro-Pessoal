@@ -11,7 +11,7 @@ interface BranchesViewProps {
     onManageSchedule: (b: Branch) => void;
 }
 
-const BranchesView: React.FC<BranchesViewProps> = ({ branches, onSaveBranch, onDeleteBranch, onManageSchedule }) => {
+const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch, onDeleteBranch, onManageSchedule }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,10 +21,12 @@ const BranchesView: React.FC<BranchesViewProps> = ({ branches, onSaveBranch, onD
         color: '#4f46e5'
     });
 
-    const filtered = branches.filter(b => 
-        b.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        b.city?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = (branches || []).filter(b => {
+        const name = b.name || '';
+        const city = b.city || '';
+        return name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+               city.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
     const handleOpenModal = (branch?: Branch) => {
         if (branch) setFormData(branch);

@@ -13,7 +13,7 @@ interface BranchScheduleViewProps {
     onBack: () => void;
 }
 
-const BranchScheduleView: React.FC<BranchScheduleViewProps> = ({ branch, appointments, clients, onSaveAppointment, onDeleteAppointment, onBack }) => {
+const BranchScheduleView: React.FC<BranchScheduleViewProps> = ({ branch, appointments = [], clients = [], onSaveAppointment, onDeleteAppointment, onBack }) => {
     const { showAlert } = useAlert();
     const { showConfirm } = useConfirm();
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -23,12 +23,13 @@ const BranchScheduleView: React.FC<BranchScheduleViewProps> = ({ branch, appoint
         date: new Date().toISOString().split('T')[0]
     });
 
-    const branchAppointments = appointments.filter(a => a.branchId === branch.id);
+    const branchAppointments = (appointments || []).filter(a => a.branchId === branch.id);
     
     // Agrupa por data para o calendário
     const eventsMap = useMemo(() => {
         const map: Record<string, ServiceAppointment[]> = {};
         branchAppointments.forEach(a => {
+            if (!a.date) return;
             const d = a.date.split('T')[0];
             if (!map[d]) map[d] = [];
             map[d].push(a);
@@ -130,12 +131,12 @@ const BranchScheduleView: React.FC<BranchScheduleViewProps> = ({ branch, appoint
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {todaysEvents.sort((a,b) => a.date.localeCompare(b.date)).map(appt => (
+                            {todaysEvents.sort((a,b) => (a.date || '').localeCompare(b.date || '')).map(appt => (
                                 <div key={appt.id} className="bg-white rounded-3xl border border-gray-100 p-6 flex items-center justify-between shadow-sm hover:shadow-md transition-all group">
                                     <div className="flex items-center gap-5">
                                         <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex flex-col items-center justify-center text-indigo-600">
                                             <Clock className="w-4 h-4 mb-0.5" />
-                                            <span className="text-xs font-black uppercase">{new Date(appt.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-xs font-black uppercase">{appt.date ? new Date(appt.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                                         </div>
                                         <div>
                                             <h4 className="font-bold text-gray-900">{appt.clientName || 'Cliente Indefinido'}</h4>
@@ -157,7 +158,7 @@ const BranchScheduleView: React.FC<BranchScheduleViewProps> = ({ branch, appoint
             </div>
 
             {isModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-200 flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-10 animate-scale-up border border-slate-100">
                         <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-8 flex items-center gap-2">
                             <Clock className="w-6 h-6 text-indigo-600" />

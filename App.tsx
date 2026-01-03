@@ -26,11 +26,18 @@ import SmartAdvisor from './components/SmartAdvisor';
 import DiagnosticView from './components/DiagnosticView';
 import CategoriesView from './components/CategoriesView';
 import ContactsView from './components/ContactsView';
+import ContactEditor from './components/ContactEditor';
 import AccessView from './components/AccessView';
 import LogsView from './components/LogsView';
 import SettingsView from './components/SettingsView';
 import OpticalModule from './components/OpticalModule';
+import OpticalRxEditor from './components/OpticalRxEditor';
 import ServiceModule from './components/ServiceModule';
+import ServicesView from './components/ServicesView';
+import ServiceOrderEditor from './components/ServiceOrderEditor';
+import SaleEditor from './components/SaleEditor';
+import BranchesView from './components/BranchesView';
+import BranchScheduleView from './components/BranchScheduleView';
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -48,6 +55,13 @@ const App: React.FC = () => {
   // View States
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
+
+  // Selection States for Editors
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
+  const [selectedSale, setSelectedSale] = useState<CommercialOrder | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
 
   // Auth Navigation States
   const [showAuth, setShowAuth] = useState(false);
@@ -85,7 +99,6 @@ const App: React.FC = () => {
             await localDb.init();
         } catch (e) {
             console.error("IndexedDB failed to initialize:", e);
-            showAlert("Erro ao acessar banco de dados local. Algumas funções offline podem não funcionar.", "error");
         }
         
         window.addEventListener('online', () => {
@@ -106,11 +119,15 @@ const App: React.FC = () => {
     initApp();
   }, [publicToken]);
 
+  const refreshData = async () => {
+      const data = await loadInitialData();
+      setState(data);
+  };
+
   const handleUpdateStatus = async (t: Transaction) => {
     const newStatus = t.status === 'PAID' ? 'PENDING' : 'PAID';
     await api.saveTransaction({ ...t, status: newStatus as any });
-    const data = await loadInitialData();
-    setState(data);
+    await refreshData();
   };
 
   const handleLoginSuccess = async (user: User) => {
@@ -130,7 +147,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium">Carregando seus dados...</p>
+                <p className="text-gray-400 font-medium">Sincronizando dados...</p>
             </div>
         );
     }
@@ -139,30 +156,164 @@ const App: React.FC = () => {
         state,
         settings: currentUser.settings,
         currentUser,
-        onAddTransaction: (t: any) => api.saveTransaction(t).then(() => loadInitialData().then(setState)),
-        onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(() => loadInitialData().then(setState)),
-        onEditTransaction: (t: any) => api.saveTransaction(t).then(() => loadInitialData().then(setState)),
+        onAddTransaction: (t: any) => api.saveTransaction(t).then(refreshData),
+        onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(refreshData),
+        onEditTransaction: (t: any) => api.saveTransaction(t).then(refreshData),
         onUpdateStatus: handleUpdateStatus,
         onChangeView: setCurrentView
     };
 
+    // Fix: Added companyProfile to safeState to ensure it exists for use in child views like SettingsView
+    const safeState = {
+        accounts: state.accounts || [],
+        transactions: state.transactions || [],
+        contacts: state.contacts || [],
+        categories: state.categories || [],
+        branches: state.branches || [],
+        costCenters: state.costCenters || [],
+        departments: state.departments || [],
+        projects: state.projects || [],
+        serviceClients: state.serviceClients || [],
+        serviceItems: state.serviceItems || [],
+        serviceAppointments: state.serviceAppointments || [],
+        serviceOrders: state.serviceOrders || [],
+        commercialOrders: state.commercialOrders || [],
+        contracts: state.contracts || [],
+        invoices: state.invoices || [],
+        opticalRxs: state.opticalRxs || [],
+        goals: state.goals || [],
+        companyProfile: state.companyProfile || null
+    };
+
     switch (currentView) {
-      case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
-      case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onEditTransaction} onToggleStatus={handleUpdateStatus} />;
-      case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts} onSaveAccount={(a) => api.saveAccount(a).then(() => loadInitialData().then(setState))} onDeleteAccount={(id) => api.deleteAccount(id).then(() => loadInitialData().then(setState))} />;
-      case 'FIN_ADVISOR': return <SmartAdvisor data={state} />;
-      case 'DIAG_HUB': return <DiagnosticView state={state} />;
-      case 'FIN_CARDS': return <CreditCardsView accounts={state.accounts} transactions={state.transactions} contacts={state.contacts} categories={state.categories} onSaveAccount={(a) => api.saveAccount(a).then(() => loadInitialData().then(setState))} onDeleteAccount={(id) => api.deleteAccount(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
-      case 'FIN_GOALS': return <GoalsView goals={state.goals} accounts={state.accounts} transactions={state.transactions} onSaveGoal={(g) => api.saveGoal(g).then(() => loadInitialData().then(setState))} onDeleteGoal={(id) => api.deleteGoal(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
-      case 'FIN_REPORTS': return <Reports transactions={state.transactions} />;
-      case 'FIN_CATEGORIES': return <CategoriesView categories={state.categories} onSaveCategory={(c) => api.saveCategory(c).then(() => loadInitialData().then(setState))} onDeleteCategory={(id) => api.deleteCategory(id).then(() => loadInitialData().then(setState))} />;
-      case 'FIN_CONTACTS': return <ContactsView contacts={state.contacts} onAddContact={() => {}} onEditContact={() => {}} onDeleteContact={(id) => api.deleteContact(id).then(() => loadInitialData().then(setState))} />;
-      case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: state.costCenters, departments: state.departments, projects: state.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(() => loadInitialData().then(setState))} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(() => loadInitialData().then(setState))} />;
+      // FINANCEIRO
+      case 'FIN_DASHBOARD': return <Dashboard {...commonProps} state={safeState as any} />;
+      case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={safeState.transactions} accounts={safeState.accounts} contacts={safeState.contacts} categories={safeState.categories} branches={safeState.branches} costCenters={safeState.costCenters} departments={safeState.departments} projects={safeState.projects} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onEditTransaction} onToggleStatus={handleUpdateStatus} />;
+      case 'FIN_ACCOUNTS': return <AccountsView accounts={safeState.accounts} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
+      case 'FIN_CARDS': return <CreditCardsView accounts={safeState.accounts} transactions={safeState.transactions} contacts={safeState.contacts} categories={safeState.categories} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+      case 'FIN_GOALS': return <GoalsView goals={safeState.goals} accounts={safeState.accounts} transactions={safeState.transactions} onSaveGoal={(g) => api.saveGoal(g).then(refreshData)} onDeleteGoal={(id) => api.deleteGoal(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+      case 'FIN_REPORTS': return <Reports transactions={safeState.transactions} />;
+      
+      // INTELIGÊNCIA
+      case 'FIN_ADVISOR': return <SmartAdvisor data={safeState as any} />;
+      case 'DIAG_HUB': return <DiagnosticView state={safeState as any} />;
+      
+      // OPERACIONAL & ÓTICA
+      case 'SRV_OS':
+      case 'SRV_SALES':
+      case 'SRV_CATALOG':
+      case 'SRV_PURCHASES':
+      case 'SRV_CONTRACTS':
+      case 'SRV_NF':
+      case 'OPTICAL_LAB':
+      case 'OPTICAL_SALES':
+          return (
+              <ServicesView 
+                {...commonProps}
+                currentView={currentView}
+                serviceOrders={safeState.serviceOrders}
+                commercialOrders={safeState.commercialOrders}
+                contracts={safeState.contracts}
+                invoices={safeState.invoices}
+                contacts={safeState.contacts}
+                accounts={safeState.accounts}
+                serviceItems={safeState.serviceItems}
+                opticalRxs={safeState.opticalRxs}
+                onAddOS={() => { setSelectedOS(null); setCurrentView('SRV_OS_EDITOR'); }}
+                onEditOS={(os) => { setSelectedOS(os); setCurrentView('SRV_OS_EDITOR'); }}
+                onAddSale={() => { setSelectedSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
+                onEditSale={(sale) => { setSelectedSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
+                onSaveOS={(os) => api.saveOS(os).then(refreshData)}
+                onDeleteOS={(id) => api.deleteOS(id).then(refreshData)}
+                onSaveOrder={(o) => api.saveOrder(o).then(refreshData)}
+                onDeleteOrder={(id) => api.deleteOrder(id).then(refreshData)}
+                onSaveContract={(c) => api.savePJEntity('contract', c).then(refreshData)}
+                onDeleteContract={(id) => api.deletePJEntity('contract', id).then(refreshData)}
+                onSaveInvoice={(i) => api.savePJEntity('invoice', i).then(refreshData)}
+                onDeleteInvoice={(id) => api.deletePJEntity('invoice', id).then(refreshData)}
+                onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)}
+                onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
+              />
+          );
+
+      case 'SRV_OS_EDITOR': 
+        return <ServiceOrderEditor 
+                    initialData={selectedOS} 
+                    contacts={safeState.contacts} 
+                    serviceItems={safeState.serviceItems} 
+                    opticalRxs={safeState.opticalRxs} 
+                    branches={safeState.branches}
+                    settings={currentUser.settings}
+                    onSave={(os) => api.saveOS(os).then(() => { refreshData(); setCurrentView('SRV_OS'); })}
+                    onCancel={() => setCurrentView('SRV_OS')} 
+                />;
+      
+      case 'SRV_SALE_EDITOR':
+        return <SaleEditor 
+                    initialData={selectedSale} 
+                    contacts={safeState.contacts} 
+                    serviceItems={safeState.serviceItems} 
+                    opticalRxs={safeState.opticalRxs} 
+                    branches={safeState.branches}
+                    settings={currentUser.settings}
+                    onSave={(sale) => api.saveOrder(sale).then(() => { refreshData(); setCurrentView('SRV_SALES'); })}
+                    onCancel={() => setCurrentView('SRV_SALES')} 
+                />;
+
+      // FILIAIS & UNIDADES
+      case 'SYS_BRANCHES':
+          return (
+              <BranchesView 
+                  branches={safeState.branches} 
+                  onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} 
+                  onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)}
+                  onManageSchedule={(b) => { setSelectedBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }}
+              />
+          );
+      
+      case 'SRV_BRANCH_SCHEDULE':
+          if (!selectedBranch) { setCurrentView('SYS_BRANCHES'); return null; }
+          return (
+              <BranchScheduleView 
+                  branch={selectedBranch}
+                  appointments={safeState.serviceAppointments}
+                  clients={safeState.serviceClients}
+                  onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)}
+                  onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)}
+                  onBack={() => setCurrentView('SYS_BRANCHES')}
+              />
+          );
+
+      // ESPECIALIDADES
+      case 'OPTICAL_RX': 
+        return <OpticalModule 
+                    opticalRxs={safeState.opticalRxs} 
+                    contacts={safeState.contacts} 
+                    onAddRx={() => { setSelectedRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }}
+                    onEditRx={(rx) => { setSelectedRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }}
+                    onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} 
+                />;
+      case 'OPTICAL_RX_EDITOR':
+        return <OpticalRxEditor 
+                    initialData={selectedRx} 
+                    contacts={safeState.contacts} 
+                    branches={safeState.branches}
+                    onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })}
+                    onCancel={() => setCurrentView('OPTICAL_RX')} 
+                />;
+
+      case 'ODONTO_AGENDA': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CALENDAR" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+      case 'ODONTO_PATIENTS': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CLIENTS" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+      
+      // SISTEMA
+      case 'FIN_CATEGORIES': return <CategoriesView categories={safeState.categories} onSaveCategory={(c) => api.saveCategory(c).then(refreshData)} onDeleteCategory={(id) => api.deleteCategory(id).then(refreshData)} />;
+      case 'FIN_CONTACTS': return <ContactsView contacts={safeState.contacts} onAddContact={() => { setSelectedContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} onEditContact={(c) => { setSelectedContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
+      case 'FIN_CONTACT_EDITOR': return <ContactEditor initialData={selectedContact} settings={currentUser.settings} onSave={(c) => api.saveContact(c).then(() => { refreshData(); setCurrentView('FIN_CONTACTS'); })} onCancel={() => setCurrentView('FIN_CONTACTS')} />;
+      case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: safeState.companyProfile, branches: safeState.branches, costCenters: safeState.costCenters, departments: safeState.departments, projects: safeState.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
       case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
       case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
-      case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} onAddRx={() => {}} onEditRx={() => {}} onDeleteRx={(id) => api.deleteOpticalRx(id).then(() => loadInitialData().then(setState))} />;
-      case 'ODONTO_AGENDA': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CALENDAR" clients={state.serviceClients} services={state.serviceItems} appointments={state.serviceAppointments} contacts={state.contacts} accounts={state.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(() => loadInitialData().then(setState))} onDeleteClient={(id) => api.deleteServiceClient(id).then(() => loadInitialData().then(setState))} onSaveService={(s) => api.saveCatalogItem(s).then(() => loadInitialData().then(setState))} onDeleteService={(id) => api.deleteCatalogItem(id).then(() => loadInitialData().then(setState))} onSaveAppointment={(a) => api.saveAppointment(a).then(() => loadInitialData().then(setState))} onDeleteAppointment={(id) => api.deleteAppointment(id).then(() => loadInitialData().then(setState))} onAddTransaction={commonProps.onAddTransaction} />;
-      default: return <Dashboard {...commonProps} />;
+      
+      default: return <Dashboard {...commonProps} state={safeState as any} />;
     }
   };
 
@@ -219,9 +370,9 @@ const App: React.FC = () => {
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
             <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
-                syncStatus === 'offline' ? 'bg-rose-500 text-white' : 
+                syncStatus === 'offline' ? 'bg-rose-50 text-white' : 
                 syncStatus === 'syncing' ? 'bg-indigo-600 text-white' : 
-                'bg-emerald-500 text-white'
+                'bg-emerald-50 text-white'
             }`}>
                 {syncStatus === 'offline' && <><WifiOff className="w-3 h-3" /> Modo Offline Ativo</>}
                 {syncStatus === 'syncing' && <><RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando Dados...</>}
