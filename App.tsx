@@ -11,7 +11,7 @@ import { refreshUser, loadInitialData, api, updateSettings } from './services/st
 import { localDb } from './services/localDb';
 import { syncService } from './services/syncService';
 import { useAlert, useConfirm } from './components/AlertSystem';
-import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, ArrowLeft } from 'lucide-react';
 
 // UI Components Imports
 import Sidebar from './components/Sidebar';
@@ -41,13 +41,13 @@ const App: React.FC = () => {
   const { showAlert } = useAlert();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'online' | 'offline'>(navigator.onLine ? 'online' : 'offline');
   
   // View States
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
-  const [loading, setLoading] = useState(true);
 
   // Auth Navigation States
   const [showAuth, setShowAuth] = useState(false);
@@ -61,7 +61,7 @@ const App: React.FC = () => {
     const token = localStorage.getItem('token');
     if (!token) {
         setAuthChecked(true);
-        setLoading(false);
+        setDataLoaded(true);
         return;
     }
     try {
@@ -70,19 +70,28 @@ const App: React.FC = () => {
         const data = await loadInitialData();
         setState(data);
     } catch (e) {
+        console.error("Auth check failed:", e);
         localStorage.removeItem('token');
         setCurrentUser(null);
     } finally {
         setAuthChecked(true);
-        setLoading(false);
+        setDataLoaded(true);
     }
   };
 
   useEffect(() => {
     const initApp = async () => {
-        await localDb.init();
+        try {
+            await localDb.init();
+        } catch (e) {
+            console.error("IndexedDB failed to initialize:", e);
+            showAlert("Erro ao acessar banco de dados local. Algumas funções offline podem não funcionar.", "error");
+        }
         
-        window.addEventListener('online', () => syncService.triggerSync());
+        window.addEventListener('online', () => {
+            setSyncStatus('online');
+            syncService.triggerSync();
+        });
         window.addEventListener('offline', () => setSyncStatus('offline'));
         
         syncService.onStatusChange(status => setSyncStatus(status));
@@ -91,7 +100,7 @@ const App: React.FC = () => {
             await checkAuth();
         } else {
             setAuthChecked(true);
-            setLoading(false);
+            setDataLoaded(true);
         }
     };
     initApp();
@@ -105,14 +114,26 @@ const App: React.FC = () => {
   };
 
   const handleLoginSuccess = async (user: User) => {
+      setDataLoaded(false);
       setCurrentUser(user);
       setShowAuth(false);
-      const data = await loadInitialData();
-      setState(data);
+      try {
+          const data = await loadInitialData();
+          setState(data);
+      } finally {
+          setDataLoaded(true);
+      }
   };
 
   const renderContent = () => {
-    if (!state || !currentUser) return null;
+    if (!dataLoaded || !state || !currentUser) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
+                <p className="text-gray-400 font-medium">Carregando seus dados...</p>
+            </div>
+        );
+    }
 
     const commonProps = {
         state,
@@ -145,14 +166,14 @@ const App: React.FC = () => {
     }
   };
 
-  if (!authChecked) return <LoadingOverlay isVisible={true} />;
+  if (!authChecked) return <LoadingOverlay isVisible={true} message="Iniciando sistema seguro..." />;
   
   if (publicToken) return <PublicOrderView token={publicToken} />;
   
   if (!currentUser) {
       if (showAuth) {
           return (
-              <div className="relative">
+              <div className="relative min-h-screen bg-gray-50">
                   <button 
                     onClick={() => setShowAuth(false)}
                     className="fixed top-6 left-6 z-50 bg-white p-2 rounded-full shadow-lg border border-gray-100 text-gray-400 hover:text-indigo-600 transition-all"
@@ -217,9 +238,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-const ArrowLeft = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
-);
 
 export default App;
