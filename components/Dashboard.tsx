@@ -1,13 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AppState, Transaction, TransactionType, TransactionStatus, Contact, EntityType, Category, ViewMode, AppSettings, User } from '../types';
+import { AppState, Transaction, TransactionType, TransactionStatus, Contact, Category, ViewMode, AppSettings, User } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, Wallet, CalendarClock, TrendingUp, TrendingDown, Target, ArrowRight, BrainCircuit, Sparkles, Loader2, Landmark, Receipt, AlertCircle, BarChart3, Scale, Eye, Glasses, Monitor, Heart, Activity, Stethoscope, SmilePlus } from 'lucide-react';
+import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
-import ReactMarkdown from 'react-markdown';
 
 interface DashboardProps {
   state: AppState;
@@ -31,8 +30,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const activeModules = settings?.activeModules || {};
   const isOptical = activeModules.optical === true;
 
-  const activeFamilyId = useMemo(() => currentUser?.familyId || (currentUser as any)?.family_id, [currentUser]);
-
   useEffect(() => {
     const fetchDiag = async () => {
       const showIntelligence = activeModules.intelligence && (currentUser?.role === 'ADMIN' || currentUser?.role === 'FIN_MANAGER');
@@ -51,14 +48,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const metrics = useMemo(() => {
     const now = new Date();
     const firstDay = now.toISOString().split('T')[0].substring(0, 8) + '01';
-    const accounts = state.accounts || [];
     
-    // FILTRO DE SEGURANÇA MULTI-TENANT
-    // Garante que o Dashboard só mostre dados vinculados à família ativa do usuário
-    const transactions = (state.transactions || []).filter(t => {
-        const tid = (t as any).familyId || (t as any).family_id;
-        return tid === activeFamilyId;
-    });
+    // Confiamos no state recebido, pois ele já é filtrado pelo App.tsx (safeState)
+    const transactions = state.transactions || [];
+    const accounts = state.accounts || [];
 
     const saldoReal = accounts.reduce((acc, a) => acc + a.balance, 0);
     const entradasMes = transactions
@@ -72,7 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
 
     return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
-  }, [state, activeFamilyId]);
+  }, [state]);
 
   const recentTransactions = useMemo(() => {
       return [...metrics.currentTransactions]
@@ -87,7 +80,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Painel de Controle</h1>
-          <p className="text-gray-500 font-medium">Gestão centralizada para sua <span className="text-indigo-600 font-bold">{isOptical ? 'Ótica' : 'Empresa'}</span>.</p>
+          <p className="text-gray-500 font-medium">Bem-vindo à sua gestão <span className="text-indigo-600 font-bold">{isOptical ? 'Ótica' : 'Financeira'}</span>.</p>
         </div>
         <button 
           onClick={() => { setEditingTransaction(null); setTransModalOpen(true); }}
@@ -106,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <h3 className="text-2xl font-black text-gray-900">
                   {metrics.entradasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Total acumulado no mês</p>
+              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Acumulado no mês</p>
           </div>
 
           {isOptical && (

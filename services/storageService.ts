@@ -9,9 +9,10 @@ const getHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('token')}`
 });
 
-// --- Authentication & Account Functions ---
-
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
+    // Limpeza preventiva antes de autenticar novo usuário
+    await localDb.clearAllStores();
+    
     const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,17 +29,7 @@ export const login = async (email: string, password: string): Promise<AuthRespon
 
 export const logout = async () => {
     localStorage.removeItem('token');
-    // Limpa o banco de dados local para evitar vazamento de dados em máquinas compartilhadas
-    const stores = [
-        'accounts', 'transactions', 'contacts', 'serviceClients', 
-        'serviceItems', 'serviceAppointments', 'goals', 'categories', 
-        'branches', 'costCenters', 'departments', 'projects', 
-        'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-        'opticalRxs', 'companyProfile'
-    ];
-    for (const store of stores) {
-        await localDb.clearStore(store);
-    }
+    await localDb.clearAllStores();
 };
 
 export const refreshUser = async (): Promise<{ user: User }> => {
@@ -50,6 +41,8 @@ export const refreshUser = async (): Promise<{ user: User }> => {
 };
 
 export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, pjPayload?: any): Promise<AuthResponse> => {
+    await localDb.clearAllStores();
+    
     const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,6 +58,8 @@ export const register = async (name: string, email: string, password: string, en
 };
 
 export const loginWithGoogle = async (credential: string, entityType?: EntityType, pjPayload?: any): Promise<AuthResponse> => {
+    await localDb.clearAllStores();
+    
     const res = await fetch(`${API_URL}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,21 +84,9 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     const data = await res.json();
     localStorage.setItem('token', data.token);
     
-    // Limpamos o cache local para garantir que o PWA puxe os dados do novo contexto (isolamento total)
-    const stores = [
-        'accounts', 'transactions', 'contacts', 'serviceClients', 
-        'serviceItems', 'serviceAppointments', 'goals', 'categories', 
-        'branches', 'costCenters', 'departments', 'projects', 
-        'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-        'opticalRxs', 'companyProfile'
-    ];
-    for (const store of stores) {
-        await localDb.clearStore(store);
-    }
+    await localDb.clearAllStores();
     return data;
 };
-
-// --- Profile & System Settings ---
 
 export const updateSettings = async (settings: AppSettings): Promise<{ success: boolean }> => {
     const res = await fetch(`${API_URL}/settings`, {
@@ -143,8 +126,6 @@ export const restoreRecord = async (entity: string, entityId: string): Promise<a
 export const revertLogChange = async (logId: number): Promise<any> => {
     return { success: true };
 };
-
-// --- Team & Collaboration ---
 
 export const getFamilyMembers = async (): Promise<Member[]> => {
     const res = await fetch(`${API_URL}/members`, { headers: getHeaders() });
@@ -194,8 +175,6 @@ export const removeMember = async (memberId: string): Promise<any> => {
     if (!res.ok) throw new Error('Falha ao remover membro');
     return await res.json();
 };
-
-// --- Admin & External Tools ---
 
 export const getAdminStats = async (): Promise<any> => {
     return { totalUsers: 0, active: 0, trial: 0, pf: 0, pj: 0, revenue: 0 };
@@ -281,34 +260,24 @@ export const api = {
 
     saveTransaction: async (t: Transaction) => api.saveLocallyAndQueue('transactions', t),
     deleteTransaction: async (id: string) => api.deleteLocallyAndQueue('transactions', id),
-    
     saveAccount: async (a: Account) => api.saveLocallyAndQueue('accounts', a),
     deleteAccount: async (id: string) => api.deleteLocallyAndQueue('accounts', id),
-    
     saveGoal: async (g: FinancialGoal) => api.saveLocallyAndQueue('goals', g),
     deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
-    
     saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
     deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),
-    
     saveCategory: async (c: Category) => api.saveLocallyAndQueue('categories', c),
     deleteCategory: async (id: string) => api.deleteLocallyAndQueue('categories', id),
-
     saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
     deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
-
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
     deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
-
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
     deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),
-    
     saveAppointment: async (a: any) => api.saveLocallyAndQueue('serviceAppointments', a),
     deleteAppointment: async (id: string) => api.deleteLocallyAndQueue('serviceAppointments', id),
-
     saveOS: async (os: any) => api.saveLocallyAndQueue('serviceOrders', os),
     deleteOS: async (id: string) => api.deleteLocallyAndQueue('serviceOrders', id),
-    
     saveOrder: async (o: any) => api.saveLocallyAndQueue('commercialOrders', o),
     deleteOrder: async (id: string) => api.deleteLocallyAndQueue('commercialOrders', id),
 

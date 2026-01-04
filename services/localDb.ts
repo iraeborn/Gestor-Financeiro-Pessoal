@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 5; // Bump para garantir que todos os stores sejam criados
+const DB_VERSION = 5;
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -45,25 +45,31 @@ export class LocalDB {
     });
   }
 
+  async clearAllStores(): Promise<void> {
+    const stores = [
+        'accounts', 'transactions', 'contacts', 'serviceClients', 
+        'serviceItems', 'serviceAppointments', 'goals', 'categories', 
+        'branches', 'costCenters', 'departments', 'projects', 
+        'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
+        'opticalRxs', 'sync_queue', 'companyProfile'
+    ];
+    await Promise.all(stores.map(s => this.clearStore(s)));
+  }
+
   async getAll<T>(storeName: string): Promise<T[]> {
     return new Promise((resolve) => {
       if (!this.db) return resolve([]);
       
       try {
         if (!this.db.objectStoreNames.contains(storeName)) {
-            console.warn(`Store ${storeName} não existe no banco atual.`);
             return resolve([]);
         }
         const transaction = this.db.transaction(storeName, 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.getAll();
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => {
-            console.error(`Erro ao ler store ${storeName}`);
-            resolve([]);
-        };
+        request.onerror = () => resolve([]);
       } catch (e) {
-        console.warn(`Falha na transação do store ${storeName}:`, e);
         resolve([]);
       }
     });
@@ -107,13 +113,14 @@ export class LocalDB {
 
   async clearStore(storeName: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.db) return reject('DB not initialized');
+      if (!this.db) return resolve();
       try {
         if (!this.db.objectStoreNames.contains(storeName)) return resolve();
         const transaction = this.db.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
         store.clear();
         transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
       } catch (e) {
         reject(e);
       }

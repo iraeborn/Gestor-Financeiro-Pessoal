@@ -148,12 +148,13 @@ const App: React.FC = () => {
     if (!state || !currentUser) return null;
     
     const activeFamilyId = currentUser.familyId || (currentUser as any).family_id;
+    if (!activeFamilyId) return null; // Prevenção de vazamento se o contexto for indefinido
     
     const filterByFamily = (items: any[]) => {
         if (!Array.isArray(items)) return [];
         return items.filter(item => {
-            // Verifica as duas possíveis formas de ID no objeto (Camel e Snake Case)
             const itemFamilyId = item.familyId || item.family_id;
+            // Só exibe se o ID do registro casar com o ID do usuário/business ativo
             return itemFamilyId === activeFamilyId;
         });
     };
@@ -185,7 +186,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium">Isolando dados contextuais...</p>
+                <p className="text-gray-400 font-medium">Protegendo sua sessão...</p>
             </div>
         );
     }
@@ -327,7 +328,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (!authChecked) return <LoadingOverlay isVisible={true} message="Iniciando sistema seguro..." />;
+  if (!authChecked) return <LoadingOverlay isVisible={true} message="Protegendo sistema..." />;
   
   if (publicToken) return <PublicOrderView token={publicToken} />;
   
@@ -399,7 +400,7 @@ const App: React.FC = () => {
             }`}>
                 {syncStatus === 'offline' && <><WifiOff className="w-3 h-3" /> Modo Offline Ativo</>}
                 {syncStatus === 'syncing' && <><RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando Dados...</>}
-                {syncStatus === 'online' && <><Wifi className="w-3 h-3" /> Sistema Sincronizado</>}
+                {syncStatus === 'online' && <><Wifi className="w-3 h-3" /> Sistema Protegido</>}
             </div>
 
             <div className="flex-1 overflow-y-auto relative scroll-smooth">
