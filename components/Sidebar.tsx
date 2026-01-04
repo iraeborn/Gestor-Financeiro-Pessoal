@@ -50,8 +50,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   const isAdmin = currentUser.id === familyId || currentWorkspace?.role === 'ADMIN'; 
   
   const userPermissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
-  const workspaceSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true };
-  const activeModules = workspaceSettings.activeModules || {};
+  
+  // CORREÇÃO: Usar ownerSettings (do workspace) se disponível, senão settings do usuário logado.
+  // Isso impede que módulos "pessoais" apareçam em ambientes de terceiros.
+  const activeSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true, activeModules: {} };
+  const activeModules = activeSettings.activeModules || {};
 
   const handleLogout = () => {
     logout();
@@ -62,6 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (id === familyId) return;
     try {
         await switchContext(id);
+        // O reload é essencial aqui para limpar o IndexedDB e pegar o novo token com as permissões corretas
         window.location.reload();
     } catch (e) {
         showAlert("Erro ao trocar de negócio.", "error");

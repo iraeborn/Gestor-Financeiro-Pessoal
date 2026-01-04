@@ -13,12 +13,17 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsj
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 /**
- * Normaliza o objeto de usuário e garante integridade do workspace
+ * Normaliza o objeto de usuário e garante integridade do workspace.
+ * IMPORTANTE: Retorna as configurações do DONO do workspace para garantir o isolamento de módulos.
  */
 const ensureUserIntegrity = async (user) => {
     if (!user) return null;
     const userId = user.id;
     const familyId = user.family_id || userId;
+
+    // Busca configurações do DONO do workspace (se for o próprio usuário, traz dele mesmo)
+    const ownerRes = await pool.query('SELECT settings, entity_type, plan FROM users WHERE id = $1', [familyId]);
+    const ownerData = ownerRes.rows[0] || { settings: user.settings, entity_type: user.entity_type, plan: user.plan };
 
     // Verificação de segurança: Se o usuário é dono mas não tem membership, cria agora.
     if (familyId === userId) {
@@ -37,10 +42,10 @@ const ensureUserIntegrity = async (user) => {
         email: user.email,
         familyId: familyId,
         googleId: user.google_id,
-        entityType: user.entity_type,
-        plan: user.plan,
+        entityType: ownerData.entity_type, // O tipo de entidade (PF/PJ) vem do negócio
+        plan: ownerData.plan,
         status: user.status,
-        settings: user.settings,
+        settings: ownerData.settings, // AS CONFIGURAÇÕES SÃO DO NEGÓCIO ATUAL
         role: user.role || 'USER'
     };
 };
@@ -53,11 +58,8 @@ export default function(logAudit) {
             if (!userRow) return res.status(404).json({ error: 'Usuário não encontrado' });
             
             const workspaces = await getUserWorkspaces(userId);
-            const ownerRes = await pool.query('SELECT entity_type FROM users WHERE id = $1', [userRow.family_id || userId]);
-            
             const mappedUser = await ensureUserIntegrity(userRow);
             mappedUser.workspaces = workspaces;
-            mappedUser.entityType = ownerRes.rows[0]?.entity_type || mappedUser.entityType;
             
             res.json({ user: mappedUser });
         } catch (err) { res.status(500).json({ error: err.message }); }
@@ -67,18 +69,25 @@ export default function(logAudit) {
         const { targetFamilyId } = req.body;
         const userId = req.user.id;
         try {
+            // Valida se o usuário tem permissão para este workspace
             const membership = await pool.query('SELECT * FROM memberships WHERE user_id = $1 AND family_id = $2', [userId, targetFamilyId]);
             if (membership.rows.length === 0) return res.status(403).json({ error: 'Acesso negado a este workspace.' });
             
+            // Atualiza o contexto ativo no banco
             await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [targetFamilyId, userId]);
+            
             const userRow = (await pool.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
             const workspaces = await getUserWorkspaces(userId);
             
+            // mappedUser agora conterá os SETTINGS do targetFamilyId (Dono do negócio)
             const mappedUser = await ensureUserIntegrity(userRow);
             mappedUser.workspaces = workspaces;
             
-            // CRÍTICO: Token agora contém o familyId ativo para isolamento no frontend
+            // Gera novo token com a familyId ativa
             const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: targetFamilyId }, JWT_SECRET, { expiresIn: '7d' });
+            
+            if (logAudit) await logAudit(pool, userId, 'JOIN', 'context_switch', targetFamilyId, `Alternou para o negócio: ${targetFamilyId}`);
+            
             res.json({ token, user: mappedUser });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -128,8 +137,8 @@ export default function(logAudit) {
         const userRow = (await pool.query('SELECT * FROM users WHERE email = $1', [email])).rows[0];
         if (!userRow || !(await bcrypt.compare(password, userRow.password_hash))) return res.status(400).json({ error: 'Credenciais inválidas' });
         
-        const workspaces = await getUserWorkspaces(userRow.id);
         const mappedUser = await ensureUserIntegrity(userRow);
+        const workspaces = await getUserWorkspaces(userRow.id);
         mappedUser.workspaces = workspaces;
         
         const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: mappedUser.familyId }, JWT_SECRET, { expiresIn: '7d' });
@@ -178,8 +187,8 @@ export default function(logAudit) {
            userRow.google_id = googleId;
         }
 
-        const workspaces = await getUserWorkspaces(userRow.id);
         const mappedUser = await ensureUserIntegrity(userRow);
+        const workspaces = await getUserWorkspaces(userRow.id);
         mappedUser.workspaces = workspaces;
         
         const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: mappedUser.familyId }, JWT_SECRET, { expiresIn: '7d' });
