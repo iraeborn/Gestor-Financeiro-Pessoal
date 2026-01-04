@@ -410,6 +410,8 @@ export interface FinancialGoal {
 
 export interface CompanyProfile {
   id: string;
+  // Fix: Added familyId to interface to support multi-tenant filtering in App.tsx
+  familyId?: string;
   tradeName: string;
   legalName: string;
   cnpj: string;

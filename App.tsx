@@ -148,13 +148,19 @@ const App: React.FC = () => {
     if (!state || !currentUser) return null;
     
     const activeFamilyId = currentUser.familyId || (currentUser as any).family_id;
-    if (!activeFamilyId) return null; // Prevenção de vazamento se o contexto for indefinido
+    if (!activeFamilyId) {
+        console.warn("Usuário logado sem familyId definido.");
+        return null; 
+    }
     
     const filterByFamily = (items: any[]) => {
         if (!Array.isArray(items)) return [];
         return items.filter(item => {
+            // Verifica as duas possíveis formas de ID no objeto (Camel e Snake Case)
             const itemFamilyId = item.familyId || item.family_id;
-            // Só exibe se o ID do registro casar com o ID do usuário/business ativo
+            
+            // SEGURANÇA MÁXIMA: Só exibe se o ID do registro casar EXATAMENTE com o ID do usuário/business ativo
+            // Registros sem familyId são considerados órfãos ou de outra conta e são filtrados.
             return itemFamilyId === activeFamilyId;
         });
     };
@@ -177,7 +183,9 @@ const App: React.FC = () => {
         invoices: filterByFamily(state.invoices || []),
         opticalRxs: filterByFamily(state.opticalRxs || []),
         goals: filterByFamily(state.goals || []),
-        companyProfile: state.companyProfile
+        companyProfile: state.companyProfile && (state.companyProfile.familyId === activeFamilyId || (state.companyProfile as any).family_id === activeFamilyId) 
+            ? state.companyProfile 
+            : null
     };
   }, [state, currentUser]);
 
@@ -186,7 +194,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium">Protegendo sua sessão...</p>
+                <p className="text-gray-400 font-medium">Validando isolamento de dados...</p>
             </div>
         );
     }

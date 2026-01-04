@@ -9,10 +9,21 @@ const getHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('token')}`
 });
 
+// Helper para obter o usuário atual do estado ou localStorage (fallback seguro)
+const getActiveUserFamilyId = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        // Buscamos o familyId persistido no token ou buscamos do estado global se disponível
+        return payload.familyId || payload.id;
+    } catch (e) {
+        return null;
+    }
+};
+
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
-    // Limpeza preventiva antes de autenticar novo usuário
     await localDb.clearAllStores();
-    
     const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -24,6 +35,8 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    // Garantir banco limpo para o novo usuário
+    await localDb.clearAllStores();
     return data;
 };
 
@@ -42,7 +55,6 @@ export const refreshUser = async (): Promise<{ user: User }> => {
 
 export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, pjPayload?: any): Promise<AuthResponse> => {
     await localDb.clearAllStores();
-    
     const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,12 +66,12 @@ export const register = async (name: string, email: string, password: string, en
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    await localDb.clearAllStores();
     return data;
 };
 
 export const loginWithGoogle = async (credential: string, entityType?: EntityType, pjPayload?: any): Promise<AuthResponse> => {
     await localDb.clearAllStores();
-    
     const res = await fetch(`${API_URL}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,6 +83,7 @@ export const loginWithGoogle = async (credential: string, entityType?: EntityTyp
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    await localDb.clearAllStores();
     return data;
 };
 
@@ -83,7 +96,6 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     if (!res.ok) throw new Error('Falha ao trocar contexto');
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    
     await localDb.clearAllStores();
     return data;
 };
@@ -216,6 +228,8 @@ export const updatePublicOrderStatus = async (token: string, status: string): Pr
 };
 
 export const loadInitialData = async (): Promise<AppState> => {
+    const currentFamilyId = getActiveUserFamilyId();
+
     if (navigator.onLine) {
         try {
             await syncService.pullFromServer();
@@ -234,11 +248,19 @@ export const loadInitialData = async (): Promise<AppState> => {
 
     const results: any = {};
     for (const store of stores) {
-        results[store] = await localDb.getAll(store) || [];
+        const rawData = await localDb.getAll(store) || [];
+        // Filtro de segurança adicional no carregamento: se o dado local não bater com o usuário logado, ignoramos
+        results[store] = rawData.filter((item: any) => {
+            const itemFamilyId = item.familyId || item.family_id;
+            return !currentFamilyId || itemFamilyId === currentFamilyId;
+        });
     }
     
     const companyProfiles = await localDb.getAll('companyProfile');
-    results.companyProfile = companyProfiles[0] || null;
+    results.companyProfile = companyProfiles.find((p: any) => {
+        const pFamilyId = p.familyId || p.family_id;
+        return !currentFamilyId || pFamilyId === currentFamilyId;
+    }) || null;
 
     return results as AppState;
 };
@@ -246,7 +268,16 @@ export const loadInitialData = async (): Promise<AppState> => {
 export const api = {
     saveLocallyAndQueue: async (store: string, data: any) => {
         const id = data.id || crypto.randomUUID();
-        const payload = { ...data, id };
+        const familyId = getActiveUserFamilyId();
+        
+        // CRÍTICO: Injeta o familyId no payload antes de salvar localmente
+        const payload = { 
+            ...data, 
+            id, 
+            familyId: familyId, // CamelCase para o frontend
+            family_id: familyId // SnakeCase para compatibilidade com o servidor
+        };
+        
         await localDb.put(store, payload);
         await syncService.enqueue('SAVE', store, payload);
         return { success: true, id };
@@ -271,7 +302,7 @@ export const api = {
     saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
     deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
-    deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
+    deleteCatalogItem: async (id: string) => api.deleteCatalogItem(id).then(() => { return { success: true }; }),
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
     deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),
     saveAppointment: async (a: any) => api.saveLocallyAndQueue('serviceAppointments', a),
@@ -285,7 +316,10 @@ export const api = {
         const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };
         const store = storeMap[type];
         if (store) return api.saveLocallyAndQueue(store, payload);
-        await localDb.put('companyProfile', payload);
+        
+        const familyId = getActiveUserFamilyId();
+        const profile = { ...payload, familyId, family_id: familyId };
+        await localDb.put('companyProfile', profile);
         return { success: true };
     },
     deletePJEntity: async (type: string, id: string) => {
