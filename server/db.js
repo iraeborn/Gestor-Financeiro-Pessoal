@@ -43,7 +43,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS service_appointments (id TEXT PRIMARY KEY, client_id TEXT, service_id TEXT, tooth INTEGER, teeth JSONB DEFAULT '[]', treatment_items JSONB DEFAULT '[]', date TEXT, status TEXT, notes TEXT, clinical_notes TEXT, module_tag TEXT, user_id TEXT, family_id TEXT, is_locked BOOLEAN DEFAULT FALSE, branch_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS contracts (id TEXT PRIMARY KEY, title TEXT, contact_id TEXT, value DECIMAL(15,2), start_date DATE, end_date DATE, status TEXT, billing_day INTEGER, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, number TEXT, series TEXT, type TEXT, amount DECIMAL(15,2), issue_date DATE, status TEXT, contact_id TEXT, description TEXT, items JSONB DEFAULT '[]', file_url TEXT, order_id TEXT, service_order_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB)`,
+        `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, timestamp TIMESTAMP DEFAULT NOW(), previous_state JSONB, changes JSONB, family_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS optical_rxs (
             id TEXT PRIMARY KEY,
             contact_id TEXT REFERENCES contacts(id),
@@ -81,29 +81,21 @@ export const initDb = async () => {
         for (const q of queries) { await pool.query(q); }
 
         const migrations = [
-            `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
-            `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`,
-            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cost_center_id TEXT`,
-            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS department_id TEXT`,
-            `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS project_id TEXT`,
-            // Índices de Segurança Multi-tenant
+            `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS family_id TEXT`,
+            `CREATE INDEX IF NOT EXISTS idx_audit_family ON audit_logs(family_id)`,
             `CREATE INDEX IF NOT EXISTS idx_users_family ON users(family_id)`,
             `CREATE INDEX IF NOT EXISTS idx_acc_family ON accounts(family_id)`,
             `CREATE INDEX IF NOT EXISTS idx_trans_family ON transactions(family_id)`,
             `CREATE INDEX IF NOT EXISTS idx_contacts_family ON contacts(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_so_family ON service_orders(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_co_family ON commercial_orders(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_rx_family ON optical_rxs(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_sc_family ON service_clients(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_sa_family ON service_appointments(family_id)`
+            // Garantir que logs órfãos recebam o family_id do usuário que os criou (retroatividade)
+            `UPDATE audit_logs al SET family_id = u.family_id FROM users u WHERE al.user_id = u.id AND al.family_id IS NULL`
         ];
 
         for (const m of migrations) {
             try { await pool.query(m); } catch (e) {}
         }
 
-        console.log("✅ [DATABASE] Estrutura Multi-tenant Protegida.");
+        console.log("✅ [DATABASE] Multi-tenancy Isolation Hardened.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }

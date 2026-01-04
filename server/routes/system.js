@@ -37,11 +37,9 @@ export default function(logAudit) {
         const { role } = req.body;
         const userId = req.user.id;
         try {
-            // Robustez: Fallback caso o family_id esteja nulo na sessão
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const familyId = userRes.rows[0]?.family_id || userId;
 
-            // Validação estrita contra a tabela de memberships
             const adminCheck = await pool.query(
                 'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', 
                 [userId, familyId]
@@ -87,7 +85,6 @@ export default function(logAudit) {
             const invite = inviteRes.rows[0];
             const userId = req.user.id;
 
-            // Ingressar na equipe
             await pool.query(
                 `INSERT INTO memberships (user_id, family_id, role, permissions) 
                  VALUES ($1, $2, $3, $4)
@@ -95,7 +92,6 @@ export default function(logAudit) {
                 [userId, invite.family_id, invite.role_template || 'MEMBER', '[]']
             );
 
-            // Atualizar contexto ativo do usuário
             await pool.query('UPDATE users SET family_id = $1 WHERE id = $2', [invite.family_id, userId]);
 
             const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
@@ -115,22 +111,22 @@ export default function(logAudit) {
         }
     });
 
-    // --- OUTRAS ROTAS DO SISTEMA MANTIDAS ---
-
     router.get('/audit-logs', authenticateToken, async (req, res) => {
         try {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
             const familyId = userRes.rows[0]?.family_id || req.user.id;
             
+            // CORREÇÃO: Filtramos diretamente pelo family_id do LOG, não do usuário autor.
+            // Isso impede que, se o Usuário A mudar para a Família Y, seu histórico da Família X vaze.
             const logs = await pool.query(`
                 SELECT al.*, u.name as user_name 
                 FROM audit_logs al 
-                JOIN users u ON al.user_id = u.id 
-                WHERE u.family_id = $1 
+                LEFT JOIN users u ON al.user_id = u.id 
+                WHERE al.family_id = $1 
                 ORDER BY al.timestamp DESC LIMIT 150
             `, [familyId]);
             
-            res.json(logs.rows.map(r => ({ ...r, userName: r.user_name, entityId: r.entity_id })));
+            res.json(logs.rows.map(r => ({ ...r, userName: r.user_name || 'Sistema', entityId: r.entity_id })));
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 

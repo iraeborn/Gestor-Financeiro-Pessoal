@@ -133,9 +133,11 @@ export default function(logAudit) {
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
+            // CORREÇÃO: Usamos LEFT JOIN para garantir que transações apareçam mesmo que o autor mude de família, 
+            // mas o filtro t.family_id = $1 garante que apenas os dados do tenant atual sejam retornados.
             const queryDefs = {
                 accounts: ['SELECT *, family_id FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
+                transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
                 goals: ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
