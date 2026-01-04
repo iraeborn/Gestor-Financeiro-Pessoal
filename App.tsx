@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, AppSettings, EntityType, 
@@ -12,6 +12,7 @@ import { localDb } from './services/localDb';
 import { syncService } from './services/syncService';
 import { useAlert, useConfirm } from './components/AlertSystem';
 import { Wifi, WifiOff, RefreshCw, ArrowLeft, Menu as MenuIcon } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 // UI Components Imports
 import Sidebar from './components/Sidebar';
@@ -56,6 +57,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
 
+  // Socket Reference
+  const socketRef = useRef<Socket | null>(null);
+
   // Selection States for Editors
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
@@ -71,10 +75,61 @@ const App: React.FC = () => {
 
   const publicToken = new URLSearchParams(window.location.search).get('orderToken');
 
+  const refreshData = async () => {
+      const data = await loadInitialData();
+      setState(data);
+  };
+
+  // --- Real-time Sync Logic ---
+  useEffect(() => {
+    if (currentUser) {
+        const familyId = currentUser.familyId || (currentUser as any).family_id;
+        
+        // Inicializar conexão Socket APENAS quando logado
+        if (!socketRef.current) {
+            const socket = io({
+                transports: ['websocket', 'polling'],
+                reconnection: true
+            }) as any;
+            socketRef.current = socket;
+
+            socket.on('connect', () => {
+                console.log("📡 [REALTIME] Conectado ao servidor.");
+                socket.emit('join_family', familyId);
+            });
+
+            socket.on('DATA_UPDATED', (payload: any) => {
+                // Se alguém da família alterou algo, recarregamos silenciosamente
+                if (payload.actorId !== currentUser.id) {
+                    console.log(`📡 [REALTIME] Mudança externa detectada em ${payload.entity}. Atualizando...`);
+                    refreshData();
+                    // Opcional: mostrar um pequeno toast ou ponto de atualização
+                }
+            });
+
+            socket.on('disconnect', () => {
+                console.warn("📡 [REALTIME] Desconectado.");
+            });
+        } else {
+            // Se já existe mas trocou de usuário/contexto
+            socketRef.current.emit('join_family', familyId);
+        }
+    } else {
+        // Cleanup se deslogar
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
+    }
+
+    return () => {
+        // No cleanup global aqui para manter vivo durante navegação, mas desconecta no unmount final
+    };
+  }, [currentUser?.id, currentUser?.familyId]);
+
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
-        // Se não há token, garantimos que o estado global esteja nulo para evitar vazamentos visuais
         setState(null);
         setCurrentUser(null);
         setAuthChecked(true);
@@ -123,11 +178,6 @@ const App: React.FC = () => {
     initApp();
   }, [publicToken]);
 
-  const refreshData = async () => {
-      const data = await loadInitialData();
-      setState(data);
-  };
-
   const handleUpdateStatus = async (t: Transaction) => {
     const newStatus = t.status === 'PAID' ? 'PENDING' : 'PAID';
     await api.saveTransaction({ ...t, status: newStatus as any });
@@ -136,7 +186,6 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = async (user: User) => {
       setDataLoaded(false);
-      // Nuke preventivo do estado ao entrar com novo usuário
       setState(null); 
       setCurrentUser(user);
       setShowAuth(false);
@@ -149,7 +198,6 @@ const App: React.FC = () => {
   };
 
   // CAMADA DE ISOLAMENTO DE DADOS (Multi-tenant)
-  // Filtra rigorosamente todos os registros pelo familyId ativo do usuário logado
   const safeState = useMemo(() => {
     if (!state || !currentUser) return null;
     
@@ -160,7 +208,6 @@ const App: React.FC = () => {
         if (!Array.isArray(items)) return [];
         return items.filter(item => {
             const itemFamilyId = item.familyId || item.family_id;
-            // SEGURANÇA CRÍTICA: Somente itens que dão "match" exato com a família da sessão são processados.
             return itemFamilyId === activeFamilyId;
         });
     };

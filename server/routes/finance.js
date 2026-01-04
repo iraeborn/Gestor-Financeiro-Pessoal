@@ -81,6 +81,10 @@ export default function(logAudit) {
                     }
                 }
             } else if (action === 'SAVE') {
+                // FORÇAR USER_ID E FAMILY_ID DO TOKEN - Isso impede que dados de usuários antigos que ficaram no cache do navegador "vazem"
+                payload.userId = userId;
+                payload.familyId = familyId;
+
                 if (store === 'transactions') {
                     const id = payload.id;
                     const existingRes = await client.query('SELECT * FROM transactions WHERE id = $1 AND family_id = $2', [id, familyId]);
@@ -113,18 +117,25 @@ export default function(logAudit) {
                         [payload.id, payload.name, payload.type, payload.balance, payload.creditLimit, payload.closingDay, payload.dueDay, userId, familyId]
                     );
                 } else {
-                    const fields = Object.keys(payload).filter(k => k !== 'id' && !k.startsWith('_'));
+                    const fields = Object.keys(payload).filter(k => k !== 'id' && !k.startsWith('_') && k !== 'userId' && k !== 'familyId');
                     const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
-                    const query = `INSERT INTO ${tableName} (id, family_id, ${snakeFields.join(', ')}) VALUES ($1, $2, ${fields.map((_, i) => `$${i + 3}`).join(', ')}) ON CONFLICT (id) DO UPDATE SET ${snakeFields.map((f, i) => `${f} = $${i + 3}`).join(', ')}, deleted_at = NULL`;
-                    const values = [payload.id, familyId, ...fields.map(f => (typeof payload[f] === 'object' && payload[f] !== null) ? JSON.stringify(payload[f]) : sanitizeValue(payload[f]))];
+                    const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
+                                   VALUES ($1, $2, $3, ${fields.map((_, i) => `$${i + 4}`).join(', ')}) 
+                                   ON CONFLICT (id) DO UPDATE SET ${snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ')}, deleted_at = NULL`;
+                    const values = [payload.id, userId, familyId, ...fields.map(f => (typeof payload[f] === 'object' && payload[f] !== null) ? JSON.stringify(payload[f]) : sanitizeValue(payload[f]))];
                     await client.query(query, values);
                 }
             }
 
             await client.query('COMMIT');
+            
+            // Audit log para rastreamento de segurança
+            await logAudit(null, userId, action, store, payload.id, `Sync ${action} em ${store}`, null, null, familyId);
+
             res.json({ success: true });
         } catch (err) {
             await client.query('ROLLBACK');
+            console.error("SYNC ERROR:", err.message);
             res.status(500).json({ error: err.message });
         } finally {
             client.release();
@@ -161,6 +172,9 @@ export default function(logAudit) {
                 const resDb = await pool.query(queryDefs[key][0], queryDefs[key][1]);
                 results[key] = key === 'companyProfile' ? mapToFrontend(resDb.rows[0]) : resDb.rows.map(r => mapToFrontend(r));
             }
+            
+            // Forçar não-cache para evitar vazamento em computadores compartilhados
+            res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
             res.json(results);
         } catch (err) {
             res.status(500).json({ error: "Falha catastrófica ao puxar dados isolados: " + err.message });
