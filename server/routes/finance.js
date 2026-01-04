@@ -61,11 +61,11 @@ export default function(logAudit) {
             const tableName = tableMap[store];
             if (!tableName) throw new Error(`Loja ${store} não suportada.`);
 
-            // SEGURANÇA: Verifica propriedade se o ID existir no banco para evitar sobrescrita cross-tenant
+            // SEGURANÇA MULTI-TENANT: Verifica se o ID pertence à mesma família antes de qualquer alteração
             if (payload.id) {
                 const ownership = await client.query(`SELECT family_id FROM ${tableName} WHERE id = $1`, [payload.id]);
                 if (ownership.rows.length > 0 && ownership.rows[0].family_id !== familyId) {
-                    throw new Error("Acesso negado: Registro pertence a outra Conta PJ.");
+                    throw new Error("Acesso negado: Tentativa de modificação cross-tenant detectada.");
                 }
             }
 
@@ -134,24 +134,24 @@ export default function(logAudit) {
         try {
             const familyId = await getFamilyId(req.user.id);
             const queryDefs = {
-                accounts: ['SELECT * FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                accounts: ['SELECT *, family_id FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
-                goals: ['SELECT * FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                contacts: ['SELECT * FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                categories: ['SELECT * FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                companyProfile: ['SELECT * FROM company_profiles WHERE family_id = $1', [familyId]],
-                branches: ['SELECT * FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                costCenters: ['SELECT * FROM cost_centers WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                departments: ['SELECT * FROM departments WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                projects: ['SELECT * FROM projects WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                serviceClients: ['SELECT * FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                serviceItems: ['SELECT * FROM module_services WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                goals: ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                companyProfile: ['SELECT *, family_id FROM company_profiles WHERE family_id = $1', [familyId]],
+                branches: ['SELECT *, family_id FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                costCenters: ['SELECT *, family_id FROM cost_centers WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                departments: ['SELECT *, family_id FROM departments WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                projects: ['SELECT *, family_id FROM projects WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                serviceClients: ['SELECT *, family_id FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                serviceItems: ['SELECT *, family_id FROM module_services WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 serviceAppointments: ['SELECT sa.*, sc.contact_name as client_name, ms.name as service_name FROM service_appointments sa LEFT JOIN service_clients sc ON sa.client_id = sc.id LEFT JOIN module_services ms ON sa.service_id = ms.id WHERE sa.family_id = $1 AND sa.deleted_at IS NULL', [familyId]],
-                serviceOrders: ['SELECT * FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC', [familyId]],
+                serviceOrders: ['SELECT *, family_id FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC', [familyId]],
                 commercialOrders: ['SELECT o.*, c.name as contact_name FROM commercial_orders o LEFT JOIN contacts c ON o.contact_id = c.id WHERE o.family_id = $1 AND o.deleted_at IS NULL ORDER BY o.date DESC', [familyId]],
                 contracts: ['SELECT ct.*, c.name as contact_name FROM contracts ct LEFT JOIN contacts c ON ct.contact_id = c.id WHERE ct.family_id = $1 AND ct.deleted_at IS NULL', [familyId]],
                 invoices: ['SELECT i.*, c.name as contact_name FROM invoices i LEFT JOIN contacts c ON i.contact_id = c.id WHERE i.family_id = $1 AND i.deleted_at IS NULL ORDER BY i.issue_date DESC', [familyId]],
-                opticalRxs: ['SELECT * FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
+                opticalRxs: ['SELECT *, family_id FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
             };
 
             const results = {};
@@ -161,38 +161,8 @@ export default function(logAudit) {
             }
             res.json(results);
         } catch (err) {
-            res.status(500).json({ error: "Sincronização falhou: " + err.message });
+            res.status(500).json({ error: "Falha ao puxar dados isolados: " + err.message });
         }
-    });
-
-    router.post('/transactions', authenticateToken, async (req, res) => {
-        const t = req.body;
-        const userId = req.user.id;
-        const client = await pool.connect();
-        try {
-            const familyId = await getFamilyId(userId);
-            await client.query('BEGIN');
-            const id = t.id || crypto.randomUUID();
-            
-            const existing = await client.query('SELECT family_id FROM transactions WHERE id = $1', [id]);
-            if (existing.rows.length > 0 && existing.rows[0].family_id !== familyId) throw new Error("Acesso negado.");
-
-            await client.query(
-                `INSERT INTO transactions (id, description, amount, type, category, date, status, account_id, destination_account_id, contact_id, goal_id, user_id, family_id, is_recurring, recurrence_frequency, recurrence_end_date, receipt_urls)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-                 ON CONFLICT (id) DO UPDATE SET description=$2, amount=$3, type=$4, category=$5, date=$6, status=$7, account_id=$8, destination_account_id=$9, contact_id=$10, goal_id=$11, deleted_at=NULL`,
-                [id, t.description, t.amount, t.type, t.category, t.date, t.status, t.accountId, sanitizeValue(t.destinationAccountId), sanitizeValue(t.contactId), sanitizeValue(t.goalId), userId, familyId, t.isRecurring || false, sanitizeValue(t.recurrenceFrequency), sanitizeValue(t.recurrenceEndDate), JSON.stringify(t.receiptUrls || [])]
-            );
-
-            if (t.status === 'PAID') {
-                await updateAccountBalance(client, t.accountId, t.amount, t.type);
-                if (t.type === 'TRANSFER' && t.destinationAccountId) await updateAccountBalance(client, t.destinationAccountId, t.amount, 'INCOME');
-            }
-            
-            await client.query('COMMIT');
-            await logAudit(pool, userId, existing.rows.length > 0 ? 'UPDATE' : 'CREATE', 'transaction', id, t.description);
-            res.json({ success: true, id });
-        } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
     });
 
     return router;

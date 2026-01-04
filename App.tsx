@@ -142,18 +142,56 @@ const App: React.FC = () => {
       }
   };
 
+  // CAMADA DE ISOLAMENTO DE DADOS (Multi-tenant)
+  // Filtra rigorosamente todos os registros pelo familyId ativo para evitar conflito Usuário X vs Usuário H
+  const safeState = useMemo(() => {
+    if (!state || !currentUser) return null;
+    
+    const activeFamilyId = currentUser.familyId || (currentUser as any).family_id;
+    
+    const filterByFamily = (items: any[]) => {
+        if (!Array.isArray(items)) return [];
+        return items.filter(item => {
+            // Verifica as duas possíveis formas de ID no objeto (Camel e Snake Case)
+            const itemFamilyId = item.familyId || item.family_id;
+            return itemFamilyId === activeFamilyId;
+        });
+    };
+
+    return {
+        accounts: filterByFamily(state.accounts || []),
+        transactions: filterByFamily(state.transactions || []),
+        contacts: filterByFamily(state.contacts || []),
+        categories: filterByFamily(state.categories || []),
+        branches: filterByFamily(state.branches || []),
+        costCenters: filterByFamily(state.costCenters || []),
+        departments: filterByFamily(state.departments || []),
+        projects: filterByFamily(state.projects || []),
+        serviceClients: filterByFamily(state.serviceClients || []),
+        serviceItems: filterByFamily(state.serviceItems || []),
+        serviceAppointments: filterByFamily(state.serviceAppointments || []),
+        serviceOrders: filterByFamily(state.serviceOrders || []),
+        commercialOrders: filterByFamily(state.commercialOrders || []),
+        contracts: filterByFamily(state.contracts || []),
+        invoices: filterByFamily(state.invoices || []),
+        opticalRxs: filterByFamily(state.opticalRxs || []),
+        goals: filterByFamily(state.goals || []),
+        companyProfile: state.companyProfile
+    };
+  }, [state, currentUser]);
+
   const renderContent = () => {
-    if (!dataLoaded || !state || !currentUser) {
+    if (!dataLoaded || !safeState || !currentUser) {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium">Sincronizando dados...</p>
+                <p className="text-gray-400 font-medium">Isolando dados contextuais...</p>
             </div>
         );
     }
 
     const commonProps = {
-        state,
+        state: safeState as AppState,
         settings: currentUser.settings,
         currentUser,
         onAddTransaction: (t: any) => api.saveTransaction(t).then(refreshData),
@@ -163,41 +201,17 @@ const App: React.FC = () => {
         onChangeView: setCurrentView
     };
 
-    const safeState = {
-        accounts: state.accounts || [],
-        transactions: state.transactions || [],
-        contacts: state.contacts || [],
-        categories: state.categories || [],
-        branches: state.branches || [],
-        costCenters: state.costCenters || [],
-        departments: state.departments || [],
-        projects: state.projects || [],
-        serviceClients: state.serviceClients || [],
-        serviceItems: state.serviceItems || [],
-        serviceAppointments: state.serviceAppointments || [],
-        serviceOrders: state.serviceOrders || [],
-        commercialOrders: state.commercialOrders || [],
-        contracts: state.contracts || [],
-        invoices: state.invoices || [],
-        opticalRxs: state.opticalRxs || [],
-        goals: state.goals || [],
-        companyProfile: state.companyProfile || null
-    };
-
     switch (currentView) {
-      // FINANCEIRO
-      case 'FIN_DASHBOARD': return <Dashboard {...commonProps} state={safeState as any} />;
+      case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
       case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={safeState.transactions} accounts={safeState.accounts} contacts={safeState.contacts} categories={safeState.categories} branches={safeState.branches} costCenters={safeState.costCenters} departments={safeState.departments} projects={safeState.projects} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onAddTransaction} onToggleStatus={handleUpdateStatus} />;
       case 'FIN_ACCOUNTS': return <AccountsView accounts={safeState.accounts} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
       case 'FIN_CARDS': return <CreditCardsView accounts={safeState.accounts} transactions={safeState.transactions} contacts={safeState.contacts} categories={safeState.categories} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
       case 'FIN_GOALS': return <GoalsView goals={safeState.goals} accounts={safeState.accounts} transactions={safeState.transactions} onSaveGoal={(g) => api.saveGoal(g).then(refreshData)} onDeleteGoal={(id) => api.deleteGoal(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
       case 'FIN_REPORTS': return <Reports transactions={safeState.transactions} />;
       
-      // INTELIGÊNCIA
       case 'FIN_ADVISOR': return <SmartAdvisor data={safeState as any} />;
       case 'DIAG_HUB': return <DiagnosticView state={safeState as any} />;
       
-      // OPERACIONAL & ÓTICA
       case 'SRV_OS':
       case 'SRV_SALES':
       case 'SRV_CATALOG':
@@ -259,7 +273,6 @@ const App: React.FC = () => {
                     onCancel={() => setCurrentView('SRV_SALES')} 
                 />;
 
-      // FILIAIS & UNIDADES
       case 'SYS_BRANCHES':
           return (
               <BranchesView 
@@ -283,7 +296,6 @@ const App: React.FC = () => {
               />
           );
 
-      // ESPECIALIDADES
       case 'OPTICAL_RX': 
         return <OpticalModule 
                     opticalRxs={safeState.opticalRxs} 
@@ -304,7 +316,6 @@ const App: React.FC = () => {
       case 'ODONTO_AGENDA': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CALENDAR" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
       case 'ODONTO_PATIENTS': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CLIENTS" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
       
-      // SISTEMA
       case 'FIN_CATEGORIES': return <CategoriesView categories={safeState.categories} onSaveCategory={(c) => api.saveCategory(c).then(refreshData)} onDeleteCategory={(id) => api.deleteCategory(id).then(refreshData)} />;
       case 'FIN_CONTACTS': return <ContactsView contacts={safeState.contacts} onAddContact={() => { setSelectedContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} onEditContact={(c) => { setSelectedContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
       case 'FIN_CONTACT_EDITOR': return <ContactEditor initialData={selectedContact} settings={currentUser.settings} onSave={(c) => api.saveContact(c).then(() => { refreshData(); setCurrentView('FIN_CONTACTS'); })} onCancel={() => setCurrentView('FIN_CONTACTS')} />;
@@ -368,7 +379,6 @@ const App: React.FC = () => {
         />
         
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-            {/* Header Mobile - Visível apenas em telas menores que MD */}
             <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-40">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg">F</div>

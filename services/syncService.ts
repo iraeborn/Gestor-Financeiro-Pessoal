@@ -69,7 +69,6 @@ class SyncService {
         }
     }
 
-    // Puxa dados novos do servidor para o local
     async pullFromServer() {
         if (!navigator.onLine) return;
         const token = localStorage.getItem('token');
@@ -77,9 +76,12 @@ class SyncService {
             const response = await fetch(`/api/initial-data`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            if (!response.ok) throw new Error("Erro ao puxar dados do servidor");
+            
             const data = await response.json();
             
-            // CRÍTICO: Limpa stores locais antes de repopular para evitar dados conflitantes de outras contas/sessões
+            // CRÍTICO: Limpa stores locais antes de repopular para garantir isolamento total entre logins/famílias
             const storesToClear = [
                 'accounts', 'transactions', 'contacts', 'serviceClients', 
                 'serviceItems', 'serviceAppointments', 'goals', 'categories', 
@@ -88,15 +90,16 @@ class SyncService {
                 'opticalRxs', 'companyProfile'
             ];
 
-            for (const storeName of storesToClear) {
+            // Executa limpeza em paralelo para performance e segurança
+            await Promise.all(storesToClear.map(async (storeName) => {
                 try {
                     await localDb.clearStore(storeName);
                 } catch (e) {
                     console.warn(`Could not clear store ${storeName}`);
                 }
-            }
+            }));
 
-            // Atualiza cada store localmente com os dados frescos do servidor
+            // Repopula os stores com os dados filtrados e atualizados do servidor
             for (const [storeName, items] of Object.entries(data)) {
                 if (Array.isArray(items)) {
                     for (const item of items) {
@@ -106,8 +109,11 @@ class SyncService {
                    await localDb.put(storeName, items);
                 }
             }
+            
+            console.log("✅ [SYNC] Banco local atualizado para o contexto atual.");
         } catch (e) {
-            console.error("Failed to pull data", e);
+            console.error("❌ [SYNC] Falha na sincronização:", e);
+            throw e;
         }
     }
 }
