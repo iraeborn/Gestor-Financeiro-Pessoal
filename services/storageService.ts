@@ -9,13 +9,12 @@ const getHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('token')}`
 });
 
-// Helper para obter o usuário atual do estado ou localStorage (fallback seguro)
+// Helper para obter o usuário atual do token JWT (fonte única de verdade no client)
 const getActiveUserFamilyId = (): string | null => {
     const token = localStorage.getItem('token');
     if (!token) return null;
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        // Agora o JWT contém familyId explicitamente
         return payload.familyId || payload.id;
     } catch (e) {
         return null;
@@ -23,6 +22,7 @@ const getActiveUserFamilyId = (): string | null => {
 };
 
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
+    // Limpeza preventiva antes de tentar novo login
     await localDb.clearAllStores();
     const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
@@ -35,7 +35,7 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    // Garantir banco limpo para o novo usuário
+    // Limpeza pós-login para garantir que o banco comece do zero para o novo tenant
     await localDb.clearAllStores();
     return data;
 };
@@ -96,6 +96,7 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     if (!res.ok) throw new Error('Falha ao trocar contexto');
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    // Ao trocar de contexto (empresa/família), o banco local DEVE ser limpo para recarregar do servidor
     await localDb.clearAllStores();
     return data;
 };
@@ -230,6 +231,17 @@ export const updatePublicOrderStatus = async (token: string, status: string): Pr
 export const loadInitialData = async (): Promise<AppState> => {
     const currentFamilyId = getActiveUserFamilyId();
 
+    // SEGURANÇA MULTI-TENANT: Antes de carregar qualquer coisa do IndexedDB, validamos se o conteúdo pertence ao usuário atual.
+    // Se encontrarmos transações de outra família no banco local, limpamos tudo.
+    const sampleTransactions = await localDb.getAll<any>('transactions');
+    if (sampleTransactions.length > 0) {
+        const dbFamilyId = sampleTransactions[0].familyId || sampleTransactions[0].family_id;
+        if (dbFamilyId !== currentFamilyId) {
+            console.warn("Detectada incompatibilidade de tenant no banco local. Executando limpeza de segurança.");
+            await localDb.clearAllStores();
+        }
+    }
+
     if (navigator.onLine) {
         try {
             await syncService.pullFromServer();
@@ -249,16 +261,17 @@ export const loadInitialData = async (): Promise<AppState> => {
     const results: any = {};
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
+        // Filtro redundante para garantir que itens órfãos ou mal-sincronizados nunca apareçam
         results[store] = rawData.filter((item: any) => {
             const itemFamilyId = item.familyId || item.family_id;
-            return !currentFamilyId || itemFamilyId === currentFamilyId;
+            return itemFamilyId === currentFamilyId;
         });
     }
     
     const companyProfiles = await localDb.getAll('companyProfile');
     results.companyProfile = companyProfiles.find((p: any) => {
         const pFamilyId = p.familyId || p.family_id;
-        return !currentFamilyId || pFamilyId === currentFamilyId;
+        return pFamilyId === currentFamilyId;
     }) || null;
 
     return results as AppState;

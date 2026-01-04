@@ -36,7 +36,8 @@ export default function(logAudit) {
 
     const getFamilyId = async (userId) => {
         const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-        return res.rows[0]?.family_id || userId;
+        if (res.rows.length === 0) throw new Error("Usuário não encontrado na base de dados.");
+        return res.rows[0].family_id || userId;
     };
 
     router.post('/sync/process', authenticateToken, async (req, res) => {
@@ -61,11 +62,11 @@ export default function(logAudit) {
             const tableName = tableMap[store];
             if (!tableName) throw new Error(`Loja ${store} não suportada.`);
 
-            // SEGURANÇA MULTI-TENANT: Verifica se o ID pertence à mesma família antes de qualquer alteração
+            // SEGURANÇA MULTI-TENANT: Verifica se o registro já existe e se pertence à família do usuário logado
             if (payload.id) {
                 const ownership = await client.query(`SELECT family_id FROM ${tableName} WHERE id = $1`, [payload.id]);
                 if (ownership.rows.length > 0 && ownership.rows[0].family_id !== familyId) {
-                    throw new Error("Acesso negado: Tentativa de modificação cross-tenant detectada.");
+                    throw new Error("Acesso negado: Tentativa de modificação de registro de outro tenant.");
                 }
             }
 
@@ -133,8 +134,7 @@ export default function(logAudit) {
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
-            // CORREÇÃO: Usamos LEFT JOIN para garantir que transações apareçam mesmo que o autor mude de família, 
-            // mas o filtro t.family_id = $1 garante que apenas os dados do tenant atual sejam retornados.
+            // GARANTIA TOTAL: O filtro 'family_id = $1' é aplicado em todas as tabelas sem exceção.
             const queryDefs = {
                 accounts: ['SELECT *, family_id FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
@@ -163,7 +163,7 @@ export default function(logAudit) {
             }
             res.json(results);
         } catch (err) {
-            res.status(500).json({ error: "Falha ao puxar dados isolados: " + err.message });
+            res.status(500).json({ error: "Falha catastrófica ao puxar dados isolados: " + err.message });
         }
     });
 

@@ -74,6 +74,9 @@ const App: React.FC = () => {
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
+        // Se não há token, garantimos que o estado global esteja nulo para evitar vazamentos visuais
+        setState(null);
+        setCurrentUser(null);
         setAuthChecked(true);
         setDataLoaded(true);
         return;
@@ -87,6 +90,7 @@ const App: React.FC = () => {
         console.error("Auth check failed:", e);
         localStorage.removeItem('token');
         setCurrentUser(null);
+        setState(null);
     } finally {
         setAuthChecked(true);
         setDataLoaded(true);
@@ -132,6 +136,8 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = async (user: User) => {
       setDataLoaded(false);
+      // Nuke preventivo do estado ao entrar com novo usuário
+      setState(null); 
       setCurrentUser(user);
       setShowAuth(false);
       try {
@@ -143,24 +149,18 @@ const App: React.FC = () => {
   };
 
   // CAMADA DE ISOLAMENTO DE DADOS (Multi-tenant)
-  // Filtra rigorosamente todos os registros pelo familyId ativo para evitar conflito Usuário X vs Usuário H
+  // Filtra rigorosamente todos os registros pelo familyId ativo do usuário logado
   const safeState = useMemo(() => {
     if (!state || !currentUser) return null;
     
     const activeFamilyId = currentUser.familyId || (currentUser as any).family_id;
-    if (!activeFamilyId) {
-        console.warn("Usuário logado sem familyId definido.");
-        return null; 
-    }
+    if (!activeFamilyId) return null; 
     
     const filterByFamily = (items: any[]) => {
         if (!Array.isArray(items)) return [];
         return items.filter(item => {
-            // Verifica as duas possíveis formas de ID no objeto (Camel e Snake Case)
             const itemFamilyId = item.familyId || item.family_id;
-            
-            // SEGURANÇA MÁXIMA: Só exibe se o ID do registro casar EXATAMENTE com o ID do usuário/business ativo
-            // Registros sem familyId são considerados órfãos ou de outra conta e são filtrados.
+            // SEGURANÇA CRÍTICA: Somente itens que dão "match" exato com a família da sessão são processados.
             return itemFamilyId === activeFamilyId;
         });
     };
@@ -194,7 +194,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium">Validando isolamento de dados...</p>
+                <p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Validando integridade do tenant...</p>
             </div>
         );
     }
