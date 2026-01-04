@@ -77,7 +77,8 @@ export default function(logAudit) {
             const mappedUser = await ensureUserIntegrity(userRow);
             mappedUser.workspaces = workspaces;
             
-            const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
+            // CRÍTICO: Token agora contém o familyId ativo para isolamento no frontend
+            const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: targetFamilyId }, JWT_SECRET, { expiresIn: '7d' });
             res.json({ token, user: mappedUser });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -96,7 +97,6 @@ export default function(logAudit) {
             [id, name, email, hashedPassword, entityType || 'PF', plan || 'MONTHLY']
         );
         
-        // Correção: Garante que id seja passado para user_id e family_id
         await client.query(
             'INSERT INTO memberships (user_id, family_id, role, permissions) VALUES ($1, $1, $2, $3)', 
             [id, 'ADMIN', '[]']
@@ -117,7 +117,7 @@ export default function(logAudit) {
         const workspaces = await getUserWorkspaces(id);
         const mappedUser = await ensureUserIntegrity(userRow);
         mappedUser.workspaces = workspaces;
-        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: id }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: mappedUser });
       } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
     });
@@ -132,7 +132,7 @@ export default function(logAudit) {
         const mappedUser = await ensureUserIntegrity(userRow);
         mappedUser.workspaces = workspaces;
         
-        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: mappedUser.familyId }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: mappedUser });
       } catch (err) { res.status(500).json({ error: err.message }); }
     });
@@ -182,7 +182,7 @@ export default function(logAudit) {
         const mappedUser = await ensureUserIntegrity(userRow);
         mappedUser.workspaces = workspaces;
         
-        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ id: mappedUser.id, email: mappedUser.email, familyId: mappedUser.familyId }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: mappedUser });
       } catch (err) { 
         if (client) await client.query('ROLLBACK').catch(() => {});

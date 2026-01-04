@@ -10,12 +10,12 @@ const getHeaders = () => ({
 });
 
 // Helper para obter o usuário atual do estado ou localStorage (fallback seguro)
-const getActiveUserFamilyId = () => {
+const getActiveUserFamilyId = (): string | null => {
     const token = localStorage.getItem('token');
     if (!token) return null;
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        // Buscamos o familyId persistido no token ou buscamos do estado global se disponível
+        // Agora o JWT contém familyId explicitamente
         return payload.familyId || payload.id;
     } catch (e) {
         return null;
@@ -249,7 +249,6 @@ export const loadInitialData = async (): Promise<AppState> => {
     const results: any = {};
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
-        // Filtro de segurança adicional no carregamento: se o dado local não bater com o usuário logado, ignoramos
         results[store] = rawData.filter((item: any) => {
             const itemFamilyId = item.familyId || item.family_id;
             return !currentFamilyId || itemFamilyId === currentFamilyId;
@@ -265,17 +264,48 @@ export const loadInitialData = async (): Promise<AppState> => {
     return results as AppState;
 };
 
-export const api = {
+// Fix: Explicitly defining interface for the api object to prevent TS7023
+export interface ApiClient {
+    saveLocallyAndQueue: (store: string, data: any) => Promise<{ success: boolean; id: string }>;
+    deleteLocallyAndQueue: (store: string, id: string) => Promise<{ success: boolean }>;
+    saveTransaction: (t: Transaction) => Promise<{ success: boolean; id: string }>;
+    deleteTransaction: (id: string) => Promise<{ success: boolean }>;
+    saveAccount: (a: Account) => Promise<{ success: boolean; id: string }>;
+    deleteAccount: (id: string) => Promise<{ success: boolean }>;
+    saveGoal: (g: FinancialGoal) => Promise<{ success: boolean; id: string }>;
+    deleteGoal: (id: string) => Promise<{ success: boolean }>;
+    saveContact: (c: Contact) => Promise<{ success: boolean; id: string }>;
+    deleteContact: (id: string) => Promise<{ success: boolean }>;
+    saveCategory: (c: Category) => Promise<{ success: boolean; id: string }>;
+    deleteCategory: (id: string) => Promise<{ success: boolean }>;
+    saveOpticalRx: (rx: OpticalRx) => Promise<{ success: boolean; id: string }>;
+    deleteOpticalRx: (id: string) => Promise<{ success: boolean }>;
+    saveCatalogItem: (i: Partial<ServiceItem>) => Promise<{ success: boolean; id: string }>;
+    deleteCatalogItem: (id: string) => Promise<{ success: boolean }>;
+    saveServiceClient: (c: any) => Promise<{ success: boolean; id: string }>;
+    deleteServiceClient: (id: string) => Promise<{ success: boolean }>;
+    saveAppointment: (a: any) => Promise<{ success: boolean; id: string }>;
+    deleteAppointment: (id: string) => Promise<{ success: boolean }>;
+    saveOS: (os: any) => Promise<{ success: boolean; id: string }>;
+    deleteOS: (id: string) => Promise<{ success: boolean }>;
+    saveOrder: (o: any) => Promise<{ success: boolean; id: string }>;
+    deleteOrder: (id: string) => Promise<{ success: boolean }>;
+    savePJEntity: (type: string, payload: any) => Promise<{ success: boolean; id?: string }>;
+    deletePJEntity: (type: string, id: string) => Promise<{ success: boolean }>;
+}
+
+export const api: ApiClient = {
     saveLocallyAndQueue: async (store: string, data: any) => {
         const id = data.id || crypto.randomUUID();
         const familyId = getActiveUserFamilyId();
         
-        // CRÍTICO: Injeta o familyId no payload antes de salvar localmente
+        if (!familyId) throw new Error("Sessão inválida: familyId ausente.");
+
         const payload = { 
             ...data, 
             id, 
-            familyId: familyId, // CamelCase para o frontend
-            family_id: familyId // SnakeCase para compatibilidade com o servidor
+            familyId, 
+            family_id: familyId
         };
         
         await localDb.put(store, payload);
@@ -302,7 +332,7 @@ export const api = {
     saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
     deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
-    deleteCatalogItem: async (id: string) => api.deleteCatalogItem(id).then(() => { return { success: true }; }),
+    deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
     deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),
     saveAppointment: async (a: any) => api.saveLocallyAndQueue('serviceAppointments', a),
