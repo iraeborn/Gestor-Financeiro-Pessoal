@@ -60,7 +60,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT',
-            receiverId: selectedUser?.id // Corrigido para undefined automático se selecionado for null
+            receiverId: selectedUser?.id // undefined se selectedUser for null (correto para interface opcional)
         };
         
         socket.emit('SEND_MESSAGE', newMsg);

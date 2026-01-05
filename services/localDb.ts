@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 6; // Incrementado para incluir salespeople
+const DB_VERSION = 7; // Incrementado para v7 para garantir a criação do store salespeople
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
