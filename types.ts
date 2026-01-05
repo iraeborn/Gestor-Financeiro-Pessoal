@@ -67,7 +67,7 @@ export type ViewMode =
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
-  maxDiscountPct?: number; // Novo: Limite de negociação
+  maxDiscountPct?: number; // Limite de negociação em %
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
@@ -88,7 +88,7 @@ export interface ChatMessage {
   id: string;
   senderId: string;
   senderName: string;
-  receiverId?: string; // Se nulo, é chat da família/grupo
+  receiverId?: string; 
   familyId: string;
   content: string;
   type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
@@ -344,7 +344,7 @@ export interface OpticalRx {
   professionalName?: string;
   rxDate: string;
   expirationDate?: string;
-  status: 'PENDING' | 'APPROVED' | 'CANCELLED'; // Novo campo
+  status: 'PENDING' | 'APPROVED' | 'SOLD';
   sphereOdLonge?: number;
   cylOdLonge?: number;
   axisOdLonge?: number;

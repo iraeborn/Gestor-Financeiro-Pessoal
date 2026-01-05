@@ -70,44 +70,11 @@ const AppContent: React.FC<{
     const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
-    // Lógica para Links de Convite (URL params)
-    useEffect(() => {
-        const checkJoinLink = async () => {
-            if (!currentUser) return;
-            
-            const params = new URLSearchParams(window.location.search);
-            const joinCode = params.get('joinCode');
-            
-            if (joinCode) {
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, '', newUrl);
-
-                const confirm = await showConfirm({
-                    title: "Novo Convite de Equipe",
-                    message: "Você recebeu um convite para entrar em uma nova organização. Deseja aceitar agora? Você mudará seu ambiente de trabalho.",
-                    confirmText: "Sim, Entrar na Equipe"
-                });
-
-                if (confirm) {
-                    try {
-                        await joinFamily(joinCode);
-                        showAlert("Bem-vindo à nova equipe! Recarregando dados...", "success");
-                        setTimeout(() => window.location.reload(), 1500);
-                    } catch (e: any) {
-                        showAlert(e.message || "Erro ao processar convite via link.", "error");
-                    }
-                }
-            }
-        };
-
-        checkJoinLink();
-    }, [currentUser]);
-
-    // Função para converter RX em Venda (Fluxo Ótico Automático)
+    // Fluxo Automático Ótico: Converter RX em Venda
     const handleStartSaleFromRx = (rx: OpticalRx) => {
         const lensItem: OSItem = {
             id: crypto.randomUUID(),
-            description: `Par de Lentes (Ref RX ${new Date(rx.rxDate).toLocaleDateString()})`,
+            description: `Par de Lentes (RX de ${new Date(rx.rxDate).toLocaleDateString()})`,
             quantity: 1,
             unitPrice: 0,
             totalPrice: 0,
@@ -117,7 +84,7 @@ const AppContent: React.FC<{
         setEditingSale({
             id: crypto.randomUUID(),
             type: 'SALE',
-            description: `Venda p/ ${rx.contactName} (Origem RX)`,
+            description: `Venda p/ ${rx.contactName} (Início via RX)`,
             contactId: rx.contactId,
             contactName: rx.contactName,
             rxId: rx.id,
@@ -131,16 +98,17 @@ const AppContent: React.FC<{
         setCurrentView('SRV_SALE_EDITOR');
     };
 
-    // Automação de OS ao salvar Venda
-    const handleSaveOrderWithOS = async (order: CommercialOrder) => {
+    // Salvar Venda e Automatizar OS de Montagem
+    const handleSaveOrderWithOSAutomation = async (order: CommercialOrder) => {
         await api.saveOrder(order);
         
-        // Se a venda veio de uma RX, cria a OS de Montagem automaticamente
+        // Se houver uma RX vinculada, cria a OS de montagem automaticamente
         if (order.rxId) {
+            const rx = state?.opticalRxs.find(r => r.id === order.rxId);
             const os: ServiceOrder = {
                 id: crypto.randomUUID(),
-                title: `Montagem: ${order.contactName}`,
-                description: `OS gerada automaticamente da Venda #${order.id.substring(0,6)}\n${order.description}`,
+                title: `Montagem de Óculos: ${order.contactName}`,
+                description: `OS gerada automaticamente da Venda #${order.id.substring(0,6)}.\nRX Ref: ${new Date(rx?.rxDate || '').toLocaleDateString()}`,
                 contactId: order.contactId,
                 contactName: order.contactName,
                 rxId: order.rxId,
@@ -150,12 +118,16 @@ const AppContent: React.FC<{
                 origin: 'VENDA_OTICA',
                 priority: 'MEDIA',
                 openedAt: new Date().toISOString(),
-                totalAmount: 0, // OS interna de montagem geralmente não cobra valor extra
+                totalAmount: 0,
                 moduleTag: 'optical',
                 items: order.items.map(i => ({ ...i, id: crypto.randomUUID(), isBillable: false }))
             };
             await api.saveOS(os);
-            showAlert("Venda e Ordem de Serviço (Laboratório) criadas!", "success");
+            
+            // Marca RX como vendida
+            if (rx) await api.saveOpticalRx({ ...rx, status: 'SOLD' });
+            
+            showAlert("Venda e OS de Montagem criadas com sucesso!", "success");
         } else {
             showAlert("Venda salva com sucesso!", "success");
         }
@@ -254,7 +226,7 @@ const AppContent: React.FC<{
                     onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
                     onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
                     onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
-                    onSaveOrder={handleSaveOrderWithOS}
+                    onSaveOrder={handleSaveOrderWithOSAutomation}
                     onDeleteOrder={(id) => api.deleteOrder(id).then(refreshData)}
                     onSaveContract={() => {}} onDeleteContract={() => {}} 
                     onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
@@ -269,8 +241,29 @@ const AppContent: React.FC<{
                     opticalRxs={state.opticalRxs}
                     branches={state.branches}
                     settings={currentUser.settings}
-                    onSave={handleSaveOrderWithOS}
+                    onSave={handleSaveOrderWithOSAutomation}
                     onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
+                />;
+
+            case 'SRV_CATALOG':
+                return <ServicesView 
+                    currentView={currentView}
+                    serviceOrders={state.serviceOrders}
+                    commercialOrders={state.commercialOrders}
+                    contracts={state.contracts}
+                    invoices={state.invoices}
+                    contacts={state.contacts}
+                    accounts={state.accounts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    settings={currentUser.settings}
+                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
+                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}}
+                    onSaveContract={() => {}} onDeleteContract={() => {}} 
+                    onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
+                    onAddTransaction={commonProps.onAddTransaction}
+                    onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)}
+                    onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
                 />;
 
             default: return <Dashboard {...commonProps} />;
@@ -364,6 +357,7 @@ const App: React.FC = () => {
             <AppContent 
                 currentUser={currentUser} state={state} dataLoaded={dataLoaded} 
                 syncStatus={syncStatus} currentView={currentView} setCurrentView={setCurrentView}
+                /* Fix: Renamed setIsMobileOpen to setIsMobileMenuOpen to match the defined state setter */
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileMenuOpen}
                 refreshData={refreshData} checkAuth={checkAuth}
                 members={members}

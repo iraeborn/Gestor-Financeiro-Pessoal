@@ -1,6 +1,6 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch } from '../types';
-// Fix: Added missing Zap icon import
 import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
@@ -33,7 +33,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-    const maxDiscountPct = settings?.maxDiscountPct || 100; // Default total se não configurado
+    const maxDiscountPct = settings?.maxDiscountPct || 100;
 
     useEffect(() => {
         loadTeam();
@@ -101,7 +101,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         e.preventDefault();
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
-        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! O limite máximo é de ${maxDiscountPct}%.`, "error");
+        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Limite máximo: ${maxDiscountPct}%.`, "error");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -126,9 +126,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                     </button>
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-                            {initialData ? 'Editar Venda' : 'Nova Venda / Orçamento'}
+                            {initialData ? 'Editar Venda' : 'Nova Venda de Óculos'}
                         </h1>
-                        <p className="text-gray-500 font-medium">Configure itens, descontos e unidade de origem.</p>
+                        <p className="text-gray-500 font-medium">Configure itens, armação e valide o poder de negociação.</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
@@ -145,7 +145,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         <div className="space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Título do Pedido</label>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Descrição do Pedido</label>
                                     <input 
                                         type="text" 
                                         value={formData.description || ''} 
@@ -212,7 +212,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             <tr>
                                                 <th className="p-5">Produto / Serviço</th>
                                                 <th className="p-5 w-20 text-center">Qtd</th>
-                                                <th className="p-5 w-32 text-center">Valor Unit</th>
+                                                <th className="p-5 w-32 text-center">Unitário</th>
                                                 <th className="p-5 w-32 text-right">Subtotal</th>
                                                 <th className="p-5 w-10"></th>
                                             </tr>
@@ -259,7 +259,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                 </tr>
                                             ))}
                                             {(formData.items || []).length === 0 && (
-                                                <tr><td colSpan={5} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione itens para começar.</td></tr>
+                                                <tr><td colSpan={5} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione armação e lentes.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -306,7 +306,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             </div>
                             
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Concedido</label>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Negociado</label>
                                 <div className="relative">
                                     <DollarSign className={`w-4 h-4 absolute left-4 top-4 ${pricing.isOverDiscount ? 'text-rose-500' : 'text-emerald-500'}`} />
                                     <input 
@@ -337,9 +337,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         {formData.rxId && (
                             <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-2">
                                 <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest">
-                                    <Glasses className="w-4 h-4" /> Venda Vinculada a Receita
+                                    <Glasses className="w-4 h-4" /> Origem: Receita RX
                                 </div>
-                                <p className="text-xs text-emerald-600 font-medium">Uma Ordem de Serviço de montagem será gerada automaticamente.</p>
+                                <p className="text-xs text-emerald-600 font-medium leading-relaxed">Uma Ordem de Serviço de montagem será gerada automaticamente após salvar.</p>
                             </div>
                         )}
 
@@ -348,16 +348,16 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             disabled={pricing.isOverDiscount}
                             className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50 disabled:grayscale"
                         >
-                            <CheckCircle className="w-5 h-5" /> Finalizar Pedido
+                            <CheckCircle className="w-5 h-5" /> Confirmar Venda
                         </button>
                     </div>
 
                     <div className="bg-slate-900 p-6 rounded-3xl text-white">
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
-                            <Info className="w-4 h-4" /> Política de Descontos
+                            <Info className="w-4 h-4" /> Alerta de Alçada
                         </h4>
                         <p className="text-xs text-slate-300 leading-relaxed">
-                            O desconto máximo permitido para este negócio é de <strong>{maxDiscountPct}%</strong>. Vendas acima deste valor requerem aprovação do administrador em "Ajustes".
+                            O desconto máximo permitido para este negócio é de <strong>{maxDiscountPct}%</strong>. Vendas fora dessa regra serão bloqueadas.
                         </p>
                     </div>
                 </div>

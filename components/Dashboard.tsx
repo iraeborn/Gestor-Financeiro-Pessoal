@@ -71,8 +71,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     const opticalStats = {
         labPendentes: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
         rxNovas: state.opticalRxs?.filter(rx => rx.rxDate >= firstDay).length || 0,
-        labProntos: state.opticalRxs?.filter(rx => rx.labStatus === 'LAB_PRONTO').length || 0,
-        osAtrasadas: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && o.endDate && o.endDate < now.toISOString().split('T')[0] && o.status !== 'FINALIZADA').length || 0
+        labProntos: state.opticalRxs?.filter(rx => rx.labStatus === 'LAB_PRONTO').length || 0
     };
 
     return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
@@ -90,9 +89,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Painel de Controle</h1>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Gestão Estratégica</h1>
           <p className="text-gray-500 font-medium">
-            Bem vindo, <span className="text-indigo-600 font-bold">{currentUser.name}</span>. Perfil: <span className="text-slate-800 font-bold">{isAdmin ? 'Administrador' : currentWorkspace?.role || 'Membro'}</span>.
+            Bem vindo, <span className="text-indigo-600 font-bold">{currentUser.name}</span>. Fique atento aos alertas operacionais abaixo.
           </p>
         </div>
         {canManageTrans && (
@@ -105,20 +104,20 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* Alertas Operacionais Óticos */}
+      {/* Alerta de Lentes Prontas no Laboratório */}
       {canSeeOptical && metrics.opticalStats.labProntos > 0 && (
-          <div className="bg-emerald-600 rounded-[2rem] p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-100 animate-pulse-subtle">
-              <div className="flex items-center gap-4">
-                  <div className="p-4 bg-white/20 rounded-3xl backdrop-blur-md">
+          <div className="bg-emerald-600 rounded-[2.5rem] p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl shadow-emerald-100 animate-pulse-subtle">
+              <div className="flex items-center gap-6">
+                  <div className="p-5 bg-white/20 rounded-3xl backdrop-blur-md">
                       <Microscope className="w-10 h-10" />
                   </div>
                   <div>
-                      <h3 className="text-xl font-black">Lentes Prontas p/ Retirada!</h3>
-                      <p className="text-emerald-100 font-medium">{metrics.opticalStats.labProntos} pedido(s) atingiram o status "Pronto no Lab". Organize a coleta.</p>
+                      <h3 className="text-2xl font-black">Lentes Prontas p/ Retirada!</h3>
+                      <p className="text-emerald-100 font-bold text-lg">{metrics.opticalStats.labProntos} pedido(s) aguardam coleta no laboratório parceiro.</p>
                   </div>
               </div>
-              <button onClick={() => onChangeView('OPTICAL_RX')} className="bg-white text-emerald-700 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-50 transition-all flex items-center gap-2 whitespace-nowrap">
-                  Visualizar Lista <ArrowRight className="w-4 h-4"/>
+              <button onClick={() => onChangeView('OPTICAL_RX')} className="bg-white text-emerald-700 px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-50 transition-all flex items-center gap-3 whitespace-nowrap shadow-xl">
+                  Gerenciar Coletas <ArrowRight className="w-5 h-5"/>
               </button>
           </div>
       )}
@@ -127,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           {canSeeFinance && (
               <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
                   <div className="flex justify-between items-start mb-2">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Meu Faturamento</p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Faturamento Líquido</p>
                       <TrendingUp className="w-5 h-5 text-emerald-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
@@ -141,15 +140,15 @@ const Dashboard: React.FC<DashboardProps> = ({
               <>
                 <div onClick={() => canSeeOS && onChangeView('OPTICAL_LAB')} className="bg-indigo-600 p-5 rounded-[2rem] text-white shadow-lg shadow-indigo-100 cursor-pointer hover:scale-[1.02] transition-all border border-indigo-500 group relative overflow-hidden">
                     <Monitor className="absolute -right-4 -bottom-4 w-24 h-24 text-white/10 group-hover:rotate-12 transition-transform" />
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Lab (Em Montagem)</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Lab (Montagem Ativa)</p>
                     <h4 className="text-3xl font-black mt-1">{metrics.opticalStats.labPendentes}</h4>
-                    <div className="mt-4 flex items-center gap-1 text-[10px] font-bold bg-white/20 w-fit px-2 py-0.5 rounded-full uppercase">Gerenciar OS <ArrowRight className="w-3 h-3"/></div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] font-bold bg-white/20 w-fit px-2 py-0.5 rounded-full uppercase">Ver Ordens <ArrowRight className="w-3 h-3"/></div>
                 </div>
                 <div onClick={() => onChangeView('OPTICAL_RX')} className="bg-white p-5 rounded-[2rem] border-2 border-indigo-100 shadow-sm cursor-pointer hover:border-indigo-600 transition-all group relative overflow-hidden">
                     <Eye className="absolute -right-4 -bottom-4 w-24 h-24 text-indigo-50 group-hover:scale-110 transition-transform" />
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Receitas RX Ativas</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Receitas Novas</p>
                     <h4 className="text-3xl font-black text-indigo-900 mt-1">{metrics.opticalStats.rxNovas}</h4>
-                    <p className="text-[10px] font-bold text-indigo-500 mt-2 uppercase">Histórico do mês</p>
+                    <p className="text-[10px] font-bold text-indigo-500 mt-2 uppercase">Prescrições este mês</p>
                 </div>
               </>
           )}
@@ -157,23 +156,15 @@ const Dashboard: React.FC<DashboardProps> = ({
           {canSeeAccounts ? (
               <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
                   <div className="flex justify-between items-start mb-2">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Saldo Disponível</p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Saldo Total</p>
                       <Landmark className="w-5 h-5 text-indigo-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
                       {metrics.saldoReal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </h3>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Consolidação de contas</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Soma de todas as contas</p>
               </div>
-          ) : (
-              !isSalesperson && (
-                <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-dashed border-gray-200 flex flex-col justify-center items-center text-center">
-                    <ShieldAlert className="w-6 h-6 text-gray-300 mb-2" />
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Informações Restritas</p>
-                    <p className="text-[8px] text-gray-300 mt-1 uppercase">Apenas Administradores</p>
-                </div>
-              )
-          )}
+          ) : null}
       </div>
 
       {canSeeFinance && !isSalesperson && (
@@ -181,14 +172,14 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 lg:col-span-2">
               <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
                   <Activity className="w-5 h-5 text-emerald-500" />
-                  Evolução do Faturamento
+                  Performance de Vendas
               </h3>
               <CashFlowChart transactions={metrics.currentTransactions} />
             </div>
             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
               <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
                   <Receipt className="w-5 h-5 text-indigo-500" />
-                  Composição de Gastos
+                  Mix de Receitas
               </h3>
               <ExpensesByCategory transactions={metrics.currentTransactions} />
             </div>
@@ -198,8 +189,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       {(permissions.includes('FIN_TRANSACTIONS') || isAdmin || isSalesperson) && (
           <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Meus Lançamentos Recentes</h3>
-                <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Ver Extrato <ArrowRight className="w-4 h-4" /></button>
+                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Fluxo de Caixa Recente</h3>
+                <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Ver Extrato Completo <ArrowRight className="w-4 h-4" /></button>
             </div>
             <TransactionList 
                 transactions={recentTransactions} 
