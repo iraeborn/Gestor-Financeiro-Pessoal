@@ -6,7 +6,7 @@ import {
     Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, 
     OSPriority, KanbanItem, KanbanColumnConfig, Member, AppSettings, OpticalRx 
 } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses, Save } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api, getFamilyMembers } from '../services/storageService';
@@ -78,16 +78,59 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
     const [viewType, setViewType] = useState<'GRID' | 'LIST' | 'KANBAN'>((isOS || isSales) ? 'KANBAN' : 'GRID');
+    
     const [formData, setFormData] = useState<Partial<ServiceItem>>({
         type: 'PRODUCT',
         defaultPrice: 0,
         costPrice: 0,
+        isComposite: false,
+        items: [],
         moduleTag: isOpticalContext ? 'optical' : 'general'
     });
 
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+    };
+
+    // --- LOGICA DE ITENS COMPOSTOS ---
+    const handleAddComponent = (itemId: string) => {
+        const itemToAdd = serviceItems.find(i => i.id === itemId);
+        if (!itemToAdd) return;
+
+        const newComponent: OSItem = {
+            id: crypto.randomUUID(),
+            serviceItemId: itemToAdd.id,
+            description: itemToAdd.name,
+            quantity: 1,
+            unitPrice: itemToAdd.defaultPrice,
+            totalPrice: itemToAdd.defaultPrice,
+            costPrice: itemToAdd.costPrice || 0
+        };
+
+        const updatedItems = [...(formData.items || []), newComponent];
+        
+        // Recalcular custo total automaticamente com base nos componentes
+        const newCost = updatedItems.reduce((acc, i) => acc + ((i.costPrice || 0) * i.quantity), 0);
+        
+        setFormData({ ...formData, items: updatedItems, costPrice: newCost });
+    };
+
+    const handleRemoveComponent = (compId: string) => {
+        const updatedItems = (formData.items || []).filter(i => i.id !== compId);
+        const newCost = updatedItems.reduce((acc, i) => acc + ((i.costPrice || 0) * i.quantity), 0);
+        setFormData({ ...formData, items: updatedItems, costPrice: newCost });
+    };
+
+    const handleUpdateComponentQty = (compId: string, qty: number) => {
+        const updatedItems = (formData.items || []).map(i => {
+            if (i.id === compId) {
+                return { ...i, quantity: qty, totalPrice: qty * i.unitPrice };
+            }
+            return i;
+        });
+        const newCost = updatedItems.reduce((acc, i) => acc + ((i.costPrice || 0) * i.quantity), 0);
+        setFormData({ ...formData, items: updatedItems, costPrice: newCost });
     };
 
     const handleOSStatusUpdate = async (itemId: string, newStatus: string) => {
@@ -122,8 +165,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleOpenAction = (item?: any) => {
         if (isCatalog) {
-            if (item) setFormData(item);
-            else setFormData({ type: 'PRODUCT', defaultPrice: 0, costPrice: 0, moduleTag: 'general' });
+            if (item) setFormData({ ...item, items: item.items || [], isComposite: item.isComposite || false });
+            else setFormData({ type: 'PRODUCT', defaultPrice: 0, costPrice: 0, isComposite: false, items: [], moduleTag: 'general' });
             setIsModalOpen(true);
         } else if (isOS) {
             if (item) onEditOS(item);
@@ -209,14 +252,17 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{item.type || 'Ref'} #{item.id.substring(0,4)}</span>
                                     <h3 className="font-bold text-gray-800 leading-tight line-clamp-2">{item.name || item.title || item.description}</h3>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase bg-gray-100 text-gray-600`}>{item.status || (item.type === 'PRODUCT' ? 'Produto' : 'Serviço')}</span>
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${item.isComposite ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-600'}`}>
+                                    {item.isComposite ? 'COMPOSTO' : (item.type === 'PRODUCT' ? 'Produto' : 'Serviço')}
+                                </span>
                             </div>
                             
                             {isCatalog && (
                                 <div className="space-y-2 mb-4">
                                     <p className="text-xs text-gray-500 line-clamp-2">{item.description || 'Sem descrição cadastrada.'}</p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[9px] font-black text-gray-400 uppercase">Custo: {formatCurrency(item.costPrice)}</span>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[9px] font-black text-gray-400 uppercase">Preço Venda: {formatCurrency(item.defaultPrice)}</span>
+                                        <span className="text-[9px] font-black text-emerald-500 uppercase">Custo: {formatCurrency(item.costPrice)}</span>
                                     </div>
                                 </div>
                             )}
@@ -278,12 +324,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             {/* Modal de Catálogo (Produtos e Serviços) */}
             {isModalOpen && isCatalog && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl p-10 animate-scale-up border border-slate-100">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl p-10 animate-scale-up border border-slate-100 overflow-y-auto max-h-[90vh]">
                         <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
                             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-3"><Package className="w-6 h-6 text-indigo-600" /> Gerenciar Item de Catálogo</h2>
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-6 h-6"/></button>
                         </div>
-                        <form onSubmit={handleSaveCatalog} className="space-y-6">
+                        <form onSubmit={handleSaveCatalog} className="space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
                                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Produto ou Serviço</label>
@@ -302,26 +348,98 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Layers className="w-4 h-4 text-amber-500" />
+                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Estrutura de Composição</span>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" className="sr-only peer" checked={formData.isComposite} onChange={e => setFormData({...formData, isComposite: e.target.checked, items: e.target.checked ? formData.items : []})} />
+                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                                        <span className="ml-3 text-xs font-bold text-slate-600">Item Composto (Kit/Combo)</span>
+                                    </label>
+                                </div>
+
+                                {formData.isComposite && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        <div className="flex gap-2">
+                                            <select 
+                                                className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none"
+                                                onChange={(e) => { if(e.target.value) handleAddComponent(e.target.value); e.target.value = ''; }}
+                                            >
+                                                <option value="">Selecionar componente p/ kit...</option>
+                                                {serviceItems.filter(i => i.id !== formData.id && !i.isComposite).map(i => (
+                                                    <option key={i.id} value={i.id}>{i.name} (Custo: {formatCurrency(i.costPrice)})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[9px] border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="p-3">Componente</th>
+                                                        <th className="p-3 text-center">Qtd</th>
+                                                        <th className="p-3 text-right">Custo Unit</th>
+                                                        <th className="p-3 text-right">Ações</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {(formData.items || []).map(comp => (
+                                                        <tr key={comp.id}>
+                                                            <td className="p-3 font-bold text-slate-700">{comp.description}</td>
+                                                            <td className="p-3 text-center">
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="w-12 text-center border-none bg-slate-50 rounded p-1 font-black" 
+                                                                    value={comp.quantity} 
+                                                                    onChange={e => handleUpdateComponentQty(comp.id, Number(e.target.value))}
+                                                                />
+                                                            </td>
+                                                            <td className="p-3 text-right font-medium text-slate-400">{formatCurrency(comp.costPrice)}</td>
+                                                            <td className="p-3 text-right">
+                                                                <button type="button" onClick={() => handleRemoveComponent(comp.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {(!formData.items || formData.items.length === 0) && (
+                                                        <tr><td colSpan={4} className="p-6 text-center text-slate-300 italic">Adicione produtos para formar este kit.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-indigo-50/50 p-8 rounded-[2rem] border border-indigo-100">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase text-indigo-400 mb-2 ml-1">Preço de Venda (R$)</label>
+                                    <label className="block text-[10px] font-black uppercase text-indigo-400 mb-2 ml-1">Preço Sugerido de Venda (R$)</label>
                                     <div className="relative">
                                         <DollarSign className="absolute left-4 top-4 w-4 h-4 text-indigo-400" />
-                                        <input type="number" step="0.01" className="w-full pl-11 py-4 bg-white border-none rounded-xl text-lg font-black text-indigo-700 outline-none shadow-sm" value={formData.defaultPrice} onChange={e => setFormData({...formData, defaultPrice: Number(e.target.value)})} />
+                                        <input type="number" step="0.01" className="w-full pl-11 py-4 bg-white border-none rounded-2xl text-xl font-black text-indigo-700 outline-none shadow-sm focus:ring-2 focus:ring-indigo-500" value={formData.defaultPrice} onChange={e => setFormData({...formData, defaultPrice: Number(e.target.value)})} />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase text-rose-400 mb-2 ml-1">Preço de Custo (R$)</label>
+                                    <label className="block text-[10px] font-black uppercase text-rose-400 mb-2 ml-1">Custo Médio {formData.isComposite ? '(Automático)' : ''} (R$)</label>
                                     <div className="relative">
                                         <DollarSign className="absolute left-4 top-4 w-4 h-4 text-rose-400" />
-                                        <input type="number" step="0.01" className="w-full pl-11 py-4 bg-white border-none rounded-xl text-lg font-black text-rose-700 outline-none shadow-sm" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} />
+                                        <input 
+                                            type="number" 
+                                            step="0.01" 
+                                            readOnly={formData.isComposite}
+                                            className={`w-full pl-11 py-4 rounded-2xl text-xl font-black text-rose-700 outline-none shadow-sm ${formData.isComposite ? 'bg-slate-100 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-rose-500'}`} 
+                                            value={formData.costPrice} 
+                                            onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} 
+                                        />
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex gap-4 pt-6 border-t border-gray-100">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 text-gray-400 font-bold uppercase text-[10px] tracking-widest">Cancelar</button>
-                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4" /> Salvar no Catálogo</button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-gray-600 transition-colors">Descartar</button>
+                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-indigo-700"><Save className="w-4 h-4" /> Salvar Item no Catálogo</button>
                             </div>
                         </form>
                     </div>

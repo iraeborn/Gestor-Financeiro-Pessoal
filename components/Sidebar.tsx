@@ -94,6 +94,10 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
     ]},
+    { section: 'Operacional', items: [
+        { id: 'SRV_CATALOG', label: 'Produtos e Serviços', icon: Package },
+        { id: 'OPTICAL_SALES', label: 'Vendas / PDV', icon: ShoppingBag, enabled: !!activeModules.optical },
+    ]},
     { section: 'Comunicação', items: [
         { id: 'SYS_CHAT', label: 'Chat Equipe', icon: MessageSquare },
     ]},
