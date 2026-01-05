@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -42,14 +42,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       
       if (window.innerWidth >= 768) setIsMobileOpen(false);
     };
-    // Inicializa correto baseando-se no tamanho atual
     handleResize(); 
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Fechar menu ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -78,7 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       if (targetId === familyId) return;
       try {
           await switchContext(targetId);
-          window.location.reload(); // Recarrega para aplicar novo contexto
+          window.location.reload();
       } catch (e) {
           showAlert("Erro ao trocar de negócio.", "error");
       }
@@ -106,6 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { section: 'Configuração', items: [
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
+        { id: 'SYS_ACCESS', label: 'Equipe / Acessos', icon: ShieldCheck },
         { id: 'SYS_SALESPEOPLE', label: 'Vendedores', icon: BadgeDollarSign, enabled: isAdmin },
         { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
@@ -119,7 +118,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         ...section,
         items: section.items.filter(item => {
             if ((item as any).enabled !== undefined && !(item as any).enabled) return false;
-            if (item.id === 'SYS_HELP') return true; // Help is always visible
+            if (item.id === 'SYS_HELP') return true; 
             if (isAdmin) return true;
             return userPermissions.includes(item.id);
         })
@@ -134,7 +133,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         
         <div className={`fixed inset-y-0 left-0 md:relative flex flex-col h-full bg-white border-r border-gray-100 shadow-xl transition-all duration-300 ease-in-out z-[150] ${isMobileOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'} ${isCollapsed ? 'md:w-20' : 'md:w-72'}`}>
             
-            {/* Desktop Toggle Button - Absolute Positioned on Border */}
             <button 
                 onClick={toggleCollapse}
                 className="hidden md:flex absolute -right-3 top-9 bg-white border border-gray-200 text-gray-400 hover:text-indigo-600 p-1.5 rounded-full shadow-sm z-50 transition-all hover:scale-110"
@@ -143,7 +141,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
             </button>
 
-            {/* Header */}
             <div className={`p-6 flex flex-col gap-4 border-b border-gray-50 mb-2 ${isCollapsed && !isMobileOpen ? 'items-center' : ''}`}>
                 <div className={`flex items-center w-full ${isCollapsed && !isMobileOpen ? 'justify-center' : 'justify-between'}`}>
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -161,11 +158,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                         )}
                     </div>
-                    {/* Mobile Close Button */}
                     <button onClick={() => setIsMobileOpen(false)} className="md:hidden text-gray-400"><X className="w-6 h-6" /></button>
                 </div>
                 
-                {/* Utility Buttons: Stack Vertical if collapsed */}
                 <div className={`flex gap-2 transition-all ${isCollapsed && !isMobileOpen ? 'flex-col w-full mt-2' : 'flex-row items-center w-full'}`}>
                     <button 
                         onClick={() => setIsTrackerVisible(!isTrackerVisible)} 
@@ -192,7 +187,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             </div>
 
-            {/* Navigation Items */}
             <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4 scrollbar-thin">
                 {filteredMenuItems.map((section, idx) => (
                     <div key={idx}>
@@ -218,7 +212,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         <span className="truncate text-left animate-fade-in">{item.label}</span>
                                     )}
                                     
-                                    {/* Tooltip for collapsed mode */}
                                     {isCollapsed && !isMobileOpen && (
                                         <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
                                             {item.label}
@@ -231,7 +224,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ))}
             </div>
 
-            {/* Profile Footer */}
             <div className={`p-4 border-t border-gray-100 bg-gray-50/50 relative`} ref={userMenuRef}>
                 {showUserMenu && (
                     <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-slide-in-bottom z-50 min-w-[240px]">
@@ -286,9 +278,5 @@ const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
-
-const Monitor = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-);
 
 export default Sidebar;
