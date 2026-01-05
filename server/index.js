@@ -17,6 +17,7 @@ import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
 import servicesRoutes from './routes/services.js';
 import billingRoutes from './routes/billing.js';
+import { authenticateToken } from './middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,7 +66,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Novo: Permite ao Chat solicitar a lista a qualquer momento (ex: ao abrir a aba)
+  // Permite ao Chat solicitar a lista a qualquer momento (ex: ao abrir a aba)
   socket.on('REQUEST_ONLINE_USERS', (familyId) => {
     const room = String(familyId).trim();
     const onlineInRoom = Array.from(connectedSockets.values())
@@ -90,8 +91,10 @@ io.on('connection', (socket) => {
           const payload = { ...msg, id, createdAt: new Date() };
 
           if (msg.receiverId) {
+              // Se for privada, envia apenas para as salas individuais do remetente e destinatário
               io.to(msg.receiverId).to(msg.senderId).emit('NEW_MESSAGE', payload);
           } else {
+              // Se for pública, envia para a sala da família/organização
               io.to(room).emit('NEW_MESSAGE', payload);
           }
       } catch (e) {
@@ -129,16 +132,24 @@ app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 app.use('/api', billingRoutes(logAudit));
 
-// Rota de Histórico de Chat
-app.get('/api/chat/history', async (req, res) => {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.sendStatus(401);
+// Rota de Histórico de Chat - SEGURA
+app.get('/api/chat/history', authenticateToken, async (req, res) => {
     const familyId = req.query.familyId;
+    const userId = req.user.id;
+    
     try {
+        // CORREÇÃO CRÍTICA: Retorna apenas mensagens que o usuário pode ver:
+        // 1. receiver_id IS NULL (Canal Geral da Organização)
+        // 2. receiver_id = userId (Mensagens enviadas para ele)
+        // 3. sender_id = userId (Mensagens enviadas por ele)
         const history = await pool.query(
-            `SELECT * FROM chat_messages WHERE family_id = $1 ORDER BY created_at ASC LIMIT 200`,
-            [familyId]
+            `SELECT * FROM chat_messages 
+             WHERE family_id = $1 
+             AND (receiver_id IS NULL OR receiver_id = $2 OR sender_id = $2)
+             ORDER BY created_at ASC LIMIT 300`,
+            [familyId, userId]
         );
+        
         res.json(history.rows.map(r => ({
             id: r.id,
             senderId: r.sender_id,

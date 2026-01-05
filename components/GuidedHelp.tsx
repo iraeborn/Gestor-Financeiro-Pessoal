@@ -26,7 +26,8 @@ const OPTICAL_STEPS: HelpStep[] = [
 
 export const HelpProvider: React.FC<{ children: React.ReactNode, currentView: ViewMode, onChangeView: (v: ViewMode) => void }> = ({ children, currentView, onChangeView }) => {
     const [activeGuide, setActiveGuide] = useState<string | null>(null);
-    const [isTrackerVisible, setIsTrackerVisible] = useState(() => localStorage.getItem('help_tracker_visible') !== 'false');
+    // Alterado para começar como falso (fechado) por padrão
+    const [isTrackerVisible, setIsTrackerVisible] = useState(() => localStorage.getItem('help_tracker_visible') === 'true');
     const [currentStepIdx, setCurrentStepIdx] = useState(0);
     const [completedSteps, setCompletedSteps] = useState<string[]>(() => JSON.parse(localStorage.getItem('help_completed_steps') || '[]'));
 
