@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Branch } from '../types';
-import { Store, Plus, MapPin, Phone, Search, Pencil, Trash2, Calendar, ChevronRight, CheckCircle2, XCircle, Globe } from 'lucide-react';
+import { Store, Plus, MapPin, Phone, Search, Pencil, Trash2, Calendar, ChevronRight, CheckCircle2, XCircle, Globe, Users } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface BranchesViewProps {
@@ -9,9 +9,10 @@ interface BranchesViewProps {
     onSaveBranch: (b: Branch) => void;
     onDeleteBranch: (id: string) => void;
     onManageSchedule: (b: Branch) => void;
+    onManageSalesSchedule: (b: Branch) => void;
 }
 
-const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch, onDeleteBranch, onManageSchedule }) => {
+const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch, onDeleteBranch, onManageSchedule, onManageSalesSchedule }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -114,13 +115,21 @@ const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 pt-4 border-t border-gray-50">
-                                <button 
-                                    onClick={() => onManageSchedule(branch)}
-                                    className="flex items-center justify-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
-                                >
-                                    <Calendar className="w-4 h-4" /> Agenda
-                                </button>
+                            <div className="grid grid-cols-1 gap-2 pt-4 border-t border-gray-50">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                        onClick={() => onManageSchedule(branch)}
+                                        className="flex items-center justify-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-bold hover:bg-indigo-100 transition-colors"
+                                    >
+                                        <Calendar className="w-3.5 h-3.5" /> Agenda Clínica
+                                    </button>
+                                    <button 
+                                        onClick={() => onManageSalesSchedule(branch)}
+                                        className="flex items-center justify-center gap-2 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-bold hover:bg-emerald-100 transition-colors"
+                                    >
+                                        <Users className="w-3.5 h-3.5" /> Escala Vendas
+                                    </button>
+                                </div>
                                 <div className="flex gap-1">
                                     <button 
                                         onClick={() => handleOpenModal(branch)}
@@ -152,7 +161,7 @@ const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cidade Principal</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.city || ''} onChange={e => setFormData({...formData, city: e.target.value})} /></div>
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Telefone da Unidade</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} /></div>
+                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Telefone da Unidade</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="(99) 99999-9999" /></div>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cor Identificadora (Agenda)</label>

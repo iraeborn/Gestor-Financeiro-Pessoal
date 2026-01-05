@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
@@ -253,7 +253,7 @@ export const loadInitialData = async (): Promise<AppState> => {
         'branches', 'costCenters', 'departments', 'projects',
         'serviceClients', 'serviceItems', 'serviceAppointments',
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices',
-        'opticalRxs', 'salespeople', 'laboratories'
+        'opticalRxs', 'salespeople', 'salespersonSchedules', 'laboratories'
     ];
 
     const results: any = {};
@@ -303,6 +303,8 @@ export interface ApiClient {
     deletePJEntity: (type: string, id: string) => Promise<{ success: boolean }>;
     saveLaboratory: (lab: Laboratory) => Promise<{ success: boolean; id: string }>;
     deleteLaboratory: (id: string) => Promise<{ success: boolean }>;
+    saveSalespersonSchedule: (s: SalespersonSchedule) => Promise<{ success: boolean; id: string }>;
+    deleteSalespersonSchedule: (id: string) => Promise<{ success: boolean }>;
 }
 
 export const api: ApiClient = {
@@ -354,6 +356,8 @@ export const api: ApiClient = {
     deleteOrder: async (id: string) => api.deleteLocallyAndQueue('commercialOrders', id),
     saveLaboratory: async (lab: Laboratory) => api.saveLocallyAndQueue('laboratories', lab),
     deleteLaboratory: async (id: string) => api.deleteLocallyAndQueue('laboratories', id),
+    saveSalespersonSchedule: async (s: SalespersonSchedule) => api.saveLocallyAndQueue('salespersonSchedules', s),
+    deleteSalespersonSchedule: async (id: string) => api.deleteLocallyAndQueue('salespersonSchedules', id),
 
     savePJEntity: async (type: string, payload: any) => {
         const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };

@@ -52,6 +52,7 @@ export default function(logAudit) {
                 categories: ['SELECT * FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 branches: ['SELECT * FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
+                salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch JOIN salespeople s ON sch.salesperson_id = s.id JOIN users u ON s.user_id = u.id JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
                 serviceOrders: ['SELECT * FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 commercialOrders: ['SELECT * FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 opticalRxs: ['SELECT * FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
@@ -85,7 +86,8 @@ export default function(logAudit) {
                 'accounts': 'accounts', 'transactions': 'transactions', 'goals': 'goals',
                 'contacts': 'contacts', 'categories': 'categories', 'branches': 'branches',
                 'serviceOrders': 'service_orders', 'commercialOrders': 'commercial_orders',
-                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 'laboratories': 'laboratories'
+                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 'laboratories': 'laboratories',
+                'salespersonSchedules': 'salesperson_schedules'
             };
 
             const tableName = tableMap[store];
@@ -101,14 +103,8 @@ export default function(logAudit) {
                     // Ignora IDs e metadados internos
                     if (['id', 'userId', 'familyId'].includes(k) || k.startsWith('_')) return false;
                     
-                    // Se for a tabela salespeople, ignoramos explicitamente campos de visualização do usuário/filial
-                    if (tableName === 'salespeople' && ['name', 'email', 'branchName'].includes(k)) return false;
-                    
-                    // Se for optical_rxs, ignoramos contactName
-                    if (tableName === 'optical_rxs' && k === 'contactName') return false;
-                    
-                    // Se for transactions, ignoramos createdByName
-                    if (tableName === 'transactions' && k === 'createdByName') return false;
+                    // Ignora campos de visualização que vêm de JOINs
+                    if (['name', 'email', 'branchName', 'contactName', 'salespersonName'].includes(k)) return false;
 
                     return true;
                 });

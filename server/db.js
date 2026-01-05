@@ -42,6 +42,18 @@ export const initDb = async () => {
             created_at TIMESTAMP DEFAULT NOW(),
             deleted_at TIMESTAMP
         )`,
+        `CREATE TABLE IF NOT EXISTS salesperson_schedules (
+            id TEXT PRIMARY KEY,
+            salesperson_id TEXT REFERENCES salespeople(id),
+            branch_id TEXT REFERENCES branches(id),
+            date DATE NOT NULL,
+            shift TEXT DEFAULT 'FULL',
+            notes TEXT,
+            user_id TEXT REFERENCES users(id),
+            family_id TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            deleted_at TIMESTAMP
+        )`,
         `CREATE TABLE IF NOT EXISTS chat_messages (
             id TEXT PRIMARY KEY,
             sender_id TEXT REFERENCES users(id),

@@ -63,7 +63,7 @@ export type ViewMode =
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB' | 'OPTICAL_LABS_MGMT'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
-  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT' | 'SYS_SALESPEOPLE' | 'SYS_HELP';
+  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT' | 'SYS_SALESPEOPLE' | 'SYS_HELP' | 'SYS_SALES_SCHEDULE';
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
@@ -127,6 +127,18 @@ export interface Salesperson {
     branchId: string;
     branchName?: string;
     commissionRate: number;
+    familyId: string;
+}
+
+export interface SalespersonSchedule {
+    id: string;
+    salespersonId: string;
+    salespersonName?: string;
+    branchId: string;
+    branchName?: string;
+    date: string;
+    shift: 'FULL' | 'MORNING' | 'AFTERNOON';
+    notes?: string;
     familyId: string;
 }
 
@@ -275,6 +287,7 @@ export interface AppState {
   invoices: Invoice[];
   opticalRxs: OpticalRx[];
   salespeople: Salesperson[];
+  salespersonSchedules: SalespersonSchedule[];
   laboratories: Laboratory[];
   companyProfile?: CompanyProfile | null;
 }
