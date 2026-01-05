@@ -4,7 +4,6 @@ import { MessageSquare, X, Send, User, ChevronUp, ChevronDown, Circle } from 'lu
 import { User as UserType, ChatMessage } from '../types';
 import { Socket } from 'socket.io-client';
 
-// Som de notificação curto (Base64 MP3)
 const NOTIFICATION_SOUND = 'data:audio/mp3;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 
 interface ChatFloatingProps {
@@ -22,60 +21,61 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(new Audio(NOTIFICATION_SOUND));
 
+    // Ref para rastrear se o modal está aberto (usado no listener de mensagens)
+    const isOpenRef = useRef(isOpen);
+    useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
+
+    // Carrega histórico e inicializa Socket
     useEffect(() => {
-        if (socket) {
-            const token = localStorage.getItem('token');
-            fetch(`/api/chat/history?familyId=${currentUser.familyId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-                .then(r => {
-                    if (r.ok) return r.json();
-                    throw new Error('Unauthorized');
-                })
-                .then(data => setMessages(data))
-                .catch(console.error);
+        if (!socket) return;
 
-            const handleNewMessage = (msg: ChatMessage) => {
-                const isFromMe = msg.senderId === currentUser.id;
-                setMessages(prev => [...prev, msg]);
-                
-                if (!isOpen && !isFromMe) {
-                    setUnreadCount(c => c + 1);
-                    try {
-                        audioRef.current.currentTime = 0;
-                        audioRef.current.play().catch(() => {});
-                    } catch (e) {}
-                }
-            };
+        const token = localStorage.getItem('token');
+        fetch(`/api/chat/history?familyId=${currentUser.familyId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.id));
+            const filtered = data.filter((m: any) => !existingIds.has(m.id));
+            return [...prev, ...filtered].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        }));
 
-            const handleOnlineList = (userIds: string[]) => {
-                setOnlineCount(userIds.length);
-            };
-
-            const handleUserStatus = () => {
-                // Solicita atualização da contagem
-                socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId);
-            };
-
-            socket.on('NEW_MESSAGE', handleNewMessage);
-            socket.on('ONLINE_LIST', handleOnlineList);
-            socket.on('USER_STATUS', handleUserStatus);
+        const handleNewMessage = (msg: ChatMessage) => {
+            setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
             
-            // Solicita a lista ao conectar
-            socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId);
+            // Gerencia notificações se o modal estiver fechado
+            if (!isOpenRef.current && msg.senderId !== currentUser.id) {
+                setUnreadCount(c => c + 1);
+                try {
+                    audioRef.current.currentTime = 0;
+                    audioRef.current.play().catch(() => {});
+                } catch (e) {}
+            }
+        };
 
-            return () => { 
-                socket.off('NEW_MESSAGE', handleNewMessage);
-                socket.off('ONLINE_LIST', handleOnlineList);
-                socket.off('USER_STATUS', handleUserStatus);
-            };
-        }
-    }, [socket, currentUser.familyId, isOpen, currentUser.id]);
+        const handleOnlineList = (userIds: string[]) => {
+            setOnlineCount(userIds.length);
+        };
+
+        socket.on('NEW_MESSAGE', handleNewMessage);
+        socket.on('ONLINE_LIST', handleOnlineList);
+        socket.on('USER_STATUS', () => socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId));
+        
+        socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId);
+
+        return () => { 
+            socket.off('NEW_MESSAGE', handleNewMessage);
+            socket.off('ONLINE_LIST', handleOnlineList);
+        };
+    }, [socket, currentUser.familyId, currentUser.id]);
 
     useEffect(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        if (scrollRef.current && isOpen) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
     }, [messages, isOpen]);
 
     const handleSend = (e: React.FormEvent) => {
@@ -87,7 +87,8 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
             senderName: currentUser.name,
             familyId: currentUser.familyId,
             content: input.trim(),
-            type: 'TEXT'
+            type: 'TEXT',
+            receiverId: null
         };
 
         socket.emit('SEND_MESSAGE', newMsg);
@@ -103,27 +104,22 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
         <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3 pointer-events-none sm:mb-0 mb-16">
             {isOpen && (
                 <div className="w-[calc(100vw-48px)] sm:w-80 h-[450px] bg-white rounded-3xl shadow-2xl border border-gray-100 flex flex-col pointer-events-auto animate-slide-in-bottom overflow-hidden">
-                    {/* Header */}
                     <div className="p-4 bg-indigo-600 text-white flex justify-between items-center shadow-lg shrink-0">
                         <div className="flex items-center gap-2">
-                            <div className="relative">
-                                <MessageSquare className="w-4 h-4" />
-                                <div className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border border-indigo-600"></div>
-                            </div>
+                            <MessageSquare className="w-4 h-4" />
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black uppercase tracking-widest leading-none">Chat da Organização</span>
-                                <span className="text-[8px] font-bold text-indigo-200 uppercase mt-0.5">{onlineCount} membros ativos</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest leading-none">Chat Organização</span>
+                                <span className="text-[8px] font-bold text-indigo-200 uppercase mt-0.5">{onlineCount} online</span>
                             </div>
                         </div>
                         <button onClick={toggleChat} className="p-1 hover:bg-white/10 rounded-lg transition-colors"><ChevronDown className="w-4 h-4"/></button>
                     </div>
 
-                    {/* Messages Area */}
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 scrollbar-none">
-                        {messages.map(msg => (
+                        {messages.filter(m => !m.receiverId).map(msg => (
                             <div key={msg.id} className={`flex flex-col ${msg.senderId === currentUser.id ? 'items-end' : 'items-start'} animate-fade-in`}>
-                                {msg.senderId !== currentUser.id && <span className="text-[9px] font-black text-indigo-400 uppercase ml-1 mb-1 tracking-tighter">{msg.senderName} {msg.receiverId ? '(Privado)' : ''}</span>}
-                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm transition-all ${msg.senderId === currentUser.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}`}>
+                                {msg.senderId !== currentUser.id && <span className="text-[9px] font-black text-indigo-400 uppercase ml-1 mb-1 tracking-tighter">{msg.senderName}</span>}
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm ${msg.senderId === currentUser.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}`}>
                                     {msg.content}
                                 </div>
                                 <span className="text-[8px] text-gray-300 mt-1 px-1">{new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -131,21 +127,19 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                         ))}
                     </div>
 
-                    {/* Input Area */}
                     <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0">
                         <input 
                             type="text" 
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            placeholder="Mensagem para o grupo..."
+                            placeholder="Mensagem coletiva..."
                             className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
                         />
-                        <button type="submit" className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-90"><Send className="w-4 h-4"/></button>
+                        <button type="submit" className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all active:scale-90"><Send className="w-4 h-4"/></button>
                     </form>
                 </div>
             )}
 
-            {/* Floating Toggle Button */}
             <button 
                 onClick={toggleChat}
                 className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 active:scale-95 pointer-events-auto relative ${isOpen ? 'bg-rose-500 rotate-90 shadow-rose-200' : 'bg-indigo-600 shadow-indigo-200'}`}
@@ -155,9 +149,6 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                     <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
                         {unreadCount}
                     </span>
-                )}
-                {!isOpen && onlineCount > 1 && (
-                    <div className="absolute top-0 left-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></div>
                 )}
             </button>
         </div>
