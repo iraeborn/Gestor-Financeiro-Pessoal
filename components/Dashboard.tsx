@@ -5,7 +5,7 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle, ShieldAlert, Microscope, CheckCircle2, Clock } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
 
 interface DashboardProps {
@@ -71,6 +71,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     const opticalStats = {
         labPendentes: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
         rxNovas: state.opticalRxs?.filter(rx => rx.rxDate >= firstDay).length || 0,
+        labProntos: state.opticalRxs?.filter(rx => rx.labStatus === 'LAB_PRONTO').length || 0,
         osAtrasadas: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && o.endDate && o.endDate < now.toISOString().split('T')[0] && o.status !== 'FINALIZADA').length || 0
     };
 
@@ -103,6 +104,24 @@ const Dashboard: React.FC<DashboardProps> = ({
             </button>
         )}
       </div>
+
+      {/* Alertas Operacionais Óticos */}
+      {canSeeOptical && metrics.opticalStats.labProntos > 0 && (
+          <div className="bg-emerald-600 rounded-[2rem] p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-emerald-100 animate-pulse-subtle">
+              <div className="flex items-center gap-4">
+                  <div className="p-4 bg-white/20 rounded-3xl backdrop-blur-md">
+                      <Microscope className="w-10 h-10" />
+                  </div>
+                  <div>
+                      <h3 className="text-xl font-black">Lentes Prontas p/ Retirada!</h3>
+                      <p className="text-emerald-100 font-medium">{metrics.opticalStats.labProntos} pedido(s) atingiram o status "Pronto no Lab". Organize a coleta.</p>
+                  </div>
+              </div>
+              <button onClick={() => onChangeView('OPTICAL_RX')} className="bg-white text-emerald-700 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-50 transition-all flex items-center gap-2 whitespace-nowrap">
+                  Visualizar Lista <ArrowRight className="w-4 h-4"/>
+              </button>
+          </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {canSeeFinance && (

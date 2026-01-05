@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -38,7 +38,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence' | 'optical') => {
       const currentActive = settings.activeModules?.[moduleKey] || false;
       
-      // Lógica de Exclusividade Mútua solicitada: Ótica vs Odonto
       let nextActiveModules = { ...settings.activeModules, [moduleKey]: !currentActive };
       
       if (!currentActive) { // Se estiver ativando
@@ -60,6 +59,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           if (!currentActive) showAlert(`Módulo ${label} ativado!`, "success");
       } catch (e) {
           showAlert("Erro ao alterar módulo.", "error");
+      }
+  };
+
+  const handleUpdateDiscount = async (pct: number) => {
+      const newSettings = { ...settings, maxDiscountPct: pct };
+      try {
+          await updateSettings(newSettings);
+          onUpdateSettings(newSettings);
+          showAlert("Limite de desconto atualizado!", "success");
+      } catch (e) {
+          showAlert("Erro ao salvar limite.", "error");
       }
   };
 
@@ -94,7 +104,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="space-y-8 animate-fade-in max-w-4xl pb-10">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Configurações de Negócio</h1>
-        <p className="text-gray-500">Personalize os módulos e a identidade da sua ótica ou clínica.</p>
+        <p className="text-gray-500">Personalize os módulos, descontos e a identidade da sua organização.</p>
       </div>
 
       <div className="space-y-6">
@@ -134,12 +144,31 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <p className="text-xs text-gray-500 mt-1">Prontuário clínico e odontograma.</p>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
-                    <Info className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <p className="text-xs text-blue-800 leading-relaxed">
-                        <strong>Integração de Dados:</strong> Ao ativar o módulo de Ótica, as Ordens de Serviço (OS) e Receitas (RX) serão priorizadas no seu Dashboard e menu.
-                    </p>
+        {/* Regras Comerciais */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Percent className="w-5 h-5 text-emerald-600" />
+                    Regras Comerciais
+                </h2>
+            </div>
+            <div className="p-6">
+                <div className="max-w-xs">
+                    <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Desconto Máximo Permitido (%)</label>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="number" 
+                            min="0" max="100" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none" 
+                            value={settings.maxDiscountPct || 0} 
+                            onChange={e => handleUpdateDiscount(Number(e.target.value))}
+                        />
+                        <span className="font-black text-gray-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Vendedores não poderão salvar vendas com descontos acima deste valor.</p>
                 </div>
             </div>
         </div>

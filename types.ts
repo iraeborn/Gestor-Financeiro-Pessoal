@@ -67,6 +67,7 @@ export type ViewMode =
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
+  maxDiscountPct?: number; // Novo: Limite de negociação
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
@@ -343,6 +344,7 @@ export interface OpticalRx {
   professionalName?: string;
   rxDate: string;
   expirationDate?: string;
+  status: 'PENDING' | 'APPROVED' | 'CANCELLED'; // Novo campo
   sphereOdLonge?: number;
   cylOdLonge?: number;
   axisOdLonge?: number;

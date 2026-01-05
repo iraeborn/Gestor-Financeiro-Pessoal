@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store } from 'lucide-react';
+// Fix: Added missing Zap icon import
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -33,6 +33,8 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
+    const maxDiscountPct = settings?.maxDiscountPct || 100; // Default total se não configurado
+
     useEffect(() => {
         loadTeam();
         if (initialData) {
@@ -62,8 +64,10 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         const gross = items.reduce((sum, i) => sum + (Number(i.totalPrice) || 0), 0);
         const discount = Number(formData.discountAmount) || 0;
         const net = gross - discount;
-        return { gross, discount, net };
-    }, [formData.items, formData.discountAmount]);
+        const discountPct = gross > 0 ? (discount / gross) * 100 : 0;
+        const isOverDiscount = discountPct > maxDiscountPct;
+        return { gross, discount, net, discountPct, isOverDiscount };
+    }, [formData.items, formData.discountAmount, maxDiscountPct]);
 
     const handleAddItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
@@ -97,6 +101,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         e.preventDefault();
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
+        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! O limite máximo é de ${maxDiscountPct}%.`, "error");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -105,7 +110,8 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
             contactName: contactSearch,
             assigneeName: assignedMember?.name || formData.assigneeName,
             amount: pricing.net,
-            grossAmount: pricing.gross
+            grossAmount: pricing.gross,
+            moduleTag: formData.rxId ? 'optical' : undefined
         } as CommercialOrder);
     };
 
@@ -120,15 +126,15 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                     </button>
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-                            {initialData ? 'Editar Venda' : 'Novo Orçamento'}
+                            {initialData ? 'Editar Venda' : 'Nova Venda / Orçamento'}
                         </h1>
-                        <p className="text-gray-500 font-medium">Fluxo Comercial & Orçamentos Digitais</p>
+                        <p className="text-gray-500 font-medium">Configure itens, descontos e unidade de origem.</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
                     <button onClick={onCancel} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase text-[10px] tracking-widest">Descartar</button>
                     <button onClick={handleSave} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2">
-                        <Save className="w-4 h-4" /> Salvar Proposta
+                        <Save className="w-4 h-4" /> Salvar Venda
                     </button>
                 </div>
             </div>
@@ -139,18 +145,18 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         <div className="space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Descrição / Nome do Orçamento</label>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Título do Pedido</label>
                                     <input 
                                         type="text" 
                                         value={formData.description || ''} 
                                         onChange={e => setFormData({...formData, description: e.target.value})}
                                         className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        placeholder="Ex: Armação Oakley + Lentes Varilux..."
+                                        placeholder="Ex: Venda de Armação e Lentes..."
                                         required
                                     />
                                 </div>
                                 <div className="relative" ref={contactDropdownRef}>
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cliente / Destinatário</label>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cliente</label>
                                     <div className="relative">
                                         <User className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
                                         <input 
@@ -194,8 +200,8 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             className="bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase px-4 py-2 rounded-xl border border-indigo-100 outline-none"
                                             onChange={e => { if(e.target.value) handleAddItem(e.target.value); e.target.value = ''; }}
                                         >
-                                            <option value="">+ Adicionar do Catálogo</option>
-                                            {serviceItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                            <option value="">+ Selecionar Armação/Lente</option>
+                                            {serviceItems.map(i => <option key={i.id} value={i.id}>[{i.type === 'PRODUCT' ? 'P' : 'S'}] {i.name}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -215,12 +221,17 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             {(formData.items || []).map(item => (
                                                 <tr key={item.id} className="bg-white/50 hover:bg-white transition-colors">
                                                     <td className="p-4">
-                                                        <input 
-                                                            type="text" 
-                                                            value={item.description} 
-                                                            onChange={e => handleUpdateItem(item.id, 'description', e.target.value)}
-                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800"
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                                                                {serviceItems.find(si => si.id === item.serviceItemId)?.type === 'PRODUCT' ? <Package className="w-4 h-4 text-gray-400"/> : <Zap className="w-4 h-4 text-indigo-400"/>}
+                                                            </div>
+                                                            <input 
+                                                                type="text" 
+                                                                value={item.description} 
+                                                                onChange={e => handleUpdateItem(item.id, 'description', e.target.value)}
+                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800"
+                                                            />
+                                                        </div>
                                                     </td>
                                                     <td className="p-4">
                                                         <input 
@@ -247,6 +258,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                     </td>
                                                 </tr>
                                             ))}
+                                            {(formData.items || []).length === 0 && (
+                                                <tr><td colSpan={5} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione itens para começar.</td></tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -264,7 +278,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                 <select 
                                     value={formData.branchId || ''} 
                                     onChange={e => setFormData({...formData, branchId: e.target.value})}
-                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none"
+                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none shadow-lg shadow-slate-200"
                                     required
                                 >
                                     <option value="">Selecionar Filial...</option>
@@ -274,56 +288,77 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Total (R$)</label>
-                            <div className="relative">
-                                <Tag className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
-                                <input 
-                                    type="number" 
-                                    step="0.01"
-                                    value={formData.discountAmount || ''} 
-                                    onChange={e => setFormData({...formData, discountAmount: Number(e.target.value)})}
-                                    className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-black outline-none"
-                                    placeholder="0,00"
-                                />
-                            </div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Vendedor</label>
+                            <select 
+                                value={formData.assigneeId || ''} 
+                                onChange={e => setFormData({...formData, assigneeId: e.target.value})}
+                                className="w-full bg-gray-50 border-none rounded-xl p-4 text-sm font-bold outline-none"
+                            >
+                                <option value="">Quem está atendendo?</option>
+                                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
                         </div>
 
                         <div className="pt-6 border-t border-gray-100 space-y-4">
                             <div className="flex justify-between text-xs font-bold text-gray-400 uppercase">
-                                <span>Subtotal</span>
+                                <span>Subtotal Bruto</span>
                                 <span>{formatCurrency(pricing.gross)}</span>
                             </div>
-                            <div className="flex justify-between text-xs font-bold text-rose-500 uppercase">
-                                <span>Desconto</span>
-                                <span>- {formatCurrency(pricing.discount)}</span>
+                            
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Concedido</label>
+                                <div className="relative">
+                                    <DollarSign className={`w-4 h-4 absolute left-4 top-4 ${pricing.isOverDiscount ? 'text-rose-500' : 'text-emerald-500'}`} />
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        value={formData.discountAmount || ''} 
+                                        onChange={e => setFormData({...formData, discountAmount: Number(e.target.value)})}
+                                        className={`w-full pl-11 py-4 rounded-xl text-sm font-black outline-none border-2 transition-all ${pricing.isOverDiscount ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-gray-50 border-transparent focus:bg-white'}`}
+                                        placeholder="0,00"
+                                    />
+                                    <span className={`absolute right-4 top-4 text-[10px] font-black uppercase ${pricing.isOverDiscount ? 'text-rose-600' : 'text-gray-400'}`}>
+                                        {Math.round(pricing.discountPct)}% OFF
+                                    </span>
+                                </div>
+                                {pricing.isOverDiscount && (
+                                    <p className="text-[9px] font-black text-rose-500 uppercase mt-2 flex items-center gap-1">
+                                        <AlertTriangle className="w-3 h-3" /> Limite de {maxDiscountPct}% excedido
+                                    </p>
+                                )}
                             </div>
+
                             <div className="pt-4 flex justify-between items-center">
                                 <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Total Líquido</span>
                                 <span className="text-3xl font-black text-gray-900">{formatCurrency(pricing.net)}</span>
                             </div>
                         </div>
 
-                        {settings?.activeModules?.optical && (
-                            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 space-y-4">
-                                <div className="flex items-center gap-2 text-indigo-700 font-black text-[10px] uppercase tracking-widest">
-                                    <Glasses className="w-4 h-4" /> Venda com Receita
+                        {formData.rxId && (
+                            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-2">
+                                <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest">
+                                    <Glasses className="w-4 h-4" /> Venda Vinculada a Receita
                                 </div>
-                                <select 
-                                    value={formData.rxId || ''} 
-                                    onChange={e => setFormData({...formData, rxId: e.target.value})}
-                                    className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-xs font-bold outline-none"
-                                >
-                                    <option value="">Selecionar RX...</option>
-                                    {opticalRxs.filter(rx => !formData.contactId || rx.contactId === formData.contactId).map(rx => (
-                                        <option key={rx.id} value={rx.id}>{new Date(rx.rxDate).toLocaleDateString()} - {rx.contactName}</option>
-                                    ))}
-                                </select>
+                                <p className="text-xs text-emerald-600 font-medium">Uma Ordem de Serviço de montagem será gerada automaticamente.</p>
                             </div>
                         )}
 
-                        <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs">
-                            <CheckCircle className="w-5 h-5" /> Salvar Proposta
+                        <button 
+                            onClick={handleSave} 
+                            disabled={pricing.isOverDiscount}
+                            className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50 disabled:grayscale"
+                        >
+                            <CheckCircle className="w-5 h-5" /> Finalizar Pedido
                         </button>
+                    </div>
+
+                    <div className="bg-slate-900 p-6 rounded-3xl text-white">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                            <Info className="w-4 h-4" /> Política de Descontos
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                            O desconto máximo permitido para este negócio é de <strong>{maxDiscountPct}%</strong>. Vendas acima deste valor requerem aprovação do administrador em "Ajustes".
+                        </p>
                     </div>
                 </div>
             </div>

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { OpticalRx, Contact, Laboratory, OpticalDeliveryStatus } from '../types';
-import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle } from 'lucide-react';
+import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import { useHelp } from './GuidedHelp';
 
@@ -13,10 +13,11 @@ interface OpticalModuleProps {
     onEditRx: (rx: OpticalRx) => void;
     onDeleteRx: (id: string) => void;
     onUpdateRx: (rx: OpticalRx) => void;
+    onStartSaleFromRx: (rx: OpticalRx) => void; // Novo callback
 }
 
 const OpticalModule: React.FC<OpticalModuleProps> = ({ 
-    opticalRxs, contacts, laboratories, onAddRx, onEditRx, onDeleteRx, onUpdateRx
+    opticalRxs, contacts, laboratories, onAddRx, onEditRx, onDeleteRx, onUpdateRx, onStartSaleFromRx
 }) => {
     const { showAlert } = useAlert();
     const { showConfirm } = useConfirm();
@@ -27,7 +28,15 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
         (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const getStatusColor = (status?: OpticalDeliveryStatus) => {
+    const getStatusColor = (status?: string) => {
+        switch (status) {
+            case 'APPROVED': return 'bg-emerald-100 text-emerald-700';
+            case 'CANCELLED': return 'bg-rose-100 text-rose-700';
+            default: return 'bg-amber-100 text-amber-700';
+        }
+    };
+
+    const getLabStatusColor = (status?: OpticalDeliveryStatus) => {
         switch (status) {
             case 'LAB_PENDENTE': return 'bg-amber-100 text-amber-700';
             case 'LAB_ENVIADO': return 'bg-blue-100 text-blue-700';
@@ -39,15 +48,16 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
         }
     };
 
-    const getStatusLabel = (status?: OpticalDeliveryStatus) => {
-        switch (status) {
-            case 'LAB_PENDENTE': return 'Pendente Lab';
-            case 'LAB_ENVIADO': return 'Enviado Lab';
-            case 'LAB_PRODUCAO': return 'Em Produção';
-            case 'LAB_PRONTO': return 'Pronto no Lab';
-            case 'LAB_RECEBIDO': return 'Na Loja (Recebido)';
-            case 'ENTREGUE_CLIENTE': return 'Entregue Cliente';
-            default: return 'Rascunho';
+    const handleApproveRx = async (rx: OpticalRx) => {
+        const confirm = await showConfirm({
+            title: "Aprovar Receita",
+            message: `Deseja aprovar a receita de ${rx.contactName} e iniciar a escolha da armação para venda?`,
+            confirmText: "Sim, Aprovar e Vender"
+        });
+
+        if (confirm) {
+            onUpdateRx({ ...rx, status: 'APPROVED' });
+            onStartSaleFromRx(rx);
         }
     };
 
@@ -125,24 +135,6 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
         onUpdateRx({ ...rx, labStatus: 'LAB_ENVIADO', labSentDate: new Date().toISOString() });
     };
 
-    const handleSendEmail = (rx: OpticalRx, lab: Laboratory) => {
-        if (!lab.email) { showAlert("Laboratório sem e-mail cadastrado.", "warning"); return; }
-        const subject = `PEDIDO DE LENTES - ${rx.contactName}`;
-        const body = `Favor confeccionar as seguintes lentes:\n\nPACIENTE: ${rx.contactName}\n\n` +
-            `OD: Esf ${rx.sphereOdLonge || 0} / Cil ${rx.cylOdLonge || 0} / Eixo ${rx.axisOdLonge || 0}\n` +
-            `OE: Esf ${rx.sphereOeLonge || 0} / Cil ${rx.cylOeLonge || 0} / Eixo ${rx.axisOeLonge || 0}\n` +
-            `ADIÇÃO: ${rx.addition || ''}\n\n` +
-            `OBS: ${rx.observations || ''}`;
-        
-        window.open(`mailto:${lab.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
-        onUpdateRx({ ...rx, labStatus: 'LAB_ENVIADO', labSentDate: new Date().toISOString() });
-    };
-
-    const handleAssignLab = async (rx: OpticalRx, labId: string) => {
-        onUpdateRx({ ...rx, laboratoryId: labId, labStatus: 'LAB_PENDENTE' });
-        showAlert("Laboratório vinculado.", "success");
-    };
-
     return (
         <div className="space-y-6 animate-fade-in pb-20">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -153,7 +145,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         </div>
                         Receitas Óticas (RX)
                     </h1>
-                    <p className="text-gray-500 mt-1">Gestão de prescrições e envio para laboratório.</p>
+                    <p className="text-gray-500 mt-1">Gestão de prescrições e conversão em vendas.</p>
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
@@ -175,7 +167,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                 ) : filteredRxs.map(rx => {
                     const linkedLab = laboratories.find(l => l.id === rx.laboratoryId);
                     return (
-                    <div key={rx.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-all group flex flex-col md:flex-row gap-6">
+                    <div key={rx.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-all group flex flex-col lg:flex-row gap-6">
                         {/* Info Básica */}
                         <div className="flex-1">
                             <div className="flex justify-between items-start mb-2">
@@ -188,13 +180,26 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                                         <div className="flex items-center gap-2 text-gray-400 text-xs font-medium">
                                             <Calendar className="w-3 h-3"/> {new Date(rx.rxDate).toLocaleDateString()}
                                             <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                            <span>Validade: {rx.expirationDate ? new Date(rx.expirationDate).toLocaleDateString() : '---'}</span>
+                                            <span className={`px-2 rounded uppercase text-[9px] font-black ${getStatusColor(rx.status)}`}>{rx.status || 'PENDENTE'}</span>
                                         </div>
                                     </div>
                                 </div>
-                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${getStatusColor(rx.labStatus)}`}>
-                                    {getStatusLabel(rx.labStatus)}
-                                </span>
+                                {rx.status !== 'APPROVED' && (
+                                    <button 
+                                        onClick={() => handleApproveRx(rx)}
+                                        className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2 border border-emerald-100"
+                                    >
+                                        <CheckCircle className="w-4 h-4" /> Aprovar Receita
+                                    </button>
+                                )}
+                                {rx.status === 'APPROVED' && (
+                                    <button 
+                                        onClick={() => onStartSaleFromRx(rx)}
+                                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100"
+                                    >
+                                        <ShoppingCart className="w-4 h-4" /> Escolher Armação
+                                    </button>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
@@ -210,35 +215,30 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         </div>
 
                         {/* Gestão de Laboratório */}
-                        <div className="flex-1 border-t md:border-t-0 md:border-l border-gray-100 md:pl-6 pt-4 md:pt-0 flex flex-col justify-between">
+                        <div className="flex-1 border-t lg:border-t-0 lg:border-l border-gray-100 lg:pl-6 pt-4 lg:pt-0 flex flex-col justify-between">
                             <div>
                                 <div className="flex justify-between items-center mb-3">
                                     <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1">
                                         <Microscope className="w-3 h-3"/> Laboratório
                                     </span>
-                                    {linkedLab && (
-                                        <button 
-                                            onClick={() => onUpdateRx({...rx, laboratoryId: undefined, labStatus: undefined})}
-                                            className="text-[9px] text-rose-400 hover:underline"
-                                        >
-                                            Desvincular
-                                        </button>
-                                    )}
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${getLabStatusColor(rx.labStatus)}`}>
+                                        {rx.labStatus || 'NÃO ENVIADO'}
+                                    </span>
                                 </div>
                                 
                                 <select 
                                     className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs font-bold outline-none mb-3"
                                     value={rx.laboratoryId || ''}
-                                    onChange={(e) => handleAssignLab(rx, e.target.value)}
+                                    onChange={(e) => onUpdateRx({ ...rx, laboratoryId: e.target.value, labStatus: rx.labStatus || 'LAB_PENDENTE' })}
                                 >
-                                    <option value="">Selecione o Laboratório...</option>
+                                    <option value="">Vincular Laboratório...</option>
                                     {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.name}</option>)}
                                 </select>
 
                                 {linkedLab && (
                                     <div className="flex gap-2">
                                         <button onClick={() => handleSendWhatsApp(rx, linkedLab)} title="Enviar WhatsApp" className="flex-1 bg-emerald-50 text-emerald-600 py-2 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1"><Send className="w-3 h-3"/> Zap</button>
-                                        <button onClick={() => handleSendEmail(rx, linkedLab)} title="Enviar E-mail" className="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"><Mail className="w-3 h-3"/> Email</button>
+                                        <button onClick={() => handlePrintRx(rx)} className="flex-1 bg-gray-50 text-gray-600 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors flex items-center justify-center gap-1"><Printer className="w-3 h-3"/> Print</button>
                                         
                                         <select 
                                             className="flex-[2] bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-bold outline-none border-none text-center cursor-pointer"
@@ -248,16 +248,15 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                                             <option value="LAB_PENDENTE">Pendente</option>
                                             <option value="LAB_ENVIADO">Enviado</option>
                                             <option value="LAB_PRODUCAO">Em Produção</option>
-                                            <option value="LAB_PRONTO">Pronto</option>
-                                            <option value="LAB_RECEBIDO">Recebido (Loja)</option>
-                                            <option value="ENTREGUE_CLIENTE">Entregue (Cliente)</option>
+                                            <option value="LAB_PRONTO">Pronto (Coletar)</option>
+                                            <option value="LAB_RECEBIDO">Na Loja</option>
+                                            <option value="ENTREGUE_CLIENTE">Entregue</option>
                                         </select>
                                     </div>
                                 )}
                             </div>
 
                             <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-50">
-                                <button onClick={() => handlePrintRx(rx)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg text-xs font-bold flex items-center gap-1"><Printer className="w-4 h-4"/> Imprimir</button>
                                 <button onClick={() => onEditRx(rx)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
                                 <button onClick={() => onDeleteRx(rx.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                             </div>

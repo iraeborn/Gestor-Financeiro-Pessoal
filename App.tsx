@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
-  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder
+  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder, OSItem
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers, joinFamily } from './services/storageService';
 import { localDb } from './services/localDb';
@@ -79,7 +79,6 @@ const AppContent: React.FC<{
             const joinCode = params.get('joinCode');
             
             if (joinCode) {
-                // Limpa a URL para não processar de novo em reloads
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
 
@@ -103,6 +102,67 @@ const AppContent: React.FC<{
 
         checkJoinLink();
     }, [currentUser]);
+
+    // Função para converter RX em Venda (Fluxo Ótico Automático)
+    const handleStartSaleFromRx = (rx: OpticalRx) => {
+        const lensItem: OSItem = {
+            id: crypto.randomUUID(),
+            description: `Par de Lentes (Ref RX ${new Date(rx.rxDate).toLocaleDateString()})`,
+            quantity: 1,
+            unitPrice: 0,
+            totalPrice: 0,
+            isBillable: true
+        };
+
+        setEditingSale({
+            id: crypto.randomUUID(),
+            type: 'SALE',
+            description: `Venda p/ ${rx.contactName} (Origem RX)`,
+            contactId: rx.contactId,
+            contactName: rx.contactName,
+            rxId: rx.id,
+            branchId: rx.branchId,
+            items: [lensItem],
+            amount: 0,
+            date: new Date().toISOString().split('T')[0],
+            status: 'DRAFT',
+            moduleTag: 'optical'
+        });
+        setCurrentView('SRV_SALE_EDITOR');
+    };
+
+    // Automação de OS ao salvar Venda
+    const handleSaveOrderWithOS = async (order: CommercialOrder) => {
+        await api.saveOrder(order);
+        
+        // Se a venda veio de uma RX, cria a OS de Montagem automaticamente
+        if (order.rxId) {
+            const os: ServiceOrder = {
+                id: crypto.randomUUID(),
+                title: `Montagem: ${order.contactName}`,
+                description: `OS gerada automaticamente da Venda #${order.id.substring(0,6)}\n${order.description}`,
+                contactId: order.contactId,
+                contactName: order.contactName,
+                rxId: order.rxId,
+                branchId: order.branchId,
+                status: 'ABERTA',
+                type: 'MONTAGEM_OTICA',
+                origin: 'VENDA_OTICA',
+                priority: 'MEDIA',
+                openedAt: new Date().toISOString(),
+                totalAmount: 0, // OS interna de montagem geralmente não cobra valor extra
+                moduleTag: 'optical',
+                items: order.items.map(i => ({ ...i, id: crypto.randomUUID(), isBillable: false }))
+            };
+            await api.saveOS(os);
+            showAlert("Venda e Ordem de Serviço (Laboratório) criadas!", "success");
+        } else {
+            showAlert("Venda salva com sucesso!", "success");
+        }
+        
+        refreshData();
+        setCurrentView(order.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES');
+    };
 
     const renderContent = () => {
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
@@ -135,7 +195,7 @@ const AppContent: React.FC<{
             case 'SRV_BRANCH_SCHEDULE': return editingBranch ? <BranchScheduleView branch={editingBranch} appointments={state.serviceAppointments} clients={state.serviceClients} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...commonProps} />;
             case 'SYS_SALES_SCHEDULE': return editingBranch ? <SalespersonScheduleView branch={editingBranch} schedules={state.salespersonSchedules} salespeople={state.salespeople} onSaveSchedule={(s) => api.saveSalespersonSchedule(s).then(refreshData)} onDeleteSchedule={(id) => api.deleteSalespersonSchedule(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...commonProps} />;
             
-            case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} laboratories={state.laboratories} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} />;
+            case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} laboratories={state.laboratories} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} onStartSaleFromRx={handleStartSaleFromRx} />;
             case 'OPTICAL_RX_EDITOR': return <OpticalRxEditor contacts={state.contacts} laboratories={state.laboratories} branches={state.branches} initialData={editingRx} onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })} onCancel={() => setCurrentView('OPTICAL_RX')} />;
             case 'OPTICAL_LABS_MGMT': return <LabsView laboratories={state.laboratories} onSaveLaboratory={(l) => api.saveLaboratory(l).then(refreshData)} onDeleteLaboratory={(id) => api.deleteLaboratory(id).then(refreshData)} />;
             
@@ -143,7 +203,6 @@ const AppContent: React.FC<{
             case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: state.costCenters, departments: state.departments, projects: state.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
             case 'SYS_HELP': return <HelpCenter />;
 
-            // --- SERVIÇOS, OS e VENDAS ---
             case 'OPTICAL_LAB':
             case 'SRV_OS':
                 return <ServicesView 
@@ -195,7 +254,7 @@ const AppContent: React.FC<{
                     onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
                     onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
                     onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
-                    onSaveOrder={(o) => api.saveOrder(o).then(refreshData)}
+                    onSaveOrder={handleSaveOrderWithOS}
                     onDeleteOrder={(id) => api.deleteOrder(id).then(refreshData)}
                     onSaveContract={() => {}} onDeleteContract={() => {}} 
                     onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
@@ -210,31 +269,8 @@ const AppContent: React.FC<{
                     opticalRxs={state.opticalRxs}
                     branches={state.branches}
                     settings={currentUser.settings}
-                    onSave={(o) => api.saveOrder(o).then(() => { refreshData(); setCurrentView(o.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES'); })}
+                    onSave={handleSaveOrderWithOS}
                     onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
-                />;
-
-            case 'SRV_CATALOG':
-            case 'SRV_CONTRACTS':
-            case 'SRV_NF':
-                return <ServicesView 
-                    currentView={currentView}
-                    serviceOrders={state.serviceOrders}
-                    commercialOrders={state.commercialOrders}
-                    contracts={state.contracts}
-                    invoices={state.invoices}
-                    contacts={state.contacts}
-                    accounts={state.accounts}
-                    serviceItems={state.serviceItems}
-                    opticalRxs={state.opticalRxs}
-                    settings={currentUser.settings}
-                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
-                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}}
-                    onSaveContract={(c) => {}} onDeleteContract={(id) => {}} // TODO: Implement API calls
-                    onSaveInvoice={(i) => {}} onDeleteInvoice={(id) => {}}
-                    onAddTransaction={commonProps.onAddTransaction}
-                    onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)}
-                    onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
                 />;
 
             default: return <Dashboard {...commonProps} />;
@@ -250,7 +286,6 @@ const AppContent: React.FC<{
                     <div className="flex items-center gap-1.5"><div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg text-xs">F</div><span className="font-black text-sm text-gray-800 tracking-tighter">FinManager</span></div>
                     <div className="flex items-center gap-1">
                         <button onClick={() => setIsTrackerVisible(!isTrackerVisible)} className={`p-2 rounded-lg transition-all ${isTrackerVisible ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-indigo-600'}`}><HelpCircle className="w-5 h-5"/></button>
-                        <button className="p-2 text-gray-400"><Bell className="w-5 h-5"/></button>
                     </div>
                 </div>
                 
@@ -301,10 +336,8 @@ const App: React.FC = () => {
             const memberList = await getFamilyMembers();
             setMembers(memberList);
             
-            // Inicializa Socket após autenticação
             if (!socket) {
                 const s = io({ transports: ['websocket', 'polling'] });
-                // Passa o userId e familyId para o servidor
                 s.on('connect', () => s.emit('join_family', { familyId: user.familyId, userId: user.id }));
                 setSocket(s);
             }
