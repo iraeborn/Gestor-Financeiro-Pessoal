@@ -121,7 +121,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT',
-            receiverId: selectedUser?.id || null 
+            receiverId: selectedUser?.id || undefined 
         };
         
         socket.emit('SEND_MESSAGE', newMsg);

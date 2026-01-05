@@ -88,7 +88,7 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT',
-            receiverId: null
+            receiverId: undefined
         };
 
         socket.emit('SEND_MESSAGE', newMsg);
