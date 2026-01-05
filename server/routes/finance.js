@@ -81,7 +81,6 @@ export default function(logAudit) {
                     }
                 }
             } else if (action === 'SAVE') {
-                // FORÇAR USER_ID E FAMILY_ID DO TOKEN - Isso impede que dados de usuários antigos que ficaram no cache do navegador "vazem"
                 payload.userId = userId;
                 payload.familyId = familyId;
 
@@ -129,8 +128,8 @@ export default function(logAudit) {
 
             await client.query('COMMIT');
             
-            // Audit log para rastreamento de segurança
-            await logAudit(null, userId, action, store, payload.id, `Sync ${action} em ${store}`, null, null, familyId);
+            // CORREÇÃO: Passamos o pool principal ou o client para garantir que o logAudit dispare o socket
+            await logAudit(pool, userId, action, store, payload.id, `Sync ${action} em ${store}`, null, null, familyId);
 
             res.json({ success: true });
         } catch (err) {
@@ -145,7 +144,6 @@ export default function(logAudit) {
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
             const familyId = await getFamilyId(req.user.id);
-            // GARANTIA TOTAL: O filtro 'family_id = $1' é aplicado em todas as tabelas sem exceção.
             const queryDefs = {
                 accounts: ['SELECT *, family_id FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
@@ -173,7 +171,6 @@ export default function(logAudit) {
                 results[key] = key === 'companyProfile' ? mapToFrontend(resDb.rows[0]) : resDb.rows.map(r => mapToFrontend(r));
             }
             
-            // Forçar não-cache para evitar vazamento em computadores compartilhados
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
             res.json(results);
         } catch (err) {

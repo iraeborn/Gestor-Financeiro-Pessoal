@@ -60,70 +60,58 @@ const App: React.FC = () => {
   // Socket Reference
   const socketRef = useRef<Socket | null>(null);
 
-  // Selection States for Editors
-  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
-  const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null);
-  const [selectedSale, setSelectedSale] = useState<CommercialOrder | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [selectedRx, setSelectedRx] = useState<OpticalRx | null>(null);
-
   // Auth Navigation States
   const [showAuth, setShowAuth] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [initialEntityType, setInitialEntityType] = useState<EntityType>(EntityType.PERSONAL);
-  const [initialPlan, setInitialPlan] = useState<SubscriptionPlan>(SubscriptionPlan.MONTHLY);
 
   const publicToken = new URLSearchParams(window.location.search).get('orderToken');
 
   const refreshData = async () => {
+      console.log("🔄 [APP] Solicitando atualização global de dados...");
       const data = await loadInitialData();
       setState(data);
   };
 
-  // --- Real-time Sync Logic ---
+  // --- Real-time Logic ---
   useEffect(() => {
     if (currentUser) {
-        const familyId = currentUser.familyId || (currentUser as any).family_id;
+        const familyId = String(currentUser.familyId || (currentUser as any).family_id).trim();
         
-        // Inicializar conexão Socket APENAS quando logado
         if (!socketRef.current) {
+            console.log("📡 [SOCKET] Iniciando nova conexão...");
             const socket = io({
                 transports: ['websocket', 'polling'],
-                reconnection: true
+                reconnection: true,
+                reconnectionAttempts: 10
             }) as any;
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log("📡 [REALTIME] Conectado ao servidor.");
+                console.log("📡 [SOCKET] Conectado. Entrando na sala:", familyId);
                 socket.emit('join_family', familyId);
             });
 
             socket.on('DATA_UPDATED', (payload: any) => {
                 // Se alguém da família alterou algo, recarregamos silenciosamente
                 if (payload.actorId !== currentUser.id) {
-                    console.log(`📡 [REALTIME] Mudança externa detectada em ${payload.entity}. Atualizando...`);
+                    console.log(`📡 [SOCKET] Mudança detectada: ${payload.entity}. Sincronizando...`);
                     refreshData();
-                    // Opcional: mostrar um pequeno toast ou ponto de atualização
                 }
             });
 
-            socket.on('disconnect', () => {
-                console.warn("📡 [REALTIME] Desconectado.");
-            });
+            socket.on('disconnect', () => console.warn("📡 [SOCKET] Desconectado."));
+            socket.on('reconnect', () => socket.emit('join_family', familyId));
         } else {
-            // Se já existe mas trocou de usuário/contexto
+            console.log("📡 [SOCKET] Atualizando sala de escuta:", familyId);
             socketRef.current.emit('join_family', familyId);
-        }
-    } else {
-        // Cleanup se deslogar
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-            socketRef.current = null;
         }
     }
 
     return () => {
-        // No cleanup global aqui para manter vivo durante navegação, mas desconecta no unmount final
+        if (!currentUser && socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
     };
   }, [currentUser?.id, currentUser?.familyId]);
 
@@ -288,10 +276,10 @@ const App: React.FC = () => {
                 accounts={safeState.accounts}
                 serviceItems={safeState.serviceItems}
                 opticalRxs={safeState.opticalRxs}
-                onAddOS={() => { setSelectedOS(null); setCurrentView('SRV_OS_EDITOR'); }}
-                onEditOS={(os) => { setSelectedOS(os); setCurrentView('SRV_OS_EDITOR'); }}
-                onAddSale={() => { setSelectedSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
-                onEditSale={(sale) => { setSelectedSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
+                onAddOS={() => setCurrentView('SRV_OS_EDITOR')}
+                onEditOS={(os) => setCurrentView('SRV_OS_EDITOR')}
+                onAddSale={() => setCurrentView('SRV_SALE_EDITOR')}
+                onEditSale={(sale) => setCurrentView('SRV_SALE_EDITOR')}
                 onSaveOS={(os) => api.saveOS(os).then(refreshData)}
                 onDeleteOS={(id) => api.deleteOS(id).then(refreshData)}
                 onSaveOrder={(o) => api.saveOrder(o).then(refreshData)}
@@ -305,76 +293,18 @@ const App: React.FC = () => {
               />
           );
 
-      case 'SRV_OS_EDITOR': 
-        return <ServiceOrderEditor 
-                    initialData={selectedOS} 
-                    contacts={safeState.contacts} 
-                    serviceItems={safeState.serviceItems} 
-                    opticalRxs={safeState.opticalRxs} 
-                    branches={safeState.branches}
-                    settings={currentUser.settings}
-                    onSave={(os) => api.saveOS(os).then(() => { refreshData(); setCurrentView('SRV_OS'); })}
-                    onCancel={() => setCurrentView('SRV_OS')} 
-                />;
-      
-      case 'SRV_SALE_EDITOR':
-        return <SaleEditor 
-                    initialData={selectedSale} 
-                    contacts={safeState.contacts} 
-                    serviceItems={safeState.serviceItems} 
-                    opticalRxs={safeState.opticalRxs} 
-                    branches={safeState.branches}
-                    settings={currentUser.settings}
-                    onSave={(sale) => api.saveOrder(sale).then(() => { refreshData(); setCurrentView('SRV_SALES'); })}
-                    onCancel={() => setCurrentView('SRV_SALES')} 
-                />;
-
       case 'SYS_BRANCHES':
           return (
               <BranchesView 
                   branches={safeState.branches} 
                   onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} 
                   onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)}
-                  onManageSchedule={(b) => { setSelectedBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }}
-              />
-          );
-      
-      case 'SRV_BRANCH_SCHEDULE':
-          if (!selectedBranch) { setCurrentView('SYS_BRANCHES'); return null; }
-          return (
-              <BranchScheduleView 
-                  branch={selectedBranch}
-                  appointments={safeState.serviceAppointments}
-                  clients={safeState.serviceClients}
-                  onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)}
-                  onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)}
-                  onBack={() => setCurrentView('SYS_BRANCHES')}
+                  onManageSchedule={(b) => setCurrentView('SRV_BRANCH_SCHEDULE')}
               />
           );
 
-      case 'OPTICAL_RX': 
-        return <OpticalModule 
-                    opticalRxs={safeState.opticalRxs} 
-                    contacts={safeState.contacts} 
-                    onAddRx={() => { setSelectedRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }}
-                    onEditRx={(rx) => { setSelectedRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }}
-                    onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} 
-                />;
-      case 'OPTICAL_RX_EDITOR':
-        return <OpticalRxEditor 
-                    initialData={selectedRx} 
-                    contacts={safeState.contacts} 
-                    branches={safeState.branches}
-                    onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })}
-                    onCancel={() => setCurrentView('OPTICAL_RX')} 
-                />;
-
-      case 'ODONTO_AGENDA': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CALENDAR" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
-      case 'ODONTO_PATIENTS': return <ServiceModule moduleTitle="Odontologia" clientLabel="Paciente" serviceLabel="Procedimento" transactionCategory="Odonto" activeSection="CLIENTS" clients={safeState.serviceClients} services={safeState.serviceItems} appointments={safeState.serviceAppointments} contacts={safeState.contacts} accounts={safeState.accounts} onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)} onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)} onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)} onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
-      
       case 'FIN_CATEGORIES': return <CategoriesView categories={safeState.categories} onSaveCategory={(c) => api.saveCategory(c).then(refreshData)} onDeleteCategory={(id) => api.deleteCategory(id).then(refreshData)} />;
-      case 'FIN_CONTACTS': return <ContactsView contacts={safeState.contacts} onAddContact={() => { setSelectedContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} onEditContact={(c) => { setSelectedContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
-      case 'FIN_CONTACT_EDITOR': return <ContactEditor initialData={selectedContact} settings={currentUser.settings} onSave={(c) => api.saveContact(c).then(() => { refreshData(); setCurrentView('FIN_CONTACTS'); })} onCancel={() => setCurrentView('FIN_CONTACTS')} />;
+      case 'FIN_CONTACTS': return <ContactsView contacts={safeState.contacts} onAddContact={() => setCurrentView('FIN_CONTACT_EDITOR')} onEditContact={(c) => setCurrentView('FIN_CONTACT_EDITOR')} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
       case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: safeState.companyProfile, branches: safeState.branches, costCenters: safeState.costCenters, departments: safeState.departments, projects: safeState.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
       case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
       case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
@@ -391,33 +321,15 @@ const App: React.FC = () => {
       if (showAuth) {
           return (
               <div className="relative min-h-screen bg-gray-50">
-                  <button 
-                    onClick={() => setShowAuth(false)}
-                    className="fixed top-6 left-6 z-50 bg-white p-2 rounded-full shadow-lg border border-gray-100 text-gray-400 hover:text-indigo-600 transition-all"
-                  >
-                      <ArrowLeft className="w-6 h-6" />
-                  </button>
-                  <Auth 
-                    onLoginSuccess={handleLoginSuccess} 
-                    initialMode={authInitialMode}
-                    initialEntityType={initialEntityType}
-                    initialPlan={initialPlan}
-                  />
+                  <button onClick={() => setShowAuth(false)} className="fixed top-6 left-6 z-50 bg-white p-2 rounded-full shadow-lg border border-gray-100 text-gray-400 hover:text-indigo-600 transition-all"><ArrowLeft className="w-6 h-6" /></button>
+                  <Auth onLoginSuccess={handleLoginSuccess} initialMode={authInitialMode} />
               </div>
           );
       }
       return (
         <LandingPage 
-            onGetStarted={(type, plan) => {
-                setInitialEntityType(type);
-                setInitialPlan(plan);
-                setAuthInitialMode('REGISTER');
-                setShowAuth(true);
-            }} 
-            onLogin={() => {
-                setAuthInitialMode('LOGIN');
-                setShowAuth(true);
-            }} 
+            onGetStarted={() => { setAuthInitialMode('REGISTER'); setShowAuth(true); }} 
+            onLogin={() => { setAuthInitialMode('LOGIN'); setShowAuth(true); }} 
         />
       );
   }
@@ -440,12 +352,7 @@ const App: React.FC = () => {
                     <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg">F</div>
                     <span className="font-black text-sm text-gray-800 tracking-tighter">FinManager</span>
                 </div>
-                <button 
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg"
-                >
-                    <MenuIcon className="w-6 h-6" />
-                </button>
+                <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg"><MenuIcon className="w-6 h-6" /></button>
             </div>
 
             <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
@@ -455,13 +362,11 @@ const App: React.FC = () => {
             }`}>
                 {syncStatus === 'offline' && <><WifiOff className="w-3 h-3" /> Modo Offline Ativo</>}
                 {syncStatus === 'syncing' && <><RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando Dados...</>}
-                {syncStatus === 'online' && <><Wifi className="w-3 h-3" /> Sistema Protegido</>}
+                {syncStatus === 'online' && <><Wifi className="w-3 h-3" /> Sistema Seguro & Sincronizado</>}
             </div>
 
             <div className="flex-1 overflow-y-auto relative scroll-smooth">
-                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
-                    {renderContent()}
-                </div>
+                <div className="p-4 md:p-8 max-w-[1600px] mx-auto">{renderContent()}</div>
             </div>
         </main>
       </HelpProvider>
