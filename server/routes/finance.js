@@ -97,10 +97,21 @@ export default function(logAudit) {
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else if (action === 'SAVE') {
                 const fields = Object.keys(payload).filter(k => {
-                    // Ignora IDs e campos de sistema
+                    // 1. Ignora IDs e campos de sistema
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    // Ignora campos virtuais de UI (nomes amigáveis vindos de joins)
-                    if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName'].includes(k)) return false;
+                    
+                    // 2. Filtro Inteligente de Campos Virtuais
+                    // Alguns nomes como 'name' e 'email' são colunas em certas tabelas, mas não em outras.
+                    if (k === 'name') {
+                        return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals'].includes(tableName);
+                    }
+                    if (k === 'email') {
+                        return ['contacts', 'laboratories'].includes(tableName);
+                    }
+                    
+                    // 3. Ignora campos de UI vindos de Joins (geralmente terminam com Name ou Label)
+                    if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName'].includes(k)) return false;
+                    
                     return true;
                 });
 
@@ -120,13 +131,11 @@ export default function(logAudit) {
                         let val = payload[f];
                         if (typeof val === 'object' && val !== null) return JSON.stringify(val);
                         // Converte string numérica para Number se for um campo financeiro
-                        if (numericFields.includes(f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`))) return Number(val) || 0;
+                        const physicalField = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
+                        if (numericFields.includes(physicalField)) return Number(val) || 0;
                         return sanitizeValue(val);
                     })
                 ];
-                
-                // Log para debug no servidor
-                console.log(`[SQL EXEC] Table: ${tableName} | ID: ${payload.id} | User: ${userId} | Family: ${familyId}`);
                 
                 await client.query(query, values);
 
