@@ -97,12 +97,12 @@ export default function(logAudit) {
             if (action === 'DELETE') {
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else if (action === 'SAVE') {
+                // Força o vínculo com o usuário e família da sessão para evitar orfandade de dados
                 payload.userId = userId;
                 payload.familyId = familyId;
 
                 const fields = Object.keys(payload).filter(k => {
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    // REFINAMENTO: Mantemos 'email' e removemos apenas nomes de exibição (joins)
                     const virtualFields = ['branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName', 'accountName', 'createdByName'];
                     if (virtualFields.includes(k)) return false;
                     return true;
@@ -129,9 +129,19 @@ export default function(logAudit) {
                 
                 await client.query(query, values);
 
-                // Se for uma transação e não for transferência, atualiza saldo da conta
-                if (tableName === 'transactions' && payload.type !== 'TRANSFER' && payload.status === 'PAID') {
-                    await updateAccountBalance(client, payload.accountId, payload.amount, payload.type);
+                // Lógica de Atualização de Saldo
+                if (tableName === 'transactions' && payload.status === 'PAID') {
+                    if (payload.type === 'TRANSFER') {
+                        // Saída da conta origem
+                        await updateAccountBalance(client, payload.accountId, payload.amount, 'EXPENSE');
+                        // Entrada na conta destino
+                        if (payload.destinationAccountId) {
+                            await updateAccountBalance(client, payload.destinationAccountId, payload.amount, 'INCOME');
+                        }
+                    } else {
+                        // Receita ou Despesa padrão
+                        await updateAccountBalance(client, payload.accountId, payload.amount, payload.type);
+                    }
                 }
             }
 

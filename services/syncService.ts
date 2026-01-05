@@ -51,26 +51,30 @@ class SyncService {
             const sortedQueue = queue.sort((a, b) => a.timestamp - b.timestamp);
 
             for (const item of sortedQueue) {
-                const response = await fetch(`/api/sync/process`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify(item)
-                });
+                try {
+                    const response = await fetch(`/api/sync/process`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(item)
+                    });
 
-                if (response.ok) {
-                    await localDb.delete('sync_queue', item.id);
-                } else {
-                    // CRÍTICO: Se um item da fila falhar (ex: erro de validação do contato),
-                    // não podemos processar os próximos itens (ex: transação) para evitar erros de FK.
-                    console.error(`[SYNC] Falha ao processar item ${item.id} da loja ${item.store}. Interrompendo batch.`);
+                    if (response.ok) {
+                        await localDb.delete('sync_queue', item.id);
+                    } else {
+                        const errorData = await response.json();
+                        console.error(`[SYNC] Erro no servidor ao processar item ${item.id}:`, errorData.error);
+                        break;
+                    }
+                } catch (fetchErr) {
+                    console.error(`[SYNC] Erro de rede ao processar item ${item.id}:`, fetchErr);
                     break;
                 }
             }
         } catch (e) {
-            console.error("Sync failed, will retry later", e);
+            console.error("Sync batch process failed:", e);
         } finally {
             this.isSyncing = false;
             this.notify(navigator.onLine ? 'online' : 'offline');
