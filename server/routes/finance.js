@@ -97,11 +97,15 @@ export default function(logAudit) {
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else if (action === 'SAVE') {
                 const fields = Object.keys(payload).filter(k => {
-                    // 1. Ignora IDs e campos de sistema
-                    if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
+                    const lowerK = k.toLowerCase();
+                    // 1. Ignora IDs e vínculos de sistema (geridos manualmente na query)
+                    if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lowerK) || k.startsWith('_')) return false;
                     
-                    // 2. Filtro Inteligente de Campos Virtuais
-                    // Alguns nomes como 'name' e 'email' são colunas em certas tabelas, mas não em outras.
+                    // 2. Ignora colunas de timestamps e auditoria para evitar duplicidade ou sobrescrita manual
+                    // deleted_at é ignorado aqui pois o ON CONFLICT já faz "deleted_at = NULL"
+                    if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at', 'createdby', 'created_by', 'updatedby', 'updated_by'].includes(lowerK)) return false;
+                    
+                    // 3. Filtro Inteligente para colunas que só existem em tabelas específicas
                     if (k === 'name') {
                         return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals'].includes(tableName);
                     }
@@ -109,8 +113,8 @@ export default function(logAudit) {
                         return ['contacts', 'laboratories'].includes(tableName);
                     }
                     
-                    // 3. Ignora campos de UI vindos de Joins (geralmente terminam com Name ou Label)
-                    if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName'].includes(k)) return false;
+                    // 4. Ignora campos virtuais de UI/Display vindos de JOINS do frontend
+                    if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName', 'contactName'].includes(k)) return false;
                     
                     return true;
                 });
@@ -119,6 +123,7 @@ export default function(logAudit) {
                 const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
                 const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
 
+                // O deleted_at = NULL fixo garante que se um item deletado for re-salvo, ele volte à vida
                 const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
                                VALUES ($1, $2, $3, ${placeholders}) 
                                ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
@@ -130,7 +135,6 @@ export default function(logAudit) {
                     ...fields.map(f => {
                         let val = payload[f];
                         if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-                        // Converte string numérica para Number se for um campo financeiro
                         const physicalField = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
                         if (numericFields.includes(physicalField)) return Number(val) || 0;
                         return sanitizeValue(val);
