@@ -287,7 +287,8 @@ const AppContent: React.FC<{
                 </div>
 
                 <div className="flex-1 overflow-y-auto relative scroll-smooth bg-gray-50">
-                    <div className="p-3 md:p-8 max-w-[1600px] mx-auto">
+                    {/* pb-32 no mobile garante que o botão do chat não cubra o conteúdo final */}
+                    <div className="p-3 md:p-8 max-w-[1600px] mx-auto pb-32 md:pb-8">
                         {renderContent()}
                     </div>
                 </div>

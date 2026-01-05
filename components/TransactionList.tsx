@@ -1,7 +1,11 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
-import { ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, FilePlus, FileCheck, Eye, Paperclip, Loader2 } from 'lucide-react';
+import { 
+  ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, 
+  Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, MoreVertical, 
+  Paperclip, Loader2, Check, Settings2, FileText
+} from 'lucide-react';
 import AttachmentModal from './AttachmentModal';
 
 interface TransactionListProps {
@@ -26,13 +30,25 @@ const TransactionList: React.FC<TransactionListProps> = ({
   
   const [activeAttachmentT, setActiveAttachmentT] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Fecha o menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '--/--';
-    // Remove a parte do tempo caso venha como ISO completo
     const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
     const parts = dateOnly.split('-');
     if (parts.length < 3) return dateOnly;
@@ -94,139 +110,146 @@ const TransactionList: React.FC<TransactionListProps> = ({
 
   if (transactions.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        <p>Nenhuma transação encontrada.</p>
+      <div className="text-center py-16 text-gray-400">
+        <p className="font-medium">Nenhuma movimentação neste período.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto overflow-y-visible">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead className="bg-gray-50/50 text-gray-400 border-b border-gray-100">
             <tr>
-              <th className="px-6 py-4 font-medium">Data</th>
-              <th className="px-6 py-4 font-medium">Descrição</th>
-              <th className="px-6 py-4 font-medium">Contato</th>
-              <th className="px-6 py-4 font-medium">Conta</th>
-              <th className="px-6 py-4 font-medium">Valor</th>
-              <th className="px-6 py-4 font-medium text-center">Status</th>
-              <th className="px-6 py-4 font-medium text-right">Ações</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Data</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Descrição</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Contato</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Conta</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Valor</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-center">Status</th>
+              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {transactions.map((t) => {
                 const contactName = getContactName(t.contactId);
                 const hasAttachments = (t.receiptUrls?.length || 0) > 0;
+                const isMenuOpen = openMenuId === t.id;
+
                 return (
-              <tr key={t.id} className="hover:bg-gray-50/50 transition-colors group">
-                <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
+              <tr key={t.id} className="hover:bg-indigo-50/20 transition-colors group">
+                <td className="px-6 py-4 text-gray-500 whitespace-nowrap font-medium">{formatDate(t.date)}</td>
                 <td className="px-6 py-4 font-medium text-gray-800">
                   <div className="flex items-center gap-3">
-                    {t.type === TransactionType.INCOME ? (
-                      <ArrowUpCircle className="w-5 h-5 text-emerald-500 shrink-0" />
-                    ) : t.type === TransactionType.EXPENSE ? (
-                      <ArrowDownCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                    ) : (
-                      <ArrowRightLeft className="w-5 h-5 text-blue-500 shrink-0" />
-                    )}
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{t.description}</span>
+                    <div className={`p-2 rounded-xl shrink-0 ${
+                        t.type === TransactionType.INCOME ? 'bg-emerald-50 text-emerald-600' : 
+                        t.type === TransactionType.EXPENSE ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
+                    }`}>
+                        {t.type === TransactionType.INCOME ? <ArrowUpCircle className="w-5 h-5" /> : 
+                         t.type === TransactionType.EXPENSE ? <ArrowDownCircle className="w-5 h-5" /> : <ArrowRightLeft className="w-5 h-5" />}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-slate-800 truncate">{t.description}</span>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-gray-400">{t.category}</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{t.category}</span>
                         {t.createdByName && (
-                            <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full flex items-center gap-1" title={`Criado por ${t.createdByName}`}>
+                            <span className="text-[9px] font-black bg-white border border-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-sm">
                                 <UserCircle className="w-2.5 h-2.5" /> {t.createdByName.split(' ')[0]}
                             </span>
                         )}
                       </div>
-                      {t.isRecurring && (
-                        <span className="flex items-center gap-1 text-[10px] text-indigo-500 bg-indigo-50 w-fit px-1.5 py-0.5 rounded-full mt-1">
-                          <Repeat className="w-3 h-3" />
-                          {t.recurrenceFrequency === 'WEEKLY' ? 'Semanal' : t.recurrenceFrequency === 'YEARLY' ? 'Anual' : 'Mensal'}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </td>
                 
                 <td className="px-6 py-4 text-gray-600">
                     {contactName ? (
-                        <div className="flex items-center gap-1.5">
-                            <span className="truncate max-w-[120px]">{contactName}</span>
-                        </div>
+                        <span className="truncate max-w-[120px] block font-medium">{contactName}</span>
                     ) : (
                         <span className="text-gray-300 text-xs italic">-</span>
                     )}
                 </td>
 
                 <td className="px-6 py-4 text-gray-600">
-                    {t.type === TransactionType.TRANSFER ? (
-                         <div className="flex flex-col text-xs">
-                             <span className="text-gray-500">De: {getAccountName(t.accountId)}</span>
-                             <span className="text-gray-900 font-medium">Para: {getAccountName(t.destinationAccountId || '')}</span>
-                         </div>
-                    ) : (
-                        <span className="bg-gray-50 border border-gray-200 px-2 py-1 rounded-md text-xs">
-                            {getAccountName(t.accountId)}
-                        </span>
-                    )}
+                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter border border-slate-200">
+                        {getAccountName(t.accountId)}
+                    </span>
                 </td>
-                <td className={`px-6 py-4 font-semibold ${
+
+                <td className={`px-6 py-4 font-black ${
                     t.type === TransactionType.INCOME ? 'text-emerald-600' : 
-                    t.type === TransactionType.EXPENSE ? 'text-gray-900' : 'text-blue-600'
+                    t.type === TransactionType.EXPENSE ? 'text-slate-900' : 'text-blue-600'
                 }`}>
                   {t.type === TransactionType.EXPENSE && '- '}
                   {formatCurrency(t.amount)}
                 </td>
+
                 <td className="px-6 py-4 text-center">
-                  <button 
-                    onClick={() => onToggleStatus(t)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-100 transition-colors"
-                  >
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                      t.status === TransactionStatus.PAID ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
+                      t.status === TransactionStatus.PENDING ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'
+                  }`}>
                     {getStatusIcon(t.status)}
                     <span className="hidden sm:inline">
                       {t.status === TransactionStatus.PAID ? 'Pago' : t.status === TransactionStatus.PENDING ? 'Pendente' : 'Atrasado'}
                     </span>
-                  </button>
+                  </div>
                 </td>
+
                 <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="relative inline-block text-left" ref={isMenuOpen ? menuRef : null}>
                     <button 
-                        onClick={() => setActiveAttachmentT(t)} 
-                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                            hasAttachments 
-                            ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' 
-                            : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
-                        }`}
-                        title={hasAttachments ? "Visualizar Anexos na Nuvem" : "Subir p/ Cloud Storage"}
+                        onClick={() => setOpenMenuId(isMenuOpen ? null : t.id)}
+                        className={`p-2.5 rounded-xl transition-all ${isMenuOpen ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
                     >
-                        {hasAttachments ? (
-                            <>
-                                <FileCheck className="w-4 h-4" />
-                                <span className="text-[10px] font-black">{t.receiptUrls?.length}</span>
-                            </>
-                        ) : (
-                            <FilePlus className="w-4 h-4" />
-                        )}
+                        <MoreVertical className="w-5 h-5" />
                     </button>
 
-                    <button 
-                        onClick={() => onEdit(t)} 
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Editar"
-                    >
-                        <Pencil className="w-4 h-4" />
-                    </button>
-                    
-                    <button 
-                        onClick={() => onDelete(t.id)} 
-                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Excluir"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 z-[100] py-2 animate-scale-up origin-top-right">
+                            <div className="px-4 py-2 border-b border-gray-50 mb-1">
+                                <p className="text-[9px] font-black uppercase text-gray-400 tracking-[0.2em]">Operações</p>
+                            </div>
+                            
+                            <button 
+                                onClick={() => { onEdit(t); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                            >
+                                <Pencil className="w-4 h-4 text-indigo-500" /> Editar Registro
+                            </button>
+
+                            <button 
+                                onClick={() => { setActiveAttachmentT(t); setOpenMenuId(null); }}
+                                className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Paperclip className="w-4 h-4 text-emerald-500" /> Arquivos e Anexos
+                                </div>
+                                {hasAttachments && (
+                                    <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                                        {t.receiptUrls?.length}
+                                    </span>
+                                )}
+                            </button>
+
+                            <button 
+                                onClick={() => { onToggleStatus(t); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                            >
+                                <Settings2 className="w-4 h-4 text-amber-500" /> Inverter Status
+                            </button>
+
+                            <div className="h-px bg-gray-50 my-1"></div>
+
+                            <button 
+                                onClick={() => { onDelete(t.id); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-black text-rose-600 hover:bg-rose-50 transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" /> Excluir permanentemente
+                            </button>
+                        </div>
+                    )}
                   </div>
                 </td>
               </tr>
