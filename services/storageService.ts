@@ -9,7 +9,6 @@ const getHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('token')}`
 });
 
-// Helper para obter o usuário atual do token JWT (fonte única de verdade no client)
 const getActiveUserFamilyId = (): string | null => {
     const token = localStorage.getItem('token');
     if (!token) return null;
@@ -247,7 +246,6 @@ export const loadInitialData = async (): Promise<AppState> => {
     const results: any = {};
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
-        // Filtro robusto: Se não houver familyId no item, ele é considerado "órfão" e exibido apenas se não houver contexto ativo
         results[store] = rawData.filter((item: any) => {
             const itemFamilyId = String(item.familyId || item.family_id || '');
             if (!currentFamilyId) return true;
@@ -267,7 +265,7 @@ export const loadInitialData = async (): Promise<AppState> => {
 export interface ApiClient {
     saveLocallyAndQueue: (store: string, data: any) => Promise<{ success: boolean; id: string }>;
     deleteLocallyAndQueue: (store: string, id: string) => Promise<{ success: boolean }>;
-    saveTransaction: (t: Transaction) => Promise<{ success: boolean; id: string }>;
+    saveTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => Promise<{ success: boolean; id: string }>;
     deleteTransaction: (id: string) => Promise<{ success: boolean }>;
     saveAccount: (a: Account) => Promise<{ success: boolean; id: string }>;
     deleteAccount: (id: string) => Promise<{ success: boolean }>;
@@ -322,7 +320,19 @@ export const api: ApiClient = {
         return { success: true };
     },
 
-    saveTransaction: async (t: Transaction) => api.saveLocallyAndQueue('transactions', t),
+    saveTransaction: async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
+        // CORREÇÃO: Se houver novo contato ou categoria, salvamos e enfileiramos eles PRIMEIRO.
+        // Isso garante que no enfileiramento do Sync, as dependências tenham timestamps anteriores
+        // e cheguem ao servidor antes da transação, evitando erro de Foreign Key.
+        if (newContact) {
+            await api.saveContact(newContact);
+        }
+        if (newCategory) {
+            await api.saveCategory(newCategory);
+        }
+        return api.saveLocallyAndQueue('transactions', t);
+    },
+
     deleteTransaction: async (id: string) => api.deleteLocallyAndQueue('transactions', id),
     saveAccount: async (a: Account) => api.saveLocallyAndQueue('accounts', a),
     deleteAccount: async (id: string) => api.deleteLocallyAndQueue('accounts', id),

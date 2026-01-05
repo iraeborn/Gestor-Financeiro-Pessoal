@@ -140,9 +140,9 @@ const AppContent: React.FC<{
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
         const commonProps = {
             state, settings: currentUser.settings, currentUser,
-            onAddTransaction: (t: any) => api.saveTransaction(t).then(refreshData),
+            onAddTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
             onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(refreshData),
-            onEditTransaction: (t: any) => api.saveTransaction(t).then(refreshData),
+            onEditTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
             onUpdateStatus: (t: any) => api.saveTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'}).then(refreshData),
             onChangeView: setCurrentView
         };
@@ -310,7 +310,7 @@ const App: React.FC = () => {
 
     const refreshData = async () => {
         try {
-            if (navigator.onLine) await syncService.pullFromServer();
+            if (navigator.onLine) await syncService.triggerSync();
             const data = await loadInitialData();
             setState(data);
             const memberList = await getFamilyMembers();
@@ -357,7 +357,6 @@ const App: React.FC = () => {
             <AppContent 
                 currentUser={currentUser} state={state} dataLoaded={dataLoaded} 
                 syncStatus={syncStatus} currentView={currentView} setCurrentView={setCurrentView}
-                /* Fix: Renamed setIsMobileOpen to setIsMobileMenuOpen to match the defined state setter */
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileMenuOpen}
                 refreshData={refreshData} checkAuth={checkAuth}
                 members={members}
