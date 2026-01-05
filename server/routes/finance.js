@@ -98,9 +98,14 @@ export default function(logAudit) {
 
                 // Filtragem de campos para garantir que apenas colunas existentes sejam inseridas
                 const fields = Object.keys(payload).filter(k => {
-                    // CORREÇÃO: Removemos também os campos em snake_case que são injetados manualmente na query
+                    // Remove campos sistêmicos e meta-propriedades
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    if (['name', 'email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'].includes(k)) return false;
+                    
+                    // Remove campos "virtuais" de exibição (joins) que não existem fisicamente na tabela alvo
+                    // Mantemos 'name' pois é coluna real em accounts, contacts, categories, branches, etc.
+                    const virtualFields = ['email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'];
+                    if (virtualFields.includes(k)) return false;
+                    
                     return true;
                 });
 
