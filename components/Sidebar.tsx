@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ViewMode, User, AppSettings } from '../types';
 import { 
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -32,6 +32,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { isTrackerVisible, setIsTrackerVisible } = useHelp();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -47,6 +49,17 @@ const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+            setShowUserMenu(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const familyId = currentUser.familyId || (currentUser as any).family_id;
   const workspaces = currentUser.workspaces || [];
   const currentWorkspace = workspaces.find(w => w.id === familyId);
@@ -59,6 +72,21 @@ const Sidebar: React.FC<SidebarProps> = ({
     const url = new URL(window.location.origin);
     url.searchParams.set('view', currentView);
     navigator.clipboard.writeText(url.toString()).then(() => showAlert("Link copiado!", "success"));
+  };
+
+  const handleSwitchWorkspace = async (targetId: string) => {
+      if (targetId === familyId) return;
+      try {
+          await switchContext(targetId);
+          window.location.reload(); // Recarrega para aplicar novo contexto
+      } catch (e) {
+          showAlert("Erro ao trocar de negócio.", "error");
+      }
+  };
+
+  const handleLogout = () => {
+      logout();
+      window.location.reload();
   };
 
   const menuSections = [
@@ -118,9 +146,20 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Header */}
             <div className={`p-6 flex flex-col gap-4 border-b border-gray-50 mb-2 ${isCollapsed && !isMobileOpen ? 'items-center' : ''}`}>
                 <div className={`flex items-center w-full ${isCollapsed && !isMobileOpen ? 'justify-center' : 'justify-between'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200">F</div>
-                        {(!isCollapsed || isMobileOpen) && <span className="font-black text-lg text-gray-800 tracking-tighter animate-fade-in">FinManager</span>}
+                    <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200 shrink-0">
+                            {currentWorkspace?.name?.charAt(0).toUpperCase() || 'F'}
+                        </div>
+                        {(!isCollapsed || isMobileOpen) && (
+                            <div className="flex flex-col min-w-0 animate-fade-in">
+                                <span className="font-black text-sm text-gray-900 leading-tight truncate" title={currentWorkspace?.name || 'Meu Negócio'}>
+                                    {currentWorkspace?.name || 'FinManager'}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">
+                                    FinManager System
+                                </span>
+                            </div>
+                        )}
                     </div>
                     {/* Mobile Close Button */}
                     <button onClick={() => setIsMobileOpen(false)} className="md:hidden text-gray-400"><X className="w-6 h-6" /></button>
@@ -193,19 +232,51 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Profile Footer */}
-            <div className={`p-4 border-t border-gray-100 bg-gray-50/50`}>
+            <div className={`p-4 border-t border-gray-100 bg-gray-50/50 relative`} ref={userMenuRef}>
+                {showUserMenu && (
+                    <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-slide-in-bottom z-50 min-w-[240px]">
+                        <div className="p-2 border-b border-gray-100">
+                            <p className="px-3 py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Meus Negócios</p>
+                            {workspaces.map(ws => (
+                                <button
+                                    key={ws.id}
+                                    onClick={() => handleSwitchWorkspace(ws.id)}
+                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors ${ws.id === familyId ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <div className={`w-2 h-2 rounded-full ${ws.id === familyId ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
+                                        <span className="truncate">{ws.name}</span>
+                                    </div>
+                                    {ws.id === familyId && <Check className="w-4 h-4 text-indigo-600" />}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="p-2">
+                            <button onClick={() => { setIsProfileModalOpen(true); setShowUserMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl">
+                                <UserCircle className="w-4 h-4" /> Meu Perfil
+                            </button>
+                            <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl">
+                                <LogOut className="w-4 h-4" /> Sair
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <button 
-                    onClick={() => setIsProfileModalOpen(true)} 
+                    onClick={() => setShowUserMenu(!showUserMenu)} 
                     className={`flex items-center w-full p-2 hover:bg-white rounded-xl transition-all border border-transparent hover:border-gray-200 text-left ${isCollapsed && !isMobileOpen ? 'justify-center' : 'gap-3'}`}
                 >
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">
                         {currentUser.name?.charAt(0).toUpperCase()}
                     </div>
                     {(!isCollapsed || isMobileOpen) && (
-                        <div className="flex-1 overflow-hidden animate-fade-in">
-                            <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name || 'Usuário'}</p>
-                            <p className="text-[10px] font-bold text-indigo-500 uppercase truncate">{currentWorkspace?.name || 'Negócio'}</p>
-                        </div>
+                        <>
+                            <div className="flex-1 overflow-hidden animate-fade-in">
+                                <p className="text-sm font-bold text-gray-800 truncate">{currentUser.name || 'Usuário'}</p>
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase truncate">{currentWorkspace?.name || 'Negócio'}</p>
+                            </div>
+                            <ChevronUp className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                        </>
                     )}
                 </button>
             </div>
