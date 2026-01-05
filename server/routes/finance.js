@@ -16,6 +16,11 @@ const numericFields = [
     'addition', 'dnp_od', 'dnp_oe', 'height_od', 'height_oe'
 ];
 
+// Lista de campos que são apenas para visualização no Frontend (JOINs) e não devem ser persistidos
+const VIEW_ONLY_FIELDS = [
+    'name', 'email', 'branchName', 'contactName', 'assigneeName', 'createdByName', 'clientName'
+];
+
 const mapToFrontend = (row) => {
     if (!row) return row;
     const newRow = {};
@@ -92,7 +97,22 @@ export default function(logAudit) {
                 payload.userId = userId;
                 payload.familyId = familyId;
 
-                const fields = Object.keys(payload).filter(k => k !== 'id' && !k.startsWith('_') && k !== 'userId' && k !== 'familyId');
+                const fields = Object.keys(payload).filter(k => {
+                    // Ignora IDs e metadados internos
+                    if (['id', 'userId', 'familyId'].includes(k) || k.startsWith('_')) return false;
+                    
+                    // Se for a tabela salespeople, ignoramos explicitamente campos de visualização do usuário/filial
+                    if (tableName === 'salespeople' && ['name', 'email', 'branchName'].includes(k)) return false;
+                    
+                    // Se for optical_rxs, ignoramos contactName
+                    if (tableName === 'optical_rxs' && k === 'contactName') return false;
+                    
+                    // Se for transactions, ignoramos createdByName
+                    if (tableName === 'transactions' && k === 'createdByName') return false;
+
+                    return true;
+                });
+
                 const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
                 
                 const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
@@ -107,6 +127,7 @@ export default function(logAudit) {
             res.json({ success: true });
         } catch (err) {
             await client.query('ROLLBACK');
+            console.error(`[SYNC ERROR] Table: ${tableName || store}`, err);
             res.status(500).json({ error: err.message });
         } finally {
             client.release();
