@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
-  Contact, Category, OpticalRx, Branch, Member
+  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers } from './services/storageService';
 import { localDb } from './services/localDb';
@@ -21,13 +21,19 @@ import Reports from './components/Reports';
 import SmartAdvisor from './components/SmartAdvisor';
 import DiagnosticView from './components/DiagnosticView';
 import ContactsView from './components/ContactsView';
+import ContactEditor from './components/ContactEditor';
 import AccessView from './components/AccessView';
+import LogsView from './components/LogsView';
 import SalespeopleView from './components/SalespeopleView';
 import SettingsView from './components/SettingsView';
+import BranchesView from './components/BranchesView';
+import BranchScheduleView from './components/BranchScheduleView';
 import OpticalModule from './components/OpticalModule';
 import OpticalRxEditor from './components/OpticalRxEditor';
 import LabsView from './components/LabsView';
 import ServicesView from './components/ServicesView';
+import ServiceOrderEditor from './components/ServiceOrderEditor';
+import SaleEditor from './components/SaleEditor';
 import Auth from './components/Auth';
 import LoadingOverlay from './components/LoadingOverlay';
 import ChatView from './components/ChatView';
@@ -53,7 +59,13 @@ const AppContent: React.FC<{
     isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members, socket 
 }) => {
     const { isTrackerVisible, setIsTrackerVisible } = useHelp();
+    
+    // States for Editing/Navigation
     const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
+    const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+    const [editingOS, setEditingOS] = useState<ServiceOrder | null>(null);
+    const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
+    const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
     const renderContent = () => {
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
@@ -67,15 +79,126 @@ const AppContent: React.FC<{
         };
         switch (currentView) {
             case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
-            case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} branches={state.branches} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onAddTransaction} onToggleStatus={commonProps.onUpdateStatus} />;
+            case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} branches={state.branches} costCenters={state.costCenters} departments={state.departments} projects={state.projects} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onAddTransaction} onToggleStatus={commonProps.onUpdateStatus} />;
             case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
+            case 'FIN_CARDS': return <CreditCardsView accounts={state.accounts} transactions={state.transactions} contacts={state.contacts} categories={state.categories} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+            case 'FIN_GOALS': return <GoalsView goals={state.goals} accounts={state.accounts} transactions={state.transactions} onSaveGoal={(g) => api.saveGoal(g).then(refreshData)} onDeleteGoal={(id) => api.deleteGoal(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
+            case 'FIN_REPORTS': return <Reports transactions={state.transactions} />;
+            case 'FIN_ADVISOR': return <SmartAdvisor data={state} />;
+            case 'DIAG_HUB': return <DiagnosticView state={state} />;
+            
+            case 'FIN_CONTACTS': return <ContactsView contacts={state.contacts} onAddContact={() => { setEditingContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} onEditContact={(c) => { setEditingContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
+            case 'FIN_CONTACT_EDITOR': return <ContactEditor initialData={editingContact} settings={currentUser.settings} onSave={(c) => api.saveContact(c).then(() => { refreshData(); setCurrentView('FIN_CONTACTS'); })} onCancel={() => setCurrentView('FIN_CONTACTS')} />;
+            
             case 'SYS_CHAT': return <ChatView currentUser={currentUser} socket={socket} />;
+            case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
+            case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
+            
+            case 'SYS_BRANCHES': return <BranchesView branches={state.branches} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} />;
+            case 'SRV_BRANCH_SCHEDULE': return editingBranch ? <BranchScheduleView branch={editingBranch} appointments={state.serviceAppointments} clients={state.serviceClients} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...commonProps} />;
+            
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} laboratories={state.laboratories} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} />;
             case 'OPTICAL_RX_EDITOR': return <OpticalRxEditor contacts={state.contacts} laboratories={state.laboratories} branches={state.branches} initialData={editingRx} onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })} onCancel={() => setCurrentView('OPTICAL_RX')} />;
             case 'OPTICAL_LABS_MGMT': return <LabsView laboratories={state.laboratories} onSaveLaboratory={(l) => api.saveLaboratory(l).then(refreshData)} onDeleteLaboratory={(id) => api.deleteLaboratory(id).then(refreshData)} />;
+            
             case 'SYS_SALESPEOPLE': return <SalespeopleView salespeople={state.salespeople} branches={state.branches} members={members} onSaveSalesperson={(s) => api.saveLocallyAndQueue('salespeople', s).then(refreshData)} onDeleteSalesperson={(id) => api.deleteLocallyAndQueue('salespeople', id).then(refreshData)} />;
-            case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: [], departments: [], projects: [] }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
+            case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: state.costCenters, departments: state.departments, projects: state.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
             case 'SYS_HELP': return <HelpCenter />;
+
+            // --- SERVIÇOS, OS e VENDAS ---
+            case 'OPTICAL_LAB':
+            case 'SRV_OS':
+                return <ServicesView 
+                    currentView={currentView}
+                    serviceOrders={state.serviceOrders}
+                    commercialOrders={state.commercialOrders}
+                    contracts={state.contracts}
+                    invoices={state.invoices}
+                    contacts={state.contacts}
+                    accounts={state.accounts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    settings={currentUser.settings}
+                    onAddOS={() => { setEditingOS(null); setCurrentView('SRV_OS_EDITOR'); }}
+                    onEditOS={(os) => { setEditingOS(os); setCurrentView('SRV_OS_EDITOR'); }}
+                    onSaveOS={(os) => api.saveOS(os).then(refreshData)}
+                    onDeleteOS={(id) => api.deleteOS(id).then(refreshData)}
+                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}} 
+                    onSaveContract={() => {}} onDeleteContract={() => {}} 
+                    onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
+                    onAddTransaction={commonProps.onAddTransaction}
+                />;
+
+            case 'SRV_OS_EDITOR':
+                return <ServiceOrderEditor 
+                    initialData={editingOS}
+                    contacts={state.contacts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    branches={state.branches}
+                    settings={currentUser.settings}
+                    onSave={(os) => api.saveOS(os).then(() => { refreshData(); setCurrentView(os.moduleTag === 'optical' ? 'OPTICAL_LAB' : 'SRV_OS'); })}
+                    onCancel={() => setCurrentView(editingOS?.moduleTag === 'optical' ? 'OPTICAL_LAB' : 'SRV_OS')}
+                />;
+
+            case 'OPTICAL_SALES':
+            case 'SRV_SALES':
+                return <ServicesView 
+                    currentView={currentView}
+                    serviceOrders={state.serviceOrders}
+                    commercialOrders={state.commercialOrders}
+                    contracts={state.contracts}
+                    invoices={state.invoices}
+                    contacts={state.contacts}
+                    accounts={state.accounts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    settings={currentUser.settings}
+                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
+                    onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
+                    onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
+                    onSaveOrder={(o) => api.saveOrder(o).then(refreshData)}
+                    onDeleteOrder={(id) => api.deleteOrder(id).then(refreshData)}
+                    onSaveContract={() => {}} onDeleteContract={() => {}} 
+                    onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
+                    onAddTransaction={commonProps.onAddTransaction}
+                />;
+
+            case 'SRV_SALE_EDITOR':
+                return <SaleEditor 
+                    initialData={editingSale}
+                    contacts={state.contacts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    branches={state.branches}
+                    settings={currentUser.settings}
+                    onSave={(o) => api.saveOrder(o).then(() => { refreshData(); setCurrentView(o.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES'); })}
+                    onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
+                />;
+
+            case 'SRV_CATALOG':
+            case 'SRV_CONTRACTS':
+            case 'SRV_NF':
+                return <ServicesView 
+                    currentView={currentView}
+                    serviceOrders={state.serviceOrders}
+                    commercialOrders={state.commercialOrders}
+                    contracts={state.contracts}
+                    invoices={state.invoices}
+                    contacts={state.contacts}
+                    accounts={state.accounts}
+                    serviceItems={state.serviceItems}
+                    opticalRxs={state.opticalRxs}
+                    settings={currentUser.settings}
+                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
+                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}}
+                    onSaveContract={(c) => {}} onDeleteContract={(id) => {}} // TODO: Implement API calls
+                    onSaveInvoice={(i) => {}} onDeleteInvoice={(id) => {}}
+                    onAddTransaction={commonProps.onAddTransaction}
+                    onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)}
+                    onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                />;
+
             default: return <Dashboard {...commonProps} />;
         }
     };
