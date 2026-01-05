@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 8; // Incrementado para v8 para store laboratories
+const DB_VERSION = 10; // Incrementado para garantir a criação da store faltante
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -19,7 +19,8 @@ export class LocalDB {
             'serviceItems', 'serviceAppointments', 'goals', 'categories', 
             'branches', 'costCenters', 'departments', 'projects', 
             'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-            'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 'laboratories'
+            'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 
+            'salespersonSchedules', 'laboratories'
           ];
 
           stores.forEach(store => {
@@ -51,7 +52,8 @@ export class LocalDB {
         'serviceItems', 'serviceAppointments', 'goals', 'categories', 
         'branches', 'costCenters', 'departments', 'projects', 
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-        'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 'laboratories'
+        'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 
+        'salespersonSchedules', 'laboratories'
     ];
     await Promise.all(stores.map(s => this.clearStore(s)));
   }
@@ -62,6 +64,7 @@ export class LocalDB {
       
       try {
         if (!this.db.objectStoreNames.contains(storeName)) {
+            console.warn(`LocalDB: Store ${storeName} não encontrada.`);
             return resolve([]);
         }
         const transaction = this.db.transaction(storeName, 'readonly');
@@ -80,7 +83,7 @@ export class LocalDB {
       if (!this.db) return reject('DB not initialized');
       try {
         if (!this.db.objectStoreNames.contains(storeName)) {
-            return reject(`Store ${storeName} não encontrado.`);
+            return reject(`Store ${storeName} não encontrada no banco local.`);
         }
         const transaction = this.db.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
@@ -98,7 +101,7 @@ export class LocalDB {
       if (!this.db) return reject('DB not initialized');
       try {
         if (!this.db.objectStoreNames.contains(storeName)) {
-            return reject(`Store ${storeName} não encontrado.`);
+            return reject(`Store ${storeName} não encontrada.`);
         }
         const transaction = this.db.transaction(storeName, 'readwrite');
         const store = transaction.objectStore(storeName);
