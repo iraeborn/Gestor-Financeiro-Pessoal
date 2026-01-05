@@ -1,8 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
-import { Salesperson, Branch, Member, ROLE_DEFINITIONS } from '../types';
-// Added Info icon import
-import { Users, Plus, MapPin, Percent, Trash2, Pencil, Search, Store, BadgeDollarSign, X, CheckCircle, UserPlus, RefreshCw, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { Salesperson, Branch, Member } from '../types';
+import { Users, Plus, Percent, Trash2, Pencil, Search, Store, BadgeDollarSign, UserPlus, Info } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface SalespeopleViewProps {
@@ -27,8 +26,9 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
         (s.branchName || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Membros que podem ser vendedores (perfil SALES_OPTICAL)
-    const eligibleMembers = members.filter(m => m.role === 'MEMBER');
+    // Permitir selecionar qualquer membro da equipe que não seja o dono se necessário, 
+    // mas geralmente são os que possuem o papel de MEMBER ou SALES_OPTICAL
+    const eligibleMembers = members;
 
     const handleOpenModal = (s?: Salesperson) => {
         if (s) setFormData(s);
@@ -41,12 +41,28 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
         if (!formData.userId) return showAlert("Selecione um colaborador.", "warning");
         if (!formData.branchId) return showAlert("Selecione uma filial.", "warning");
 
+        const selectedMember = members.find(m => m.id === formData.userId);
+        const selectedBranch = branches.find(b => b.id === formData.branchId);
+
         onSaveSalesperson({
             ...formData,
             id: formData.id || crypto.randomUUID(),
+            name: selectedMember?.name || formData.name,
+            email: selectedMember?.email || formData.email,
+            branchName: selectedBranch?.name || formData.branchName
         } as Salesperson);
+        
         setIsModalOpen(false);
         showAlert("Vendedor atualizado!", "success");
+    };
+
+    const handleDelete = async (id: string, name?: string) => {
+        const confirm = await showConfirm({
+            title: "Remover Vendedor",
+            message: `Deseja remover as configurações de vendas de ${name || 'este colaborador'}?`,
+            variant: "danger"
+        });
+        if (confirm) onDeleteSalesperson(id);
     };
 
     return (
@@ -79,7 +95,11 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filtered.map(seller => (
+                {filtered.length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
+                        Nenhum vendedor configurado.
+                    </div>
+                ) : filtered.map(seller => (
                     <div key={seller.id} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-6 group hover:shadow-xl transition-all relative overflow-hidden">
                         <div className="absolute -right-4 -bottom-4 w-24 h-24 text-gray-50 group-hover:text-indigo-50 transition-colors">
                             <BadgeDollarSign className="w-full h-full" />
@@ -90,14 +110,14 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-lg">
                                     {seller.name?.charAt(0)}
                                 </div>
-                                <div>
-                                    <h3 className="font-black text-gray-900">{seller.name}</h3>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{seller.email}</p>
+                                <div className="overflow-hidden">
+                                    <h3 className="font-black text-gray-900 truncate">{seller.name}</h3>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest truncate">{seller.email}</p>
                                 </div>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenModal(seller)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><Pencil className="w-4 h-4"/></button>
-                                <button onClick={() => onDeleteSalesperson(seller.id)} className="p-2 text-rose-500 bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                                <button onClick={() => handleOpenModal(seller)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"><Pencil className="w-4 h-4"/></button>
+                                <button onClick={() => handleDelete(seller.id, seller.name)} className="p-2 text-rose-500 bg-rose-50 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4"/></button>
                             </div>
                         </div>
 
@@ -123,7 +143,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                             <div>
                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Colaborador</label>
                                 <select 
-                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold"
+                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                                     value={formData.userId || ''}
                                     onChange={e => setFormData({...formData, userId: e.target.value})}
                                     disabled={!!formData.id}
@@ -131,7 +151,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                                 >
                                     <option value="">Selecionar membro...</option>
                                     {eligibleMembers.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                        <option key={m.id} value={m.id}>{m.name} ({m.email})</option>
                                     ))}
                                 </select>
                             </div>
@@ -140,7 +160,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                                 <div>
                                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Filial de Atuação</label>
                                     <select 
-                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold"
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                                         value={formData.branchId || ''}
                                         onChange={e => setFormData({...formData, branchId: e.target.value})}
                                         required
@@ -156,7 +176,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                                     <input 
                                         type="number" 
                                         step="0.1"
-                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" 
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" 
                                         value={formData.commissionRate} 
                                         onChange={e => setFormData({...formData, commissionRate: Number(e.target.value)})} 
                                         required 
@@ -167,7 +187,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                             <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
                                 <Info className="w-5 h-5 text-amber-600 shrink-0" />
                                 <p className="text-[10px] font-bold text-amber-800 uppercase leading-relaxed">
-                                    Vendedores têm acesso restrito ao financeiro, visualizando apenas o que eles mesmos lançam.
+                                    Vendedores configurados aqui terão as vendas associadas automaticamente para cálculo de comissões futuras.
                                 </p>
                             </div>
 

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, OpticalRx, Branch, Member
@@ -9,6 +9,7 @@ import { localDb } from './services/localDb';
 import { syncService } from './services/syncService';
 import { useAlert } from './components/AlertSystem';
 import { Wifi, WifiOff, RefreshCw, Menu as MenuIcon, HelpCircle, Bell } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -44,9 +45,10 @@ const AppContent: React.FC<{
     refreshData: () => void;
     checkAuth: () => void;
     members: Member[];
+    socket: Socket | null;
 }> = ({ 
     currentUser, state, dataLoaded, syncStatus, currentView, setCurrentView, 
-    isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members 
+    isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members, socket 
 }) => {
     const { isTrackerVisible, setIsTrackerVisible } = useHelp();
     const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
@@ -65,7 +67,7 @@ const AppContent: React.FC<{
             case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
             case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} branches={state.branches} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onAddTransaction} onToggleStatus={commonProps.onUpdateStatus} />;
             case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
-            case 'SYS_CHAT': return <ChatView currentUser={currentUser} socket={null} />;
+            case 'SYS_CHAT': return <ChatView currentUser={currentUser} socket={socket} />;
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} />;
             case 'OPTICAL_RX_EDITOR': return <OpticalRxEditor contacts={state.contacts} branches={state.branches} initialData={editingRx} onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })} onCancel={() => setCurrentView('OPTICAL_RX')} />;
             case 'SYS_SALESPEOPLE': return <SalespeopleView salespeople={state.salespeople} branches={state.branches} members={members} onSaveSalesperson={(s) => api.saveLocallyAndQueue('salespeople', s).then(refreshData)} onDeleteSalesperson={(id) => api.deleteLocallyAndQueue('salespeople', id).then(refreshData)} />;
@@ -78,7 +80,6 @@ const AppContent: React.FC<{
         <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden relative">
             <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser!} onUserUpdate={() => {}} isMobileOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen} />
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                {/* Header Mobile Otimizado */}
                 <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-40 shrink-0">
                     <button onClick={() => setIsMobileOpen(true)} className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"><MenuIcon className="w-6 h-6" /></button>
                     <div className="flex items-center gap-1.5"><div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg text-xs">F</div><span className="font-black text-sm text-gray-800 tracking-tighter">FinManager</span></div>
@@ -98,7 +99,7 @@ const AppContent: React.FC<{
                     </div>
                 </div>
             </main>
-            <ChatFloating currentUser={currentUser!} socket={null} />
+            <ChatFloating currentUser={currentUser!} socket={socket} />
         </div>
     );
 };
@@ -112,6 +113,7 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
     const [state, setState] = useState<AppState | null>(null);
     const [members, setMembers] = useState<Member[]>([]);
+    const [socket, setSocket] = useState<Socket | null>(null);
 
     const refreshData = async () => {
         try {
@@ -133,6 +135,13 @@ const App: React.FC = () => {
             setState(data);
             const memberList = await getFamilyMembers();
             setMembers(memberList);
+            
+            // Inicializa Socket após autenticação
+            if (!socket) {
+                const s = io({ transports: ['websocket', 'polling'] });
+                s.on('connect', () => s.emit('join_family', user.familyId));
+                setSocket(s);
+            }
         } catch (e) { localStorage.removeItem('token'); setCurrentUser(null); }
         finally { setAuthChecked(true); setDataLoaded(true); }
     };
@@ -145,6 +154,7 @@ const App: React.FC = () => {
             await checkAuth();
         };
         init();
+        return () => { socket?.disconnect(); };
     }, []);
 
     if (!authChecked) return <LoadingOverlay isVisible={true} message="Protegendo..." />;
@@ -158,6 +168,7 @@ const App: React.FC = () => {
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileMenuOpen}
                 refreshData={refreshData} checkAuth={checkAuth}
                 members={members}
+                socket={socket}
             />
         </HelpProvider>
     );

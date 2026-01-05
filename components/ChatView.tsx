@@ -30,7 +30,12 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
             .catch(console.error);
 
         if (socket) {
-            const handleNewMessage = (msg: ChatMessage) => setMessages(prev => [...prev, msg]);
+            const handleNewMessage = (msg: ChatMessage) => {
+                setMessages(prev => {
+                    if (prev.find(m => m.id === msg.id)) return prev;
+                    return [...prev, msg];
+                });
+            };
             socket.on('NEW_MESSAGE', handleNewMessage);
             return () => { socket.off('NEW_MESSAGE', handleNewMessage); };
         }
@@ -48,14 +53,16 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
     const handleSend = (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !socket) return;
+        
         const newMsg: Partial<ChatMessage> = {
             senderId: currentUser.id,
             senderName: currentUser.name,
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT',
-            receiverId: selectedUser?.id
+            receiverId: selectedUser?.id || null
         };
+        
         socket.emit('SEND_MESSAGE', newMsg);
         setInput('');
     };
@@ -76,7 +83,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     <button 
                         onClick={() => handleSelectChat(null)}
-                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${!selectedUser ? 'bg-white border-indigo-200 shadow-md' : 'bg-transparent border-transparent hover:bg-gray-100'}`}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${selectedUser === null && !isListView ? 'bg-white border-indigo-200 shadow-md' : 'bg-transparent border-transparent hover:bg-gray-100'}`}
                     >
                         <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shrink-0"><MessageSquare className="w-5 h-5"/></div>
                         <div className="text-left"><p className="font-bold text-gray-800 text-sm">Time Principal</p><p className="text-[10px] text-indigo-500 font-bold uppercase">Grupo</p></div>
@@ -107,6 +114,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
                         </div>
                         <h3 className="font-black text-gray-800 tracking-tight">{selectedUser ? selectedUser.name : 'Time Principal'}</h3>
                     </div>
+                    {!socket && <span className="text-[10px] text-rose-500 font-bold uppercase animate-pulse">Desconectado</span>}
                 </div>
 
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-10 space-y-4 bg-slate-50/30 scroll-smooth">
@@ -126,7 +134,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
                     })}
                 </div>
 
-                <div className="p-4 md:p-6 bg-white border-t border-gray-50">
+                <div className="p-4 md:p-6 bg-white border-t border-gray-100">
                     <form onSubmit={handleSend} className="flex items-center gap-2 md:gap-4 bg-gray-50 p-2 rounded-[2rem] border border-gray-100">
                         <input type="file" ref={fileInputRef} className="hidden" />
                         <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-400 hover:text-indigo-600 shrink-0"><Paperclip className="w-5 h-5"/></button>
@@ -134,10 +142,11 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
                             type="text" 
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            placeholder="Mensagem..."
+                            placeholder={socket ? "Escreva sua mensagem..." : "Conectando ao servidor..."}
+                            disabled={!socket}
                             className="flex-1 bg-transparent border-none outline-none font-medium text-sm text-gray-700 px-2"
                         />
-                        <button type="submit" disabled={!input.trim()} className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shadow-lg disabled:opacity-50">
+                        <button type="submit" disabled={!input.trim() || !socket} className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shadow-lg disabled:opacity-50 transition-all active:scale-90">
                             <Send className="w-5 h-5"/>
                         </button>
                     </form>
