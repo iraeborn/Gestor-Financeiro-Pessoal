@@ -47,7 +47,10 @@ class SyncService {
 
         const token = localStorage.getItem('token');
         try {
-            for (const item of queue) {
+            // Ordenar por timestamp para garantir ordem cronológica de dependências
+            const sortedQueue = queue.sort((a, b) => a.timestamp - b.timestamp);
+
+            for (const item of sortedQueue) {
                 const response = await fetch(`/api/sync/process`, {
                     method: 'POST',
                     headers: { 
@@ -59,6 +62,11 @@ class SyncService {
 
                 if (response.ok) {
                     await localDb.delete('sync_queue', item.id);
+                } else {
+                    // CRÍTICO: Se um item da fila falhar (ex: erro de validação do contato),
+                    // não podemos processar os próximos itens (ex: transação) para evitar erros de FK.
+                    console.error(`[SYNC] Falha ao processar item ${item.id} da loja ${item.store}. Interrompendo batch.`);
+                    break;
                 }
             }
         } catch (e) {
@@ -81,16 +89,14 @@ class SyncService {
             
             const data = await response.json();
             
-            // CRÍTICO: Limpa stores locais antes de repopular para garantir isolamento total entre logins/famílias
             const storesToClear = [
                 'accounts', 'transactions', 'contacts', 'serviceClients', 
                 'serviceItems', 'serviceAppointments', 'goals', 'categories', 
                 'branches', 'costCenters', 'departments', 'projects', 
                 'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-                'opticalRxs', 'companyProfile', 'salespeople'
+                'opticalRxs', 'companyProfile', 'salespeople', 'laboratories'
             ];
 
-            // Executa limpeza em paralelo para performance e segurança
             await Promise.all(storesToClear.map(async (storeName) => {
                 try {
                     await localDb.clearStore(storeName);
@@ -99,7 +105,6 @@ class SyncService {
                 }
             }));
 
-            // Repopula os stores com os dados filtrados e atualizados do servidor
             for (const [storeName, items] of Object.entries(data)) {
                 if (Array.isArray(items)) {
                     for (const item of items) {

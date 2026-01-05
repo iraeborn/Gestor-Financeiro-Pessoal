@@ -42,7 +42,6 @@ export default function(logAudit) {
             const userRole = userRes.rows[0]?.role;
             const isSalesperson = userRole === 'SALES_OPTICAL';
 
-            // CORREÇÃO: Todas as queries agora selecionam family_id para o frontend filtrar corretamente
             const queryDefs = {
                 accounts: ['SELECT id, name, type, family_id, CASE WHEN $2 = true THEN 0 ELSE balance END as balance FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId, isSalesperson]],
                 transactions: isSalesperson 
@@ -103,7 +102,8 @@ export default function(logAudit) {
 
                 const fields = Object.keys(payload).filter(k => {
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    const virtualFields = ['email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'];
+                    // REFINAMENTO: Mantemos 'email' e removemos apenas nomes de exibição (joins)
+                    const virtualFields = ['branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName', 'accountName', 'createdByName'];
                     if (virtualFields.includes(k)) return false;
                     return true;
                 });
