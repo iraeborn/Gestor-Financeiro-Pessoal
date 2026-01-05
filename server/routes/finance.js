@@ -98,7 +98,8 @@ export default function(logAudit) {
 
                 // Filtragem de campos para garantir que apenas colunas existentes sejam inseridas
                 const fields = Object.keys(payload).filter(k => {
-                    if (['id', 'userId', 'familyId'].includes(k) || k.startsWith('_')) return false;
+                    // CORREÇÃO: Removemos também os campos em snake_case que são injetados manualmente na query
+                    if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
                     if (['name', 'email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'].includes(k)) return false;
                     return true;
                 });
