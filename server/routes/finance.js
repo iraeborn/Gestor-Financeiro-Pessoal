@@ -41,6 +41,8 @@ export default function(logAudit) {
             const userRole = userRes.rows[0]?.role;
             const isSalesperson = userRole === 'SALES_OPTICAL';
 
+            // Usamos LEFT JOIN para garantir que, se o registro principal existe, ele seja retornado, 
+            // mesmo que os nomes vinculados falhem ou o vendedor associado tenha sido removido.
             const queryDefs = {
                 accounts: ['SELECT id, name, type, family_id, CASE WHEN $2 = true THEN 0 ELSE balance END as balance FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId, isSalesperson]],
                 transactions: isSalesperson 
@@ -49,8 +51,8 @@ export default function(logAudit) {
                 contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 branches: ['SELECT *, family_id FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
-                salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch JOIN salespeople s ON sch.salesperson_id = s.id JOIN users u ON s.user_id = u.id JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
+                salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
+                salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch LEFT JOIN salespeople s ON sch.salesperson_id = s.id LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
                 serviceOrders: ['SELECT *, family_id FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 commercialOrders: ['SELECT *, family_id FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 opticalRxs: ['SELECT *, family_id FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
@@ -98,22 +100,11 @@ export default function(logAudit) {
             } else if (action === 'SAVE') {
                 const fields = Object.keys(payload).filter(k => {
                     const lowerK = k.toLowerCase();
-                    // 1. Ignora IDs e vínculos de sistema (geridos manualmente na query)
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lowerK) || k.startsWith('_')) return false;
-                    
-                    // 2. Ignora colunas de timestamps e auditoria para evitar duplicidade ou sobrescrita manual
-                    // deleted_at é ignorado aqui pois o ON CONFLICT já faz "deleted_at = NULL"
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at', 'createdby', 'created_by', 'updatedby', 'updated_by'].includes(lowerK)) return false;
                     
-                    // 3. Filtro Inteligente para colunas que só existem em tabelas específicas
-                    if (k === 'name') {
-                        return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals'].includes(tableName);
-                    }
-                    if (k === 'email') {
-                        return ['contacts', 'laboratories'].includes(tableName);
-                    }
-                    
-                    // 4. Ignora campos virtuais de UI/Display vindos de JOINS do frontend
+                    if (k === 'name') return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals'].includes(tableName);
+                    if (k === 'email') return ['contacts', 'laboratories'].includes(tableName);
                     if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName', 'contactName'].includes(k)) return false;
                     
                     return true;
@@ -123,14 +114,19 @@ export default function(logAudit) {
                 const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
                 const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
 
-                // O deleted_at = NULL fixo garante que se um item deletado for re-salvo, ele volte à vida
+                // Regra especial: Na tabela salespeople, o user_id da coluna deve ser o do payload (vendedor designado),
+                // mas em outras tabelas (como transações), o user_id é o criador (quem está logado).
+                const targetUserId = (tableName === 'salespeople' && (payload.userId || payload.user_id)) 
+                                    ? (payload.userId || payload.user_id) 
+                                    : userId;
+
                 const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
                                VALUES ($1, $2, $3, ${placeholders}) 
                                ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
                 
                 const values = [
                     payload.id, 
-                    userId, 
+                    targetUserId, 
                     familyId, 
                     ...fields.map(f => {
                         let val = payload[f];
