@@ -141,7 +141,8 @@ const App: React.FC = () => {
             // Inicializa Socket após autenticação
             if (!socket) {
                 const s = io({ transports: ['websocket', 'polling'] });
-                s.on('connect', () => s.emit('join_family', user.familyId));
+                // Passa o userId e familyId para o servidor
+                s.on('connect', () => s.emit('join_family', { familyId: user.familyId, userId: user.id }));
                 setSocket(s);
             }
         } catch (e) { localStorage.removeItem('token'); setCurrentUser(null); }

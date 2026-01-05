@@ -35,14 +35,36 @@ const logAudit = (poolInstance, userId, action, entity, entityId, details, previ
     return createAuditLog(poolInstance, io, { userId, action, entity, entityId, details, previousState, changes, familyIdOverride });
 };
 
+// Rastreamento de usuários online: Map<SocketId, { userId, familyId }>
+const connectedUsers = new Map();
+
 io.on('connection', (socket) => {
   console.log(`🔌 [SOCKET] Conexão ativa: ${socket.id}`);
 
-  socket.on('join_family', (familyId) => {
+  socket.on('join_family', (data) => {
+    // Suporte para legado (apenas string) ou objeto novo { familyId, userId }
+    const familyId = typeof data === 'object' ? data.familyId : data;
+    const userId = typeof data === 'object' ? data.userId : null;
+
     if (familyId) {
         const room = String(familyId).trim();
-        socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
         socket.join(room);
+        
+        // Se temos userId, registramos presença e criamos sala privada
+        if (userId) {
+            socket.join(userId); // Sala privada para DMs
+            connectedUsers.set(socket.id, { userId, familyId: room });
+            
+            // Notifica todos na família que este usuário está online
+            io.to(room).emit('USER_STATUS', { userId, status: 'ONLINE' });
+            
+            // Envia lista atual de online para quem acabou de entrar
+            const onlineInRoom = Array.from(connectedUsers.values())
+                .filter(u => u.familyId === room)
+                .map(u => u.userId);
+            socket.emit('ONLINE_LIST', [...new Set(onlineInRoom)]);
+        }
+
         socket.emit('joined_room', { room, timestamp: new Date() });
     }
   });
@@ -61,14 +83,28 @@ io.on('connection', (socket) => {
               [id, msg.senderId, msg.senderName, msg.receiverId || null, room, msg.content, msg.type || 'TEXT', msg.attachmentUrl || null]
           );
 
-          // Broadcast para a sala (incluindo o remetente para confirmação visual)
-          io.to(room).emit('NEW_MESSAGE', { ...msg, id, createdAt: new Date() });
+          const payload = { ...msg, id, createdAt: new Date() };
+
+          if (msg.receiverId) {
+              // MENSAGEM PRIVADA: Envia para o destinatário E para o remetente (para aparecer na tela dele)
+              io.to(msg.receiverId).to(msg.senderId).emit('NEW_MESSAGE', payload);
+          } else {
+              // MENSAGEM GRUPO: Broadcast para a sala da família
+              io.to(room).emit('NEW_MESSAGE', payload);
+          }
+
       } catch (e) {
           console.error("[CHAT ERROR] Falha ao processar mensagem:", e.message);
       }
   });
 
-  socket.on('disconnect', (reason) => {
+  socket.on('disconnect', () => {
+      const user = connectedUsers.get(socket.id);
+      if (user) {
+          // Notifica que saiu
+          io.to(user.familyId).emit('USER_STATUS', { userId: user.userId, status: 'OFFLINE' });
+          connectedUsers.delete(socket.id);
+      }
       console.log(`🔌 [SOCKET] Cliente desconectado: ${socket.id}`);
   });
 });
