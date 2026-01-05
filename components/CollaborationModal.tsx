@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase, ChevronRight } from 'lucide-react';
+import { X, Users, Copy, CheckCircle, ArrowRight, UserPlus, Briefcase, ChevronRight, Link as LinkIcon } from 'lucide-react';
 import { createInvite, joinFamily, getFamilyMembers } from '../services/storageService';
 import { User, EntityType, Member, ROLE_DEFINITIONS } from '../types';
 import { useAlert } from './AlertSystem';
@@ -75,6 +75,13 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
     }
   };
 
+  const getInviteUrl = () => {
+    if (!inviteCode) return '';
+    const url = new URL(window.location.origin);
+    url.searchParams.set('joinCode', inviteCode);
+    return url.toString();
+  };
+
   if (!isOpen) return null;
 
   // Textos Dinâmicos
@@ -83,8 +90,8 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
       inviteTab: isPJ ? "Convidar Sócio/Membro" : "Convidar Familiar",
       joinTab: isPJ ? "Entrar em Organização" : "Entrar em Família",
       inviteDesc: isPJ 
-        ? "Gere um código de acesso. Escolha o perfil do novo membro para configurar permissões automaticamente."
-        : "Gere um código para que seu parceiro(a) ou familiar possa ver e editar as mesmas finanças.",
+        ? "Gere um link de acesso rápido. O novo membro entrará automaticamente na equipe ao clicar."
+        : "Gere um link para que seu familiar possa ver e gerenciar as mesmas finanças.",
       membersTitle: isPJ ? "Membros da Organização" : "Membros da Família",
       joinTitle: isPJ ? "Unir-se a uma Empresa" : "Unir Contas Familiares",
       joinDesc: isPJ
@@ -181,32 +188,37 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
                                 <button 
                                     onClick={handleCreateInvite}
                                     disabled={loading}
-                                    className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2"
+                                    className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2 flex items-center justify-center gap-2"
                                 >
-                                    {loading ? 'Gerando...' : 'Gerar Código de Acesso'}
+                                    {loading ? 'Gerando...' : <LinkIcon className="w-4 h-4" />}
+                                    {loading ? 'Gerando...' : 'Gerar Link de Convite'}
                                 </button>
                             </div>
                         ) : (
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 animate-fade-in">
-                                <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider mb-2">Código de Acesso ({ROLE_DEFINITIONS.find(r => r.id === selectedRole)?.label})</p>
-                                <div className="flex items-center justify-center gap-3">
-                                    <span className="text-4xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
+                            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 animate-fade-in text-center space-y-4">
+                                <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest mb-2">Link de Convite Gerado</p>
+                                
+                                <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex items-center gap-2">
+                                    <span className="flex-1 text-[10px] font-mono text-slate-400 truncate text-left">{getInviteUrl()}</span>
                                     <button 
-                                        onClick={() => { navigator.clipboard.writeText(inviteCode); showAlert("Código copiado!", "info"); }}
-                                        className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
-                                        title="Copiar"
+                                        onClick={() => { navigator.clipboard.writeText(getInviteUrl()); showAlert("Link de convite copiado!", "success"); }}
+                                        className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                                        title="Copiar Link"
                                     >
-                                        <Copy className="w-6 h-6" />
+                                        <Copy className="w-4 h-4" />
                                     </button>
                                 </div>
-                                <p className="text-xs text-indigo-400 mt-2">Válido por 24 horas</p>
                                 
-                                <button 
-                                    onClick={() => setInviteCode(null)}
-                                    className="text-xs text-gray-400 hover:text-gray-600 underline mt-4"
-                                >
-                                    Gerar novo código
-                                </button>
+                                <div className="flex justify-center gap-4">
+                                    <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Válido por 24 horas</p>
+                                    <span className="text-slate-300">|</span>
+                                    <button 
+                                        onClick={() => setInviteCode(null)}
+                                        className="text-[10px] font-black text-indigo-400 uppercase hover:underline"
+                                    >
+                                        Novo Link
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -254,8 +266,8 @@ const CollaborationModal: React.FC<CollaborationModalProps> = ({ isOpen, onClose
                             value={joinCode}
                             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                             placeholder="Ex: A1B2C3"
-                            maxLength={10}
-                            className="text-center uppercase tracking-widest font-mono text-lg block w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            maxLength={6}
+                            className="text-center uppercase tracking-widest font-black text-lg block w-full rounded-xl border border-gray-200 px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
                         />
                     </div>
 

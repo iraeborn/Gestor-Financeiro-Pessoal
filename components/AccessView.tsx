@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle, Loader2 } from 'lucide-react';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle, Loader2, Link as LinkIcon, Share2 } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
@@ -120,7 +120,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
         try {
             const data = await createInvite();
             setInviteCode(data.code);
-            // Log de auditoria local (opcional)
         } catch (e) {
             console.error(e);
             showAlert("Erro ao gerar convite.", "error");
@@ -238,6 +237,13 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
         return activeModules?.[group.requiredModule] === true;
     });
 
+    const getInviteUrl = () => {
+        if (!inviteCode) return '';
+        const url = new URL(window.location.origin);
+        url.searchParams.set('joinCode', inviteCode);
+        return url.toString();
+    };
+
     return (
         <div className="space-y-8 animate-fade-in max-w-6xl pb-10">
             <div>
@@ -263,38 +269,45 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                         </div>
                         <div className="p-6 flex-1 flex flex-col justify-center">
                             <p className="text-sm text-gray-600 mb-6">
-                                Gere um código temporário para adicionar um novo membro à sua equipe/família. O código expira em 24 horas.
+                                Gere um <strong>Link de Convite</strong> para adicionar um novo membro. Ao clicar no link, o novo membro entrará automaticamente na sua equipe.
                             </p>
                             
-                            <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-xl border border-gray-100 border-dashed min-h-[120px]">
+                            <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-2xl border border-gray-100 border-dashed min-h-[160px]">
                                 {!inviteCode ? (
                                     <button 
                                         onClick={handleCreateInvite}
                                         disabled={generatingInvite}
-                                        className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center gap-2"
+                                        className="bg-indigo-600 text-white px-6 py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center gap-2"
                                     >
-                                        {generatingInvite ? <RefreshCw className="w-4 h-4 animate-spin"/> : <UserPlus className="w-4 h-4" />}
-                                        {generatingInvite ? 'Gerando...' : 'Gerar Código de Convite'}
+                                        {generatingInvite ? <RefreshCw className="w-4 h-4 animate-spin"/> : <LinkIcon className="w-4 h-4" />}
+                                        {generatingInvite ? 'Gerando Link...' : 'Gerar Link de Convite'}
                                     </button>
                                 ) : (
-                                    <div className="w-full animate-fade-in text-center">
-                                        <p className="text-xs text-indigo-500 font-bold uppercase mb-2">Compartilhe este código</p>
-                                        <div className="flex items-center justify-center gap-3 mb-2">
-                                            <span className="text-3xl font-mono font-bold text-gray-800 tracking-widest">{inviteCode}</span>
-                                            <button 
-                                                onClick={() => { navigator.clipboard.writeText(inviteCode); showAlert("Código copiado!", "info"); }}
-                                                className="p-2 hover:bg-white rounded-lg text-indigo-600 transition-colors"
-                                                title="Copiar"
-                                            >
-                                                <Copy className="w-5 h-5" />
-                                            </button>
+                                    <div className="w-full animate-fade-in text-center space-y-4">
+                                        <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                                            <p className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mb-2">Seu Link de Acesso Rápido</p>
+                                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 overflow-hidden">
+                                                <span className="flex-1 text-xs font-mono text-slate-500 truncate text-left">{getInviteUrl()}</span>
+                                                <button 
+                                                    onClick={() => { navigator.clipboard.writeText(getInviteUrl()); showAlert("Link copiado para a área de transferência!", "success"); }}
+                                                    className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                                                    title="Copiar Link"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <button 
-                                            onClick={() => setInviteCode(null)}
-                                            className="text-xs text-gray-400 hover:text-gray-600 underline"
-                                        >
-                                            Gerar outro código
-                                        </button>
+                                        
+                                        <div className="flex justify-center gap-4">
+                                            <button 
+                                                onClick={() => setInviteCode(null)}
+                                                className="text-[10px] font-black uppercase text-gray-400 hover:text-gray-600"
+                                            >
+                                                Gerar novo link
+                                            </button>
+                                            <span className="text-[10px] font-black text-slate-300">•</span>
+                                            <p className="text-[10px] font-black text-rose-400 uppercase tracking-tighter">Expira em 24h</p>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -306,12 +319,12 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                     <div className="p-6 border-b border-gray-50 bg-gray-50/50">
                         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                             <ArrowRight className="w-5 h-5 text-emerald-600" />
-                            Entrar em Outra Equipe
+                            Entrar Manualmente
                         </h2>
                     </div>
                     <div className="p-6 flex-1 flex flex-col justify-center">
                         <p className="text-sm text-gray-600 mb-6">
-                            Tem um código de convite? Digite-o abaixo para acessar uma nova conta empresarial ou familiar.
+                            Se você recebeu apenas o código curto de 6 dígitos, digite-o abaixo para acessar a organização.
                         </p>
                         
                         <form onSubmit={handleJoinFamily} className="flex gap-2">
@@ -319,9 +332,9 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                                 type="text" 
                                 value={joinCode}
                                 onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                                placeholder="Código (ex: A1B2C3)"
-                                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 font-mono text-center uppercase tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none"
-                                maxLength={10}
+                                placeholder="CÓDIGO"
+                                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 font-mono text-center uppercase tracking-[0.5em] focus:ring-2 focus:ring-emerald-500 outline-none font-black"
+                                maxLength={6}
                             />
                             <button 
                                 type="submit"

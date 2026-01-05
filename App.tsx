@@ -4,10 +4,10 @@ import {
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder
 } from './types';
-import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers } from './services/storageService';
+import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers, joinFamily } from './services/storageService';
 import { localDb } from './services/localDb';
 import { syncService } from './services/syncService';
-import { useAlert } from './components/AlertSystem';
+import { useAlert, useConfirm } from './components/AlertSystem';
 import { Wifi, WifiOff, RefreshCw, Menu as MenuIcon, HelpCircle, Bell } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
@@ -59,6 +59,8 @@ const AppContent: React.FC<{
     isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members, socket 
 }) => {
     const { isTrackerVisible, setIsTrackerVisible } = useHelp();
+    const { showAlert } = useAlert();
+    const { showConfirm } = useConfirm();
     
     // States for Editing/Navigation
     const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
@@ -66,6 +68,40 @@ const AppContent: React.FC<{
     const [editingOS, setEditingOS] = useState<ServiceOrder | null>(null);
     const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
+
+    // Lógica para Links de Convite (URL params)
+    useEffect(() => {
+        const checkJoinLink = async () => {
+            if (!currentUser) return;
+            
+            const params = new URLSearchParams(window.location.search);
+            const joinCode = params.get('joinCode');
+            
+            if (joinCode) {
+                // Limpa a URL para não processar de novo em reloads
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, '', newUrl);
+
+                const confirm = await showConfirm({
+                    title: "Novo Convite de Equipe",
+                    message: "Você recebeu um convite para entrar em uma nova organização. Deseja aceitar agora? Você mudará seu ambiente de trabalho.",
+                    confirmText: "Sim, Entrar na Equipe"
+                });
+
+                if (confirm) {
+                    try {
+                        await joinFamily(joinCode);
+                        showAlert("Bem-vindo à nova equipe! Recarregando dados...", "success");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } catch (e: any) {
+                        showAlert(e.message || "Erro ao processar convite via link.", "error");
+                    }
+                }
+            }
+        };
+
+        checkJoinLink();
+    }, [currentUser]);
 
     const renderContent = () => {
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
