@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, User, ChevronUp, ChevronDown } from 'lucide-react';
+import { MessageSquare, X, Send, User, ChevronUp, ChevronDown, Circle } from 'lucide-react';
 import { User as UserType, ChatMessage } from '../types';
 import { Socket } from 'socket.io-client';
 
@@ -17,6 +17,8 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [unreadCount, setUnreadCount] = useState(0);
+    const [onlineCount, setOnlineCount] = useState(0);
+    
     const scrollRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(new Audio(NOTIFICATION_SOUND));
 
@@ -36,13 +38,7 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                 .catch(console.error);
 
             const handleNewMessage = (msg: ChatMessage) => {
-                // Apenas adicionamos ao chat flutuante se for mensagem de grupo (sem receiverId) ou se for para MIM
-                const isGroup = !msg.receiverId;
-                const isForMe = msg.receiverId === currentUser.id;
                 const isFromMe = msg.senderId === currentUser.id;
-
-                // No chat flutuante, mostramos prioritariamente o grupo, mas podemos receber DMs também
-                // Para simplificar, o flutuante exibe tudo que chega ao socket deste usuário
                 setMessages(prev => [...prev, msg]);
                 
                 if (!isOpen && !isFromMe) {
@@ -54,8 +50,27 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                 }
             };
 
+            const handleOnlineList = (userIds: string[]) => {
+                setOnlineCount(userIds.length);
+            };
+
+            const handleUserStatus = () => {
+                // Solicita atualização da contagem
+                socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId);
+            };
+
             socket.on('NEW_MESSAGE', handleNewMessage);
-            return () => { socket.off('NEW_MESSAGE', handleNewMessage); };
+            socket.on('ONLINE_LIST', handleOnlineList);
+            socket.on('USER_STATUS', handleUserStatus);
+            
+            // Solicita a lista ao conectar
+            socket.emit('REQUEST_ONLINE_USERS', currentUser.familyId);
+
+            return () => { 
+                socket.off('NEW_MESSAGE', handleNewMessage);
+                socket.off('ONLINE_LIST', handleOnlineList);
+                socket.off('USER_STATUS', handleUserStatus);
+            };
         }
     }, [socket, currentUser.familyId, isOpen, currentUser.id]);
 
@@ -73,7 +88,6 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT'
-            // Chat flutuante envia para o grupo geral por padrão
         };
 
         socket.emit('SEND_MESSAGE', newMsg);
@@ -92,21 +106,27 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                     {/* Header */}
                     <div className="p-4 bg-indigo-600 text-white flex justify-between items-center shadow-lg shrink-0">
                         <div className="flex items-center gap-2">
-                            <MessageSquare className="w-4 h-4" />
-                            <span className="text-xs font-bold uppercase tracking-widest">Chat Rápido</span>
+                            <div className="relative">
+                                <MessageSquare className="w-4 h-4" />
+                                <div className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border border-indigo-600"></div>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-widest leading-none">Chat da Organização</span>
+                                <span className="text-[8px] font-bold text-indigo-200 uppercase mt-0.5">{onlineCount} membros ativos</span>
+                            </div>
                         </div>
                         <button onClick={toggleChat} className="p-1 hover:bg-white/10 rounded-lg transition-colors"><ChevronDown className="w-4 h-4"/></button>
                     </div>
 
                     {/* Messages Area */}
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 scrollbar-none">
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 scrollbar-none">
                         {messages.map(msg => (
-                            <div key={msg.id} className={`flex flex-col ${msg.senderId === currentUser.id ? 'items-end' : 'items-start'}`}>
-                                {msg.senderId !== currentUser.id && <span className="text-[9px] font-black text-gray-400 uppercase ml-1 mb-1">{msg.senderName} {msg.receiverId ? '(Privado)' : ''}</span>}
-                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm ${msg.senderId === currentUser.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}`}>
+                            <div key={msg.id} className={`flex flex-col ${msg.senderId === currentUser.id ? 'items-end' : 'items-start'} animate-fade-in`}>
+                                {msg.senderId !== currentUser.id && <span className="text-[9px] font-black text-indigo-400 uppercase ml-1 mb-1 tracking-tighter">{msg.senderName} {msg.receiverId ? '(Privado)' : ''}</span>}
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm transition-all ${msg.senderId === currentUser.id ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}`}>
                                     {msg.content}
                                 </div>
-                                <span className="text-[8px] text-gray-300 mt-1">{new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span className="text-[8px] text-gray-300 mt-1 px-1">{new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             </div>
                         ))}
                     </div>
@@ -120,7 +140,7 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                             placeholder="Mensagem para o grupo..."
                             className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
                         />
-                        <button type="submit" className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"><Send className="w-4 h-4"/></button>
+                        <button type="submit" className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-90"><Send className="w-4 h-4"/></button>
                     </form>
                 </div>
             )}
@@ -128,13 +148,16 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
             {/* Floating Toggle Button */}
             <button 
                 onClick={toggleChat}
-                className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 active:scale-95 pointer-events-auto relative ${isOpen ? 'bg-rose-500 rotate-90' : 'bg-indigo-600'}`}
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 active:scale-95 pointer-events-auto relative ${isOpen ? 'bg-rose-500 rotate-90 shadow-rose-200' : 'bg-indigo-600 shadow-indigo-200'}`}
             >
                 {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
                 {!isOpen && unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white animate-bounce">
                         {unreadCount}
                     </span>
+                )}
+                {!isOpen && onlineCount > 1 && (
+                    <div className="absolute top-0 left-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></div>
                 )}
             </button>
         </div>
