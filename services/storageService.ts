@@ -15,14 +15,13 @@ const getActiveUserFamilyId = (): string | null => {
     if (!token) return null;
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload.familyId || payload.id;
+        return String(payload.familyId || payload.id);
     } catch (e) {
         return null;
     }
 };
 
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
-    // Limpeza preventiva antes de tentar novo login
     await localDb.clearAllStores();
     const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
@@ -35,7 +34,6 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    // Limpeza pós-login para garantir que o banco comece do zero para o novo tenant
     await localDb.clearAllStores();
     return data;
 };
@@ -96,7 +94,6 @@ export const switchContext = async (targetFamilyId: string): Promise<AuthRespons
     if (!res.ok) throw new Error('Falha ao trocar contexto');
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    // Ao trocar de contexto (empresa/família), o banco local DEVE ser limpo para recarregar do servidor
     await localDb.clearAllStores();
     return data;
 };
@@ -231,15 +228,6 @@ export const updatePublicOrderStatus = async (token: string, status: string): Pr
 export const loadInitialData = async (): Promise<AppState> => {
     const currentFamilyId = getActiveUserFamilyId();
 
-    const sampleTransactions = await localDb.getAll<any>('transactions');
-    if (sampleTransactions.length > 0) {
-        const dbFamilyId = sampleTransactions[0].familyId || sampleTransactions[0].family_id;
-        if (dbFamilyId !== currentFamilyId) {
-            console.warn("Detectada incompatibilidade de tenant no banco local. Executando limpeza de segurança.");
-            await localDb.clearAllStores();
-        }
-    }
-
     if (navigator.onLine) {
         try {
             await syncService.pullFromServer();
@@ -259,15 +247,17 @@ export const loadInitialData = async (): Promise<AppState> => {
     const results: any = {};
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
+        // Filtro robusto: Se não houver familyId no item, ele é considerado "órfão" e exibido apenas se não houver contexto ativo
         results[store] = rawData.filter((item: any) => {
-            const itemFamilyId = item.familyId || item.family_id;
+            const itemFamilyId = String(item.familyId || item.family_id || '');
+            if (!currentFamilyId) return true;
             return itemFamilyId === currentFamilyId;
         });
     }
     
     const companyProfiles = await localDb.getAll('companyProfile');
     results.companyProfile = companyProfiles.find((p: any) => {
-        const pFamilyId = p.familyId || p.family_id;
+        const pFamilyId = String(p.familyId || p.family_id || '');
         return pFamilyId === currentFamilyId;
     }) || null;
 

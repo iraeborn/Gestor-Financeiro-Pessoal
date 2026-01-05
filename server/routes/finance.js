@@ -26,6 +26,10 @@ const mapToFrontend = (row) => {
         if (value instanceof Date) value = value.toISOString().split('T')[0];
         newRow[camelKey] = value;
     }
+    // Garante que o familyId esteja sempre presente para o filtro do storageService.ts
+    if (row.family_id && !newRow.familyId) {
+        newRow.familyId = row.family_id;
+    }
     return newRow;
 };
 
@@ -38,21 +42,22 @@ export default function(logAudit) {
             const userRole = userRes.rows[0]?.role;
             const isSalesperson = userRole === 'SALES_OPTICAL';
 
+            // CORREÇÃO: Todas as queries agora selecionam family_id para o frontend filtrar corretamente
             const queryDefs = {
-                accounts: ['SELECT id, name, type, CASE WHEN $2 = true THEN 0 ELSE balance END as balance FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId, isSalesperson]],
+                accounts: ['SELECT id, name, type, family_id, CASE WHEN $2 = true THEN 0 ELSE balance END as balance FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId, isSalesperson]],
                 transactions: isSalesperson 
                     ? ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId, userId]]
                     : ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
-                contacts: ['SELECT * FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                categories: ['SELECT * FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                branches: ['SELECT * FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                branches: ['SELECT *, family_id FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
                 salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch JOIN salespeople s ON sch.salesperson_id = s.id JOIN users u ON s.user_id = u.id JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
-                serviceOrders: ['SELECT * FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                commercialOrders: ['SELECT * FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                opticalRxs: ['SELECT * FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                laboratories: ['SELECT * FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                goals: isSalesperson ? ['SELECT id, name, 0 as target_amount, 0 as current_amount, NULL as deadline FROM goals LIMIT 0', []] : ['SELECT * FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
+                serviceOrders: ['SELECT *, family_id FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                commercialOrders: ['SELECT *, family_id FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                opticalRxs: ['SELECT *, family_id FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                laboratories: ['SELECT *, family_id FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                goals: isSalesperson ? ['SELECT id, name, 0 as target_amount, 0 as current_amount, family_id, NULL as deadline FROM goals LIMIT 0', []] : ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
             };
 
             const results = {};
@@ -96,21 +101,14 @@ export default function(logAudit) {
                 payload.userId = userId;
                 payload.familyId = familyId;
 
-                // Filtragem de campos para garantir que apenas colunas existentes sejam inseridas
                 const fields = Object.keys(payload).filter(k => {
-                    // Remove campos sistêmicos e meta-propriedades
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    
-                    // Remove campos "virtuais" de exibição (joins) que não existem fisicamente na tabela alvo
-                    // Mantemos 'name' pois é coluna real em accounts, contacts, categories, branches, etc.
                     const virtualFields = ['email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'];
                     if (virtualFields.includes(k)) return false;
-                    
                     return true;
                 });
 
                 const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
-                
                 const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
                 const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
 
@@ -122,10 +120,19 @@ export default function(logAudit) {
                     payload.id, 
                     userId, 
                     familyId, 
-                    ...fields.map(f => (typeof payload[f] === 'object' && payload[f] !== null) ? JSON.stringify(payload[f]) : sanitizeValue(payload[f]))
+                    ...fields.map(f => {
+                        let val = payload[f];
+                        if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+                        return sanitizeValue(val);
+                    })
                 ];
                 
                 await client.query(query, values);
+
+                // Se for uma transação e não for transferência, atualiza saldo da conta
+                if (tableName === 'transactions' && payload.type !== 'TRANSFER' && payload.status === 'PAID') {
+                    await updateAccountBalance(client, payload.accountId, payload.amount, payload.type);
+                }
             }
 
             await client.query('COMMIT');
