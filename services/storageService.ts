@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
@@ -231,8 +231,6 @@ export const updatePublicOrderStatus = async (token: string, status: string): Pr
 export const loadInitialData = async (): Promise<AppState> => {
     const currentFamilyId = getActiveUserFamilyId();
 
-    // SEGURANÇA MULTI-TENANT: Antes de carregar qualquer coisa do IndexedDB, validamos se o conteúdo pertence ao usuário atual.
-    // Se encontrarmos transações de outra família no banco local, limpamos tudo.
     const sampleTransactions = await localDb.getAll<any>('transactions');
     if (sampleTransactions.length > 0) {
         const dbFamilyId = sampleTransactions[0].familyId || sampleTransactions[0].family_id;
@@ -255,13 +253,12 @@ export const loadInitialData = async (): Promise<AppState> => {
         'branches', 'costCenters', 'departments', 'projects',
         'serviceClients', 'serviceItems', 'serviceAppointments',
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices',
-        'opticalRxs', 'salespeople'
+        'opticalRxs', 'salespeople', 'laboratories'
     ];
 
     const results: any = {};
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
-        // Filtro redundante para garantir que itens órfãos ou mal-sincronizados nunca apareçam
         results[store] = rawData.filter((item: any) => {
             const itemFamilyId = item.familyId || item.family_id;
             return itemFamilyId === currentFamilyId;
@@ -277,7 +274,6 @@ export const loadInitialData = async (): Promise<AppState> => {
     return results as AppState;
 };
 
-// Fix: Explicitly defining interface for the api object to prevent TS7023
 export interface ApiClient {
     saveLocallyAndQueue: (store: string, data: any) => Promise<{ success: boolean; id: string }>;
     deleteLocallyAndQueue: (store: string, id: string) => Promise<{ success: boolean }>;
@@ -305,6 +301,8 @@ export interface ApiClient {
     deleteOrder: (id: string) => Promise<{ success: boolean }>;
     savePJEntity: (type: string, payload: any) => Promise<{ success: boolean; id?: string }>;
     deletePJEntity: (type: string, id: string) => Promise<{ success: boolean }>;
+    saveLaboratory: (lab: Laboratory) => Promise<{ success: boolean; id: string }>;
+    deleteLaboratory: (id: string) => Promise<{ success: boolean }>;
 }
 
 export const api: ApiClient = {
@@ -354,6 +352,8 @@ export const api: ApiClient = {
     deleteOS: async (id: string) => api.deleteLocallyAndQueue('serviceOrders', id),
     saveOrder: async (o: any) => api.saveLocallyAndQueue('commercialOrders', o),
     deleteOrder: async (id: string) => api.deleteLocallyAndQueue('commercialOrders', id),
+    saveLaboratory: async (lab: Laboratory) => api.saveLocallyAndQueue('laboratories', lab),
+    deleteLaboratory: async (id: string) => api.deleteLocallyAndQueue('laboratories', id),
 
     savePJEntity: async (type: string, payload: any) => {
         const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };

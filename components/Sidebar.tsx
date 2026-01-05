@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -73,7 +73,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { section: 'Especialidade', enabled: !!activeModules.optical, items: [
         { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye },
-        { id: 'OPTICAL_LAB', label: 'Laboratório', icon: Monitor },
+        { id: 'OPTICAL_LABS_MGMT', label: 'Laboratórios', icon: Microscope },
+        { id: 'OPTICAL_LAB', label: 'Montagem (OS)', icon: Monitor },
     ]},
     { section: 'Configuração', items: [
         { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },

@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 7; // Incrementado para v7 para garantir migrações e persistência de Vendedores
+const DB_VERSION = 8; // Incrementado para v8 para store laboratories
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -19,7 +19,7 @@ export class LocalDB {
             'serviceItems', 'serviceAppointments', 'goals', 'categories', 
             'branches', 'costCenters', 'departments', 'projects', 
             'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-            'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople'
+            'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 'laboratories'
           ];
 
           stores.forEach(store => {
@@ -51,7 +51,7 @@ export class LocalDB {
         'serviceItems', 'serviceAppointments', 'goals', 'categories', 
         'branches', 'costCenters', 'departments', 'projects', 
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-        'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople'
+        'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 'laboratories'
     ];
     await Promise.all(stores.map(s => this.clearStore(s)));
   }

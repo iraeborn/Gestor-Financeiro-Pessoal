@@ -1,18 +1,18 @@
-
 import React, { useState, useEffect } from 'react';
-import { OpticalRx, Contact, Branch } from '../types';
-import { ArrowLeft, Save, Eye, Stethoscope, Info, Store } from 'lucide-react';
+import { OpticalRx, Contact, Branch, Laboratory } from '../types';
+import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 
 interface OpticalRxEditorProps {
     contacts: Contact[];
     branches: Branch[];
+    laboratories?: Laboratory[];
     initialData?: OpticalRx | null;
     onSave: (rx: OpticalRx) => void;
     onCancel: () => void;
 }
 
-const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, initialData, onSave, onCancel }) => {
+const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, laboratories = [], initialData, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [formData, setFormData] = useState<Partial<OpticalRx>>({
         rxDate: new Date().toISOString().split('T')[0],
@@ -136,9 +136,25 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, i
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Observações Clínicas / Laboratório</label>
-                        <textarea className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-bold min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" value={formData.observations || ''} onChange={e => setFormData({...formData, observations: e.target.value})} placeholder="Instruções de montagem, prisma ou notas médicas..."></textarea>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Laboratório Preferencial</label>
+                            <div className="relative">
+                                <Microscope className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <select 
+                                    className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer"
+                                    value={formData.laboratoryId || ''}
+                                    onChange={e => setFormData({...formData, laboratoryId: e.target.value})}
+                                >
+                                    <option value="">Selecione o laboratório...</option>
+                                    {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Observações Clínicas / Laboratório</label>
+                            <textarea className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-bold min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" value={formData.observations || ''} onChange={e => setFormData({...formData, observations: e.target.value})} placeholder="Instruções de montagem, prisma ou notas médicas..."></textarea>
+                        </div>
                     </div>
                 </div>
             </form>

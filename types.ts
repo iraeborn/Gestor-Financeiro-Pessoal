@@ -1,5 +1,5 @@
 
-export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_RECEBIDO' | 'CONFERIDO' | 'PRONTO_ENTREGA' | 'ENTREGUE' | 'NAO_ENTREGUE';
+export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_ENVIADO' | 'LAB_PRODUCAO' | 'LAB_PRONTO' | 'LAB_RECEBIDO' | 'ENTREGUE_CLIENTE';
 
 export enum EntityType {
   PERSONAL = 'PF',
@@ -60,7 +60,7 @@ export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 export type ViewMode = 
   | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_CONTACT_EDITOR'
   | 'SRV_OS' | 'SRV_OS_EDITOR' | 'SRV_SALES' | 'SRV_SALE_EDITOR' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS' | 'SRV_BRANCH_SCHEDULE'
-  | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
+  | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB' | 'OPTICAL_LABS_MGMT'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
   | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT' | 'SYS_SALESPEOPLE';
@@ -127,6 +127,17 @@ export interface Salesperson {
     branchId: string;
     branchName?: string;
     commissionRate: number;
+    familyId: string;
+}
+
+export interface Laboratory {
+    id: string;
+    name: string;
+    contactPerson?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    notes?: string;
     familyId: string;
 }
 
@@ -264,6 +275,7 @@ export interface AppState {
   invoices: Invoice[];
   opticalRxs: OpticalRx[];
   salespeople: Salesperson[];
+  laboratories: Laboratory[];
   companyProfile?: CompanyProfile | null;
 }
 
@@ -293,14 +305,14 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       label: 'Vendedor de Ótica',
       description: 'Acesso a vendas, receitas RX, catálogo de produtos e agenda de exames.',
       requiredModule: 'optical',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE', 'SYS_CHAT']
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE', 'SYS_CHAT', 'OPTICAL_LABS_MGMT']
   },
   {
       id: 'LAB_TECHNICIAN',
       label: 'Técnico de Laboratório',
       description: 'Acesso restrito a Ordens de Serviço (Laboratório) e Receitas RX.',
       requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX', 'SYS_CHAT']
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX', 'SYS_CHAT', 'OPTICAL_LABS_MGMT']
   },
   {
       id: 'DENTIST',
@@ -338,6 +350,12 @@ export interface OpticalRx {
   imageUrl?: string;
   observations?: string;
   branchId?: string;
+  
+  // Laboratory Fields
+  laboratoryId?: string;
+  labStatus?: OpticalDeliveryStatus;
+  labSentDate?: string;
+  labReturnDate?: string;
 }
 
 export interface ToothState {
@@ -562,7 +580,6 @@ export interface KanbanColumnConfig {
   borderColor: string;
 }
 
-/* Fix: Adding missing exported interfaces used in storageService and LogsView */
 export interface AuthResponse {
   token: string;
   user: User;
@@ -594,7 +611,6 @@ export interface NotificationLog {
   createdAt: string;
 }
 
-/* Fix: Adding missing AppNotification interface used in App.tsx and NotificationPanel */
 export interface AppNotification {
   id: string;
   title: string;

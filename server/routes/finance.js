@@ -10,7 +10,10 @@ const numericFields = [
     'balance', 'amount', 'target_amount', 'current_amount', 
     'total_amount', 'gross_amount', 'discount_amount', 'tax_amount',
     'value', 'unit_price', 'total_price', 'cost_price', 'credit_limit',
-    'interest_rate', 'commission_rate'
+    'interest_rate', 'commission_rate',
+    'sphere_od_longe', 'cyl_od_longe', 'sphere_oe_longe', 'cyl_oe_longe',
+    'sphere_od_perto', 'cyl_od_perto', 'sphere_oe_perto', 'cyl_oe_perto',
+    'addition', 'dnp_od', 'dnp_oe', 'height_od', 'height_oe'
 ];
 
 const mapToFrontend = (row) => {
@@ -47,6 +50,7 @@ export default function(logAudit) {
                 serviceOrders: ['SELECT * FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 commercialOrders: ['SELECT * FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 opticalRxs: ['SELECT * FROM optical_rxs WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                laboratories: ['SELECT * FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 goals: isSalesperson ? ['SELECT id, name, 0 as target_amount, 0 as current_amount, NULL as deadline FROM goals LIMIT 0', []] : ['SELECT * FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
             };
 
@@ -76,7 +80,7 @@ export default function(logAudit) {
                 'accounts': 'accounts', 'transactions': 'transactions', 'goals': 'goals',
                 'contacts': 'contacts', 'categories': 'categories', 'branches': 'branches',
                 'serviceOrders': 'service_orders', 'commercialOrders': 'commercial_orders',
-                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople'
+                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 'laboratories': 'laboratories'
             };
 
             const tableName = tableMap[store];
