@@ -1,4 +1,5 @@
 
+
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_RECEBIDO' | 'CONFERIDO' | 'PRONTO_ENTREGA' | 'ENTREGUE' | 'NAO_ENTREGUE';
 
 export enum EntityType {
@@ -63,7 +64,7 @@ export type ViewMode =
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
-  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES';
+  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT';
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
@@ -82,6 +83,221 @@ export interface AppSettings {
     notifyOverdue: boolean;
   };
 }
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  receiverId?: string; // Se nulo, é chat da família/grupo
+  familyId: string;
+  content: string;
+  type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
+  attachmentUrl?: string;
+  createdAt: string;
+  isRead?: boolean;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  familyId: string;
+  settings?: AppSettings;
+  role: string;
+  entityType: EntityType;
+  plan: SubscriptionPlan;
+  googleId?: string;
+  workspaces?: Member[];
+  status?: string;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'MEMBER';
+  permissions?: string[] | string;
+  ownerSettings?: AppSettings;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  type: 'PF' | 'PJ';
+  email?: string;
+  phone?: string;
+  document?: string;
+  fantasyName?: string;
+  ie?: string;
+  im?: string;
+  pixKey?: string;
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  isDefaulter?: boolean;
+  isBlocked?: boolean;
+  creditLimit?: number;
+  defaultPaymentMethod?: string;
+  defaultPaymentTerm?: number;
+  opticalNotes?: string;
+  brandPreference?: string;
+  lastConsultationDate?: string;
+  yearsOfUse?: number;
+  opticalCategory?: 'NORMAL' | 'PREMIUM' | 'KIDS' | 'SPORT';
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  balance: number;
+  creditLimit?: number;
+  closingDay?: number;
+  dueDay?: number;
+}
+
+export interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  type: TransactionType;
+  category: string;
+  date: string;
+  status: TransactionStatus;
+  accountId: string;
+  contactId?: string;
+  receiptUrls?: string[];
+  createdByName?: string;
+  destinationAccountId?: string;
+  isRecurring?: boolean;
+  recurrenceFrequency?: RecurrenceFrequency;
+  recurrenceEndDate?: string;
+  interestRate?: number;
+  goalId?: string;
+  branchId?: string;
+  costCenterId?: string;
+  departmentId?: string;
+  projectId?: string;
+  classification?: TransactionClassification;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  type: TransactionType;
+}
+
+export interface FinancialGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount?: number;
+  current_amount?: number;
+  deadline: string;
+}
+
+export interface CompanyProfile {
+  id: string;
+  familyId?: string;
+  tradeName: string;
+  legalName: string;
+  cnpj: string;
+  taxRegime?: TaxRegime;
+  cnae?: string;
+  secondaryCnaes?: string;
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  phone?: string;
+  email?: string;
+  hasEmployees?: boolean;
+  issuesInvoices?: boolean;
+}
+
+export interface Branch { 
+    id: string; 
+    name: string; 
+    code?: string; 
+    city?: string; 
+    address?: string;
+    phone?: string;
+    color?: string;
+    isActive: boolean;
+}
+export interface CostCenter { id: string; name: string; code?: string; }
+export interface Department { id: string; name: string; }
+export interface Project { id: string; name: string; }
+
+export interface AppState {
+  accounts: Account[];
+  transactions: Transaction[];
+  contacts: Contact[];
+  serviceClients: ServiceClient[];
+  serviceItems: ServiceItem[];
+  serviceAppointments: ServiceAppointment[];
+  goals: FinancialGoal[];
+  categories: Category[];
+  branches: Branch[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  projects: Project[];
+  serviceOrders: ServiceOrder[];
+  commercialOrders: CommercialOrder[];
+  contracts: Contract[];
+  invoices: Invoice[];
+  opticalRxs: OpticalRx[];
+  companyProfile?: CompanyProfile | null;
+}
+
+export interface RoleDefinition {
+  id: string;
+  label: string;
+  description: string;
+  defaultPermissions: string[];
+  requiredModule?: 'odonto' | 'services' | 'intelligence' | 'optical';
+}
+
+export const ROLE_DEFINITIONS: RoleDefinition[] = [
+  {
+      id: 'ADMIN',
+      label: 'Administrador Proprietário',
+      description: 'Acesso irrestrito a todos os módulos, configurações financeiras e gestão de equipe.',
+      defaultPermissions: []
+  },
+  {
+      id: 'FIN_MANAGER',
+      label: 'Gerente Administrativo',
+      description: 'Foco total em gestão financeira, contas bancárias, relatórios e auditoria.',
+      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_REPORTS', 'FIN_GOALS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'SYS_LOGS', 'SYS_CHAT']
+  },
+  {
+      id: 'SALES_OPTICAL',
+      label: 'Vendedor de Ótica',
+      description: 'Acesso a vendas, receitas RX, catálogo de produtos e agenda de exames.',
+      requiredModule: 'optical',
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE', 'SYS_CHAT']
+  },
+  {
+      id: 'LAB_TECHNICIAN',
+      label: 'Técnico de Laboratório',
+      description: 'Acesso restrito a Ordens de Serviço (Laboratório) e Receitas RX.',
+      requiredModule: 'services',
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX', 'SYS_CHAT']
+  },
+  {
+      id: 'DENTIST',
+      label: 'Dentista / Clínico',
+      description: 'Acesso a agenda clínica e prontuários odontológicos.',
+      requiredModule: 'odonto',
+      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'FIN_CONTACTS', 'SYS_CHAT']
+  }
+];
 
 export interface OpticalRx {
   id: string;
@@ -305,250 +521,6 @@ export interface ServiceAppointment {
   branchId?: string;
 }
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  familyId: string;
-  settings?: AppSettings;
-  role: string;
-  entityType: EntityType;
-  plan: SubscriptionPlan;
-  googleId?: string;
-  workspaces?: Member[];
-  status?: string;
-}
-
-export interface Member {
-  id: string;
-  name: string;
-  email: string;
-  role: 'ADMIN' | 'MEMBER';
-  permissions?: string[] | string;
-  ownerSettings?: AppSettings;
-}
-
-export interface Contact {
-  id: string;
-  name: string;
-  type: 'PF' | 'PJ';
-  email?: string;
-  phone?: string;
-  document?: string;
-  fantasyName?: string;
-  ie?: string;
-  im?: string;
-  pixKey?: string;
-  zipCode?: string;
-  street?: string;
-  number?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  isDefaulter?: boolean;
-  isBlocked?: boolean;
-  creditLimit?: number;
-  defaultPaymentMethod?: string;
-  defaultPaymentTerm?: number;
-  // Campos Ótica
-  opticalNotes?: string;
-  brandPreference?: string;
-  lastConsultationDate?: string;
-  yearsOfUse?: number;
-  opticalCategory?: 'NORMAL' | 'PREMIUM' | 'KIDS' | 'SPORT';
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  type: AccountType;
-  balance: number;
-  creditLimit?: number;
-  closingDay?: number;
-  dueDay?: number;
-}
-
-export interface Transaction {
-  id: string;
-  description: string;
-  amount: number;
-  type: TransactionType;
-  category: string;
-  date: string;
-  status: TransactionStatus;
-  accountId: string;
-  contactId?: string;
-  receiptUrls?: string[];
-  createdByName?: string;
-  destinationAccountId?: string;
-  isRecurring?: boolean;
-  recurrenceFrequency?: RecurrenceFrequency;
-  recurrenceEndDate?: string;
-  interestRate?: number;
-  goalId?: string;
-  branchId?: string;
-  costCenterId?: string;
-  departmentId?: string;
-  projectId?: string;
-  classification?: TransactionClassification;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  type: TransactionType;
-}
-
-export interface FinancialGoal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  currentAmount?: number;
-  current_amount?: number;
-  deadline: string;
-}
-
-export interface CompanyProfile {
-  id: string;
-  familyId?: string;
-  tradeName: string;
-  legalName: string;
-  cnpj: string;
-  taxRegime?: TaxRegime;
-  cnae?: string;
-  secondaryCnaes?: string;
-  zipCode?: string;
-  street?: string;
-  number?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  phone?: string;
-  email?: string;
-  hasEmployees?: boolean;
-  issuesInvoices?: boolean;
-}
-
-export interface Branch { 
-    id: string; 
-    name: string; 
-    code?: string; 
-    city?: string; 
-    address?: string;
-    phone?: string;
-    color?: string;
-    isActive: boolean;
-}
-export interface CostCenter { id: string; name: string; code?: string; }
-export interface Department { id: string; name: string; }
-export interface Project { id: string; name: string; }
-
-export interface AppState {
-  accounts: Account[];
-  transactions: Transaction[];
-  contacts: Contact[];
-  serviceClients: ServiceClient[];
-  serviceItems: ServiceItem[];
-  serviceAppointments: ServiceAppointment[];
-  goals: FinancialGoal[];
-  categories: Category[];
-  branches: Branch[];
-  costCenters: CostCenter[];
-  departments: Department[];
-  projects: Project[];
-  serviceOrders: ServiceOrder[];
-  commercialOrders: CommercialOrder[];
-  contracts: Contract[];
-  invoices: Invoice[];
-  opticalRxs: OpticalRx[];
-  companyProfile?: CompanyProfile | null;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: User;
-}
-
-export interface AuditLog {
-  id: number;
-  userId: string;
-  userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'REVERT' | 'JOIN';
-  entity: string;
-  entityId: string;
-  details: string;
-  timestamp: string;
-  previousState?: any;
-  changes?: any;
-  isDeleted?: boolean;
-}
-
-export interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    timestamp: string;
-    type: 'INFO' | 'SUCCESS' | 'WARNING';
-    isRead: boolean;
-    entity?: string;
-    entityId?: string;
-}
-
-export interface NotificationLog {
-  id: number;
-  status: 'SENT' | 'FAILED';
-  channel: 'EMAIL' | 'WHATSAPP';
-  recipient: string;
-  subject: string;
-  content: string;
-  userName: string;
-  createdAt: string;
-}
-
-export interface RoleDefinition {
-  id: string;
-  label: string;
-  description: string;
-  defaultPermissions: string[];
-  requiredModule?: 'odonto' | 'services' | 'intelligence' | 'optical';
-}
-
-export const ROLE_DEFINITIONS: RoleDefinition[] = [
-  {
-      id: 'ADMIN',
-      label: 'Administrador Proprietário',
-      description: 'Acesso irrestrito a todos os módulos, configurações financeiras e gestão de equipe.',
-      defaultPermissions: []
-  },
-  {
-      id: 'FIN_MANAGER',
-      label: 'Gerente Administrativo',
-      description: 'Foco total em gestão financeira, contas bancárias, relatórios e auditoria.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_REPORTS', 'FIN_GOALS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'SYS_LOGS']
-  },
-  {
-      id: 'SALES_OPTICAL',
-      label: 'Vendedor de Ótica',
-      description: 'Acesso a vendas, receitas RX, catálogo de produtos e agenda de exames.',
-      requiredModule: 'optical',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE']
-  },
-  {
-      id: 'LAB_TECHNICIAN',
-      label: 'Técnico de Laboratório',
-      description: 'Acesso restrito a Ordens de Serviço (Laboratório) e Receitas RX.',
-      requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX']
-  },
-  {
-      id: 'DENTIST',
-      label: 'Dentista / Clínico',
-      description: 'Acesso a agenda clínica e prontuários odontológicos.',
-      requiredModule: 'odonto',
-      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'FIN_CONTACTS']
-  }
-];
-
 export interface HelpStep {
   id: string;
   targetId: string;
@@ -576,4 +548,47 @@ export interface KanbanColumnConfig {
   label: string;
   color: string;
   borderColor: string;
+}
+
+/* Fix: Adding missing exported interfaces used in storageService and LogsView */
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface AuditLog {
+  id: number;
+  userId: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  details: string;
+  timestamp: string;
+  previousState?: any;
+  changes?: any;
+  familyId: string;
+  userName?: string;
+  isDeleted?: boolean;
+}
+
+export interface NotificationLog {
+  id: number;
+  status: string;
+  channel: string;
+  recipient: string;
+  subject: string;
+  content: string;
+  userName: string;
+  createdAt: string;
+}
+
+/* Fix: Adding missing AppNotification interface used in App.tsx and NotificationPanel */
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  entity?: string;
+  timestamp: string;
+  isRead: boolean;
 }

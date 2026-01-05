@@ -31,9 +31,6 @@ const io = new Server(httpServer, {
   pingTimeout: 60000
 });
 
-/**
- * Helper para auditoria e broadcast em tempo real.
- */
 const logAudit = (poolInstance, userId, action, entity, entityId, details, previousState, changes, familyIdOverride) => {
     return createAuditLog(poolInstance, io, { userId, action, entity, entityId, details, previousState, changes, familyIdOverride });
 };
@@ -44,33 +41,39 @@ io.on('connection', (socket) => {
   socket.on('join_family', (familyId) => {
     if (familyId) {
         const room = String(familyId).trim();
-        
-        // Limpeza de salas antigas antes de ingressar na nova
-        socket.rooms.forEach(r => {
-            if (r !== socket.id) {
-                socket.leave(r);
-                console.log(`🚪 [SOCKET] Cliente ${socket.id} saiu da sala antiga: [${r}]`);
-            }
-        });
-        
+        socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
         socket.join(room);
-        console.log(`🏠 [SOCKET] Cliente ${socket.id} ingressou na sala familiar/PJ: [${room}]`);
-        
-        // Confirmação para o cliente
         socket.emit('joined_room', { room, timestamp: new Date() });
-    } else {
-        console.warn(`⚠️ [SOCKET] Tentativa de ingresso em sala por ${socket.id} sem identificador válido.`);
     }
   });
 
+  // SISTEMA DE CHAT REALTIME
+  socket.on('SEND_MESSAGE', async (msg) => {
+      if (!msg.familyId) return;
+      const room = String(msg.familyId).trim();
+      
+      try {
+          const id = msg.id || Date.now().toString();
+          // Persistência no banco
+          await pool.query(
+              `INSERT INTO chat_messages (id, sender_id, sender_name, receiver_id, family_id, content, type, attachment_url)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [id, msg.senderId, msg.senderName, msg.receiverId || null, room, msg.content, msg.type || 'TEXT', msg.attachmentUrl || null]
+          );
+
+          // Broadcast para a sala (incluindo o remetente para confirmação visual)
+          io.to(room).emit('NEW_MESSAGE', { ...msg, id, createdAt: new Date() });
+      } catch (e) {
+          console.error("[CHAT ERROR] Falha ao processar mensagem:", e.message);
+      }
+  });
+
   socket.on('disconnect', (reason) => {
-      console.log(`🔌 [SOCKET] Cliente desconectado: ${socket.id} | Motivo: ${reason}`);
+      console.log(`🔌 [SOCKET] Cliente desconectado: ${socket.id}`);
   });
 });
 
 app.use(cors());
-
-// Webhook precisa do body RAW, os outros precisam de JSON
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
@@ -82,77 +85,42 @@ app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 app.use('/api', billingRoutes(logAudit));
 
-// --- Static Files Logic ---
-const rootPath = process.cwd();
-const distPath = path.join(rootPath, 'dist');
-const publicPath = path.join(rootPath, 'public');
-
-const staticOptions = {
-    setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-        }
-        if (filePath.endsWith('.json')) {
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        }
-        if (filePath.endsWith('sw.js')) {
-            res.setHeader('Content-Type', 'application/javascript');
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-        }
-    }
-};
+// Rota de Histórico de Chat
+app.get('/api/chat/history', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.sendStatus(401);
+    const familyId = req.query.familyId;
+    try {
+        const history = await pool.query(
+            `SELECT * FROM chat_messages WHERE family_id = $1 ORDER BY created_at ASC LIMIT 200`,
+            [familyId]
+        );
+        res.json(history.rows.map(r => ({
+            id: r.id,
+            senderId: r.sender_id,
+            senderName: r.sender_name,
+            receiverId: r.receiver_id,
+            familyId: r.family_id,
+            content: r.content,
+            type: r.type,
+            attachmentUrl: r.attachment_url,
+            createdAt: r.created_at
+        })));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 const renderIndex = (req, res) => {
-    const pathsToTry = [
-        path.join(distPath, 'index.html'),
-        path.join(rootPath, 'index.html')
-    ];
-    
-    let indexPath = pathsToTry.find(p => fs.existsSync(p));
-
+    const indexPath = [path.join(process.cwd(), 'dist/index.html'), path.join(process.cwd(), 'index.html')].find(p => fs.existsSync(p));
     if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        
-        let googleId = process.env.GOOGLE_CLIENT_ID;
-        if (!googleId || googleId === "" || googleId.includes("__GOOGLE_CLIENT_ID__")) {
-            googleId = "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com";
-        }
-        
-        content = content.replace(/__GOOGLE_CLIENT_ID__/g, googleId);
+        content = content.replace(/__GOOGLE_CLIENT_ID__/g, process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com");
         content = content.replace(/__API_KEY__/g, process.env.API_KEY || "");
-        content = content.replace(/__PAGARME_ENC_KEY__/g, process.env.PAGARME_ENC_KEY || "");
-        
-        res.set({
-            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'Content-Type': 'text/html; charset=utf-8'
-        });
-
         res.send(content);
-    } else {
-        res.status(404).send('Sistema em inicialização...');
-    }
+    } else res.status(404).send('Sistema em inicialização...');
 };
 
 app.get('/', renderIndex);
-app.use(express.static(distPath, { ...staticOptions, index: false }));
-app.use(express.static(publicPath, { ...staticOptions, index: false }));
-app.use(express.static(rootPath, { ...staticOptions, index: false }));
+app.use(express.static(path.join(process.cwd(), 'dist')));
+app.get('*', (req, res) => { if (!req.path.startsWith('/api/')) renderIndex(req, res); else res.sendStatus(404); });
 
-app.get('*', (req, res) => {
-    const isApiRequest = req.path.startsWith('/api/');
-    if (isApiRequest) return res.status(404).end();
-    renderIndex(req, res);
-});
-
-const PORT = process.env.PORT || 8080;
-
-initDb().then(() => {
-    httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
-    });
-}).catch(err => {
-    console.error("❌ [SERVER] Falha crítica no banco de dados:", err);
-    process.exit(1);
-});
+initDb().then(() => httpServer.listen(process.env.PORT || 8080, '0.0.0.0', () => console.log(`🚀 [SERVER] Operacional`)));

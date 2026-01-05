@@ -33,9 +33,18 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS goals (id TEXT PRIMARY KEY, name TEXT, target_amount DECIMAL(15,2), current_amount DECIMAL(15,2), deadline DATE, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS company_profiles (id TEXT PRIMARY KEY, trade_name TEXT, legal_name TEXT, cnpj TEXT, tax_regime TEXT, cnae TEXT, city TEXT, state TEXT, has_employees BOOLEAN, issues_invoices BOOLEAN, user_id TEXT, family_id TEXT, zip_code TEXT, street TEXT, number TEXT, neighborhood TEXT, phone TEXT, email TEXT, secondary_cnaes TEXT)`,
         `CREATE TABLE IF NOT EXISTS branches (id TEXT PRIMARY KEY, name TEXT, code TEXT, city TEXT, phone TEXT, color TEXT, is_active BOOLEAN DEFAULT TRUE, family_id TEXT, deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS cost_centers (id TEXT PRIMARY KEY, name TEXT, code TEXT, family_id TEXT, deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS departments (id TEXT PRIMARY KEY, name TEXT, family_id TEXT, deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, family_id TEXT, deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT REFERENCES users(id),
+            sender_name TEXT,
+            receiver_id TEXT, -- NULL para chat da família
+            family_id TEXT,
+            content TEXT,
+            type TEXT DEFAULT 'TEXT', -- TEXT, IMAGE, AUDIO, FILE
+            attachment_url TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            is_read BOOLEAN DEFAULT FALSE
+        )`,
         `CREATE TABLE IF NOT EXISTS module_services (id TEXT PRIMARY KEY, name TEXT, code TEXT, default_price DECIMAL(15,2), module_tag TEXT, user_id TEXT, family_id TEXT, type TEXT DEFAULT 'SERVICE', cost_price DECIMAL(15,2), unit TEXT, default_duration INTEGER DEFAULT 0, description TEXT, image_url TEXT, brand TEXT, items JSONB DEFAULT '[]', is_composite BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, type TEXT, description TEXT, contact_id TEXT, amount DECIMAL(15,2), gross_amount DECIMAL(15,2), discount_amount DECIMAL(15,2), tax_amount DECIMAL(15,2), items JSONB DEFAULT '[]', date DATE, status TEXT, transaction_id TEXT, user_id TEXT, family_id TEXT, access_token TEXT, branch_id TEXT, rx_id TEXT, assignee_id TEXT, assignee_name TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, number SERIAL, title TEXT, description TEXT, contact_id TEXT, status TEXT, total_amount DECIMAL(15,2) DEFAULT 0, start_date DATE, end_date DATE, user_id TEXT, family_id TEXT, type TEXT, origin TEXT, priority TEXT, opened_at TIMESTAMP DEFAULT NOW(), items JSONB DEFAULT '[]', branch_id TEXT, rx_id TEXT, assignee_id TEXT, assignee_name TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
@@ -79,23 +88,7 @@ export const initDb = async () => {
     
     try {
         for (const q of queries) { await pool.query(q); }
-
-        const migrations = [
-            `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS family_id TEXT`,
-            `CREATE INDEX IF NOT EXISTS idx_audit_family ON audit_logs(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_users_family ON users(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_acc_family ON accounts(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_trans_family ON transactions(family_id)`,
-            `CREATE INDEX IF NOT EXISTS idx_contacts_family ON contacts(family_id)`,
-            // Garantir que logs órfãos recebam o family_id do usuário que os criou (retroatividade)
-            `UPDATE audit_logs al SET family_id = u.family_id FROM users u WHERE al.user_id = u.id AND al.family_id IS NULL`
-        ];
-
-        for (const m of migrations) {
-            try { await pool.query(m); } catch (e) {}
-        }
-
-        console.log("✅ [DATABASE] Multi-tenancy Isolation Hardened.");
+        console.log("✅ [DATABASE] Sistema operacional.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na inicialização:", e);
     }
