@@ -410,7 +410,6 @@ export interface FinancialGoal {
 
 export interface CompanyProfile {
   id: string;
-  // Fix: Added familyId to interface to support multi-tenant filtering in App.tsx
   familyId?: string;
   tradeName: string;
   legalName: string;
@@ -517,22 +516,36 @@ export interface RoleDefinition {
 export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
       id: 'ADMIN',
-      label: 'Administrador',
-      description: 'Acesso total ao sistema.',
+      label: 'Administrador Proprietário',
+      description: 'Acesso irrestrito a todos os módulos, configurações financeiras e gestão de equipe.',
       defaultPermissions: []
   },
   {
       id: 'FIN_MANAGER',
-      label: 'Gerente Financeiro',
-      description: 'Gestão completa de contas.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_REPORTS']
+      label: 'Gerente Administrativo',
+      description: 'Foco total em gestão financeira, contas bancárias, relatórios e auditoria.',
+      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_REPORTS', 'FIN_GOALS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'SYS_LOGS']
   },
   {
-      id: 'SALES_REP',
-      label: 'Vendedor',
-      description: 'Foco em orçamentos e vendas.',
+      id: 'SALES_OPTICAL',
+      label: 'Vendedor de Ótica',
+      description: 'Acesso a vendas, receitas RX, catálogo de produtos e agenda de exames.',
+      requiredModule: 'optical',
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE']
+  },
+  {
+      id: 'LAB_TECHNICIAN',
+      label: 'Técnico de Laboratório',
+      description: 'Acesso restrito a Ordens de Serviço (Laboratório) e Receitas RX.',
       requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'SRV_CLIENTS']
+      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX']
+  },
+  {
+      id: 'DENTIST',
+      label: 'Dentista / Clínico',
+      description: 'Acesso a agenda clínica e prontuários odontológicos.',
+      requiredModule: 'odonto',
+      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'FIN_CONTACTS']
   }
 ];
 

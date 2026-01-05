@@ -5,13 +5,13 @@ import StatCard from './StatCard';
 import TransactionList from './TransactionList';
 import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
-import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle, ShieldAlert } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
 
 interface DashboardProps {
   state: AppState;
   settings?: AppSettings;
-  currentUser?: User;
+  currentUser: User;
   onAddTransaction: (t: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
   onDeleteTransaction: (id: string) => void;
   onEditTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
@@ -28,12 +28,24 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [loadingDiag, setLoadingDiag] = useState(false);
 
   const activeModules = settings?.activeModules || {};
-  const isOptical = activeModules.optical === true;
+  
+  // LOGICA DE PERMISSÃO: Extrai permissões do workspace atual do usuário
+  const familyId = currentUser.familyId || (currentUser as any).family_id;
+  const currentWorkspace = currentUser.workspaces?.find(w => w.id === familyId);
+  const isAdmin = currentUser.id === familyId || currentWorkspace?.role === 'ADMIN';
+  const permissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
+
+  // Helpers de Visibilidade
+  const canSeeFinance = isAdmin || permissions.includes('FIN_TRANSACTIONS') || permissions.includes('FIN_REPORTS');
+  const canSeeAccounts = isAdmin || permissions.includes('FIN_ACCOUNTS');
+  const canSeeOptical = (isAdmin || permissions.includes('OPTICAL_RX') || permissions.includes('SRV_OS')) && activeModules.optical;
+  const canSeeOS = isAdmin || permissions.includes('SRV_OS');
+  const canManageTrans = isAdmin || permissions.includes('FIN_TRANSACTIONS');
 
   useEffect(() => {
     const fetchDiag = async () => {
-      const showIntelligence = activeModules.intelligence && (currentUser?.role === 'ADMIN' || currentUser?.role === 'FIN_MANAGER');
-      if (showIntelligence && state && state.transactions && state.transactions.length > 0) {
+      const showIntelligence = activeModules.intelligence && (isAdmin || permissions.includes('FIN_ADVISOR') || permissions.includes('DIAG_HUB'));
+      if (showIntelligence && state?.transactions?.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
@@ -43,13 +55,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length, activeModules.intelligence, currentUser?.role]);
+  }, [state?.transactions?.length, activeModules.intelligence, isAdmin, permissions]);
 
   const metrics = useMemo(() => {
     const now = new Date();
     const firstDay = now.toISOString().split('T')[0].substring(0, 8) + '01';
     
-    // Confiamos no state recebido, pois ele já é filtrado pelo App.tsx (safeState)
     const transactions = state.transactions || [];
     const accounts = state.accounts || [];
 
@@ -80,98 +91,114 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Painel de Controle</h1>
-          <p className="text-gray-500 font-medium">Bem-vindo à sua gestão <span className="text-indigo-600 font-bold">{isOptical ? 'Ótica' : 'Financeira'}</span>.</p>
+          <p className="text-gray-500 font-medium">
+            Resumo personalizado para seu perfil: <span className="text-indigo-600 font-bold">{isAdmin ? 'Administrador' : currentWorkspace?.role || 'Membro'}</span>.
+          </p>
         </div>
-        <button 
-          onClick={() => { setEditingTransaction(null); setTransModalOpen(true); }}
-          className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-xl shadow-slate-200"
-        >
-          <Plus className="w-5 h-5" /> Novo Lançamento
-        </button>
+        {canManageTrans && (
+            <button 
+                onClick={() => { setEditingTransaction(null); setTransModalOpen(true); }}
+                className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-xl shadow-slate-200"
+            >
+                <Plus className="w-5 h-5" /> Novo Lançamento
+            </button>
+        )}
       </div>
 
+      {/* CARDS DINÂMICOS POR PERMISSÃO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
-              <div className="flex justify-between items-start mb-2">
-                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Faturamento Realizado</p>
-                  <TrendingUp className="w-5 h-5 text-emerald-500" />
+          
+          {/* Card Financeiro: Só se tiver permissão financeira */}
+          {canSeeFinance && (
+              <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Faturamento Realizado</p>
+                      <TrendingUp className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <h3 className="text-2xl font-black text-gray-900">
+                      {metrics.entradasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </h3>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Acumulado no mês</p>
               </div>
-              <h3 className="text-2xl font-black text-gray-900">
-                  {metrics.entradasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Acumulado no mês</p>
-          </div>
+          )}
 
-          {isOptical && (
+          {/* Cards de Ótica: Visível apenas para quem tem acesso a OS ou RX */}
+          {canSeeOptical && (
               <>
-                <div onClick={() => onChangeView('OPTICAL_LAB')} className="bg-indigo-600 p-5 rounded-[2rem] text-white shadow-lg shadow-indigo-100 cursor-pointer hover:scale-[1.02] transition-all border border-indigo-500 group relative overflow-hidden">
+                <div onClick={() => canSeeOS && onChangeView('OPTICAL_LAB')} className="bg-indigo-600 p-5 rounded-[2rem] text-white shadow-lg shadow-indigo-100 cursor-pointer hover:scale-[1.02] transition-all border border-indigo-500 group relative overflow-hidden">
                     <Monitor className="absolute -right-4 -bottom-4 w-24 h-24 text-white/10 group-hover:rotate-12 transition-transform" />
                     <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Lab (Em Montagem)</p>
                     <h4 className="text-3xl font-black mt-1">{metrics.opticalStats.labPendentes}</h4>
-                    <div className="mt-4 flex items-center gap-1 text-[10px] font-bold bg-white/20 w-fit px-2 py-0.5 rounded-full uppercase">Ver Ordens <ArrowRight className="w-3 h-3"/></div>
+                    <div className="mt-4 flex items-center gap-1 text-[10px] font-bold bg-white/20 w-fit px-2 py-0.5 rounded-full uppercase">Gerenciar OS <ArrowRight className="w-3 h-3"/></div>
                 </div>
                 <div onClick={() => onChangeView('OPTICAL_RX')} className="bg-white p-5 rounded-[2rem] border-2 border-indigo-100 shadow-sm cursor-pointer hover:border-indigo-600 transition-all group relative overflow-hidden">
                     <Eye className="absolute -right-4 -bottom-4 w-24 h-24 text-indigo-50 group-hover:scale-110 transition-transform" />
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Novas Receitas RX</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Receitas RX Ativas</p>
                     <h4 className="text-3xl font-black text-indigo-900 mt-1">{metrics.opticalStats.rxNovas}</h4>
-                    <p className="text-[10px] font-bold text-indigo-500 mt-2 uppercase">Prescrições do mês</p>
-                </div>
-                <div className={`p-5 rounded-[2rem] border shadow-sm transition-all ${metrics.opticalStats.osAtrasadas > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-gray-100'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                        <p className={`text-[10px] font-black uppercase tracking-widest ${metrics.opticalStats.osAtrasadas > 0 ? 'text-rose-600' : 'text-gray-400'}`}>Atrasos Lab</p>
-                        <AlertCircle className={`w-5 h-5 ${metrics.opticalStats.osAtrasadas > 0 ? 'text-rose-500 animate-pulse' : 'text-gray-300'}`} />
-                    </div>
-                    <h3 className={`text-2xl font-black ${metrics.opticalStats.osAtrasadas > 0 ? 'text-rose-600' : 'text-gray-900'}`}>{metrics.opticalStats.osAtrasadas}</h3>
-                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Ordens vencidas</p>
+                    <p className="text-[10px] font-bold text-indigo-500 mt-2 uppercase">Histórico do mês</p>
                 </div>
               </>
           )}
 
-          {!isOptical && (
+          {/* Card de Saldo: Restrito a Administradores ou Financeiro Senior */}
+          {canSeeAccounts ? (
               <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
                   <div className="flex justify-between items-start mb-2">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Saldo Total</p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Saldo Disponível</p>
                       <Landmark className="w-5 h-5 text-indigo-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
                       {metrics.saldoReal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </h3>
-                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Disponível em contas</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Consolidação de contas</p>
+              </div>
+          ) : (
+              /* Placeholder se não puder ver saldo para manter o grid */
+              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-dashed border-gray-200 flex flex-col justify-center items-center text-center">
+                  <ShieldAlert className="w-6 h-6 text-gray-300 mb-2" />
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Informações Restritas</p>
+                  <p className="text-[8px] text-gray-300 mt-1 uppercase">Contate o Administrador</p>
               </div>
           )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 lg:col-span-2">
-          <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
-              <Activity className="w-5 h-5 text-emerald-500" />
-              Fluxo de Caixa Operacional
-          </h3>
-          <CashFlowChart transactions={metrics.currentTransactions} />
-        </div>
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
-          <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
-              <Receipt className="w-5 h-5 text-indigo-500" />
-              Gastos por Categoria
-          </h3>
-          <ExpensesByCategory transactions={metrics.currentTransactions} />
-        </div>
-      </div>
+      {/* SEÇÃO DE GRÁFICOS: Visível apenas para quem tem permissão de relatórios */}
+      {canSeeFinance && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 lg:col-span-2">
+              <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
+                  <Activity className="w-5 h-5 text-emerald-500" />
+                  Evolução do Faturamento
+              </h3>
+              <CashFlowChart transactions={metrics.currentTransactions} />
+            </div>
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
+              <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
+                  <Receipt className="w-5 h-5 text-indigo-500" />
+                  Composição de Gastos
+              </h3>
+              <ExpensesByCategory transactions={metrics.currentTransactions} />
+            </div>
+          </div>
+      )}
 
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-            <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Movimentações do Dia</h3>
-            <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Histórico Completo <ArrowRight className="w-4 h-4" /></button>
-        </div>
-        <TransactionList 
-            transactions={recentTransactions} 
-            accounts={state.accounts} 
-            contacts={state.contacts || []} 
-            onDelete={onDeleteTransaction}
-            onEdit={(t) => { setEditingTransaction(t); setTransModalOpen(true); }}
-            onToggleStatus={onUpdateStatus}
-        />
-      </div>
+      {/* SEÇÃO DE TABELA: Visível apenas se puder ver transações */}
+      {permissions.includes('FIN_TRANSACTIONS') || isAdmin ? (
+          <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Histórico Recente</h3>
+                <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Extrato Completo <ArrowRight className="w-4 h-4" /></button>
+            </div>
+            <TransactionList 
+                transactions={recentTransactions} 
+                accounts={state.accounts} 
+                contacts={state.contacts || []} 
+                onDelete={onDeleteTransaction}
+                onEdit={(t) => { setEditingTransaction(t); setTransModalOpen(true); }}
+                onToggleStatus={onUpdateStatus}
+            />
+          </div>
+      ) : null}
 
       <TransactionModal 
         isOpen={isTransModalOpen} 
