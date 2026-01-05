@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap } from 'lucide-react';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -194,7 +194,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
                             <div className="space-y-4 pt-6 border-t border-gray-100">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-indigo-500" /> Carrinho de Itens</h3>
+                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-indigo-500" /> Itens no Carrinho</h3>
                                     <div className="flex gap-2">
                                         <select 
                                             className="bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase px-4 py-2 rounded-xl border border-indigo-100 outline-none"
@@ -207,9 +207,10 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                 </div>
 
                                 <div className="bg-slate-50 rounded-[2rem] border border-gray-100 shadow-inner overflow-x-auto">
-                                    <table className="w-full text-left">
+                                    <table className="w-full text-left min-w-[700px]">
                                         <thead className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">
                                             <tr>
+                                                <th className="p-5">Visual</th>
                                                 <th className="p-5">Produto / Serviço</th>
                                                 <th className="p-5 w-20 text-center">Qtd</th>
                                                 <th className="p-5 w-32 text-center">Unitário</th>
@@ -218,19 +219,28 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {(formData.items || []).map(item => (
+                                            {(formData.items || []).map(item => {
+                                                const catalogItem = serviceItems.find(si => si.id === item.serviceItemId);
+                                                return (
                                                 <tr key={item.id} className="bg-white/50 hover:bg-white transition-colors">
+                                                    <td className="p-4 w-20">
+                                                        <div className="w-14 h-14 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
+                                                            {catalogItem?.imageUrl ? (
+                                                                <img src={catalogItem.imageUrl} alt="Foto" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <ImageIcon className="w-5 h-5 text-gray-300" />
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                     <td className="p-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0">
-                                                                {serviceItems.find(si => si.id === item.serviceItemId)?.type === 'PRODUCT' ? <Package className="w-4 h-4 text-gray-400"/> : <Zap className="w-4 h-4 text-indigo-400"/>}
-                                                            </div>
+                                                        <div className="flex flex-col">
                                                             <input 
                                                                 type="text" 
                                                                 value={item.description} 
                                                                 onChange={e => handleUpdateItem(item.id, 'description', e.target.value)}
-                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800"
+                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 p-0"
                                                             />
+                                                            {item.code && <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mt-1">Ref: {item.code}</span>}
                                                         </div>
                                                     </td>
                                                     <td className="p-4">
@@ -257,9 +267,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                         <button onClick={() => setFormData(prev => ({...prev, items: prev.items?.filter(i => i.id !== item.id)}))} className="text-gray-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
                                                     </td>
                                                 </tr>
-                                            ))}
+                                            )})}
                                             {(formData.items || []).length === 0 && (
-                                                <tr><td colSpan={5} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione armação e lentes.</td></tr>
+                                                <tr><td colSpan={6} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione armação e lentes.</td></tr>
                                             )}
                                         </tbody>
                                     </table>

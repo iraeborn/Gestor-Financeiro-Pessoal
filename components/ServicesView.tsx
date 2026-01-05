@@ -6,7 +6,7 @@ import {
     Account, CompanyProfile, TaxRegime, OSStatus, OSType, OSOrigin, 
     OSPriority, KanbanItem, KanbanColumnConfig, Member, AppSettings, OpticalRx 
 } from '../types';
-import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wrench, ShoppingBag, FileSignature, FileText, Plus, Search, Trash2, CheckCircle, Clock, X, DollarSign, Calendar, Filter, Box, Tag, Percent, BarChart, AlertTriangle, ArrowRight, TrendingUp, ScanBarcode, Loader2, Globe, Image as ImageIcon, Calculator, ReceiptText, UserCircle, User, Package, Zap, Info, UserCheck, Timer, Layers, ListChecks, RefreshCw, Share2, Send, MessageSquare, FileUp, Download, Monitor, FileSearch, Link2, LayoutGrid, LayoutList, Trello, UserCog, Pencil, Eye, Glasses, Save, ChevronDown, ChevronUp, UploadCloud } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import ApprovalModal from './ApprovalModal';
 import { api, getFamilyMembers } from '../services/storageService';
@@ -85,15 +85,43 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         costPrice: 0,
         isComposite: false,
         items: [],
-        moduleTag: isOpticalContext ? 'optical' : 'general'
+        moduleTag: isOpticalContext ? 'optical' : 'general',
+        imageUrl: ''
     });
+
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const formatCurrency = (val: number | undefined | null) => {
         const amount = typeof val === 'number' ? val : 0;
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
     };
 
-    // --- LOGICA DE ITENS COMPOSTOS ---
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.length) return;
+        setIsUploading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const uploadData = new FormData();
+            uploadData.append('files', e.target.files[0]);
+
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+                body: uploadData
+            });
+
+            if (!res.ok) throw new Error("Falha no upload");
+            const { urls } = await res.json();
+            setFormData(prev => ({ ...prev, imageUrl: urls[0] }));
+            showAlert("Imagem enviada!", "success");
+        } catch (err) {
+            showAlert("Erro ao subir imagem.", "error");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const handleAddComponent = (itemId: string) => {
         const itemToAdd = serviceItems.find(i => i.id === itemId);
         if (!itemToAdd) return;
@@ -109,10 +137,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         };
 
         const updatedItems = [...(formData.items || []), newComponent];
-        
-        // Recalcular custo total automaticamente com base nos componentes
         const newCost = updatedItems.reduce((acc, i) => acc + ((i.costPrice || 0) * i.quantity), 0);
-        
         setFormData({ ...formData, items: updatedItems, costPrice: newCost });
     };
 
@@ -137,14 +162,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         const os = serviceOrders.find(o => o.id === itemId);
         if (!os) return;
         onSaveOS({ ...os, status: newStatus as OSStatus });
-        showAlert(`OS #${os.id.substring(0,6)} movida para ${newStatus}`, "info");
     };
 
     const handleSaleStatusUpdate = async (itemId: string, newStatus: string) => {
         const order = commercialOrders.find(o => o.id === itemId);
         if (!order) return;
         onSaveOrder({ ...order, status: newStatus as any });
-        showAlert(`Pedido #${order.id.substring(0,6)} movido para ${newStatus}`, "info");
     };
 
     const header = useMemo(() => {
@@ -166,7 +189,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const handleOpenAction = (item?: any) => {
         if (isCatalog) {
             if (item) setFormData({ ...item, items: item.items || [], isComposite: item.isComposite || false });
-            else setFormData({ type: 'PRODUCT', defaultPrice: 0, costPrice: 0, isComposite: false, items: [], moduleTag: 'general' });
+            else setFormData({ type: 'PRODUCT', defaultPrice: 0, costPrice: 0, isComposite: false, items: [], moduleTag: 'general', imageUrl: '' });
             setIsModalOpen(true);
         } else if (isOS) {
             if (item) onEditOS(item);
@@ -196,7 +219,6 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         if (!formData.name) return showAlert("O nome é obrigatório", "warning");
         if (onSaveCatalogItem) {
             onSaveCatalogItem({ ...formData, id: formData.id || crypto.randomUUID() } as ServiceItem);
-            showAlert("Item do catálogo salvo!", "success");
             setIsModalOpen(false);
         }
     };
@@ -243,36 +265,44 @@ const ServicesView: React.FC<ServicesViewProps> = ({
         }
 
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 px-1">
                 {filtered.map(item => (
                     <div key={item.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col h-full">
-                        <div className="p-6 flex-1">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{item.type || 'Ref'} #{item.id.substring(0,4)}</span>
-                                    <h3 className="font-bold text-gray-800 leading-tight line-clamp-2">{item.name || item.title || item.description}</h3>
-                                </div>
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${item.isComposite ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-600'}`}>
-                                    {item.isComposite ? 'COMPOSTO' : (item.type === 'PRODUCT' ? 'Produto' : 'Serviço')}
-                                </span>
-                            </div>
-                            
-                            {isCatalog && (
-                                <div className="space-y-2 mb-4">
-                                    <p className="text-xs text-gray-500 line-clamp-2">{item.description || 'Sem descrição cadastrada.'}</p>
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-[9px] font-black text-gray-400 uppercase">Preço Venda: {formatCurrency(item.defaultPrice)}</span>
-                                        <span className="text-[9px] font-black text-emerald-500 uppercase">Custo: {formatCurrency(item.costPrice)}</span>
+                        {isCatalog && (
+                            <div className="aspect-square relative bg-slate-50 overflow-hidden border-b border-gray-50 flex items-center justify-center">
+                                {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2 opacity-20">
+                                        {item.type === 'PRODUCT' ? <Package className="w-12 h-12" /> : <Zap className="w-12 h-12" />}
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Sem Imagem</span>
                                     </div>
+                                )}
+                                <div className="absolute top-4 left-4">
+                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase shadow-sm border ${item.isComposite ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-100'}`}>
+                                        {item.isComposite ? 'Kit / Combo' : (item.type === 'PRODUCT' ? 'Produto' : 'Serviço')}
+                                    </span>
                                 </div>
-                            )}
+                            </div>
+                        )}
+                        
+                        <div className="p-6 flex-1">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">#{item.id.substring(0,4)}</span>
+                                {isCatalog && item.code && <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Ref: {item.code}</span>}
+                            </div>
+                            <h3 className="font-bold text-gray-800 leading-tight line-clamp-2 text-lg mb-2">{item.name || item.title || item.description}</h3>
+                            {isCatalog && item.description && <p className="text-xs text-gray-400 line-clamp-2 font-medium">{item.description}</p>}
                         </div>
                         
-                        <div className="px-6 py-4 border-t border-gray-50 flex justify-between items-center bg-gray-50/30 mt-auto">
-                            <div className="text-lg font-black text-gray-900">{formatCurrency(item.defaultPrice || item.amount || item.totalAmount)}</div>
-                            <div className="flex gap-1">
-                                <button onClick={() => handleOpenAction(item)} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl transition-colors"><Pencil className="w-4 h-4"/></button>
-                                <button onClick={() => handleDeleteRecord(isCatalog ? 'CATALOG' : (isOS ? 'OS' : 'SALE'), item.id, item.name || item.title)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition-colors"><Trash2 className="w-4 h-4"/></button>
+                        <div className="px-6 py-5 border-t border-gray-50 flex justify-between items-center bg-gray-50/20 mt-auto">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Preço Sugerido</span>
+                                <div className="text-xl font-black text-gray-900">{formatCurrency(item.defaultPrice || item.amount || item.totalAmount)}</div>
+                            </div>
+                            <div className="flex gap-1.5">
+                                <button onClick={() => handleOpenAction(item)} className="p-2.5 text-indigo-600 bg-white border border-gray-100 shadow-sm hover:bg-indigo-50 rounded-xl transition-all"><Pencil className="w-4 h-4"/></button>
+                                <button onClick={() => handleDeleteRecord(isCatalog ? 'CATALOG' : (isOS ? 'OS' : 'SALE'), item.id, item.name || item.title)} className="p-2.5 text-rose-500 bg-white border border-gray-100 shadow-sm hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-4 h-4"/></button>
                             </div>
                         </div>
                     </div>
@@ -330,87 +360,116 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-6 h-6"/></button>
                         </div>
                         <form onSubmit={handleSaveCatalog} className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Produto ou Serviço</label>
-                                    <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Ex: Armação Ray-Ban Aviador" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Tipo de Item</label>
-                                    <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})}>
-                                        <option value="PRODUCT">📦 Produto / Mercadoria</option>
-                                        <option value="SERVICE">🛠️ Serviço / Mão de Obra</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Código / Ref Interna</label>
-                                    <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="SKU-001" />
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Layers className="w-4 h-4 text-amber-500" />
-                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Estrutura de Composição</span>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                {/* Upload de Foto */}
+                                <div className="md:col-span-1">
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-3 ml-1 tracking-widest">Foto do Produto</label>
+                                    <div 
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={`aspect-square rounded-[2rem] border-2 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group ${formData.imageUrl ? 'border-indigo-500' : 'border-gray-200 hover:border-indigo-400 bg-gray-50'}`}
+                                    >
+                                        {formData.imageUrl ? (
+                                            <>
+                                                <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                                                <div className="absolute inset-0 bg-indigo-600/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <UploadCloud className="w-8 h-8 text-white" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /> : <ImageIcon className="w-8 h-8 text-gray-300" />}
+                                                <span className="text-[10px] font-black uppercase text-gray-400 mt-2">{isUploading ? 'Enviando...' : 'Clique para subir'}</span>
+                                            </>
+                                        )}
+                                        <input ref={fileInputRef} type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
                                     </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={formData.isComposite} onChange={e => setFormData({...formData, isComposite: e.target.checked, items: e.target.checked ? formData.items : []})} />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                                        <span className="ml-3 text-xs font-bold text-slate-600">Item Composto (Kit/Combo)</span>
-                                    </label>
+                                    <p className="text-[9px] text-gray-400 text-center mt-3 font-medium uppercase italic">Dica: Fotos reais aumentam a confiança do cliente na hora da escolha.</p>
                                 </div>
 
-                                {formData.isComposite && (
-                                    <div className="space-y-4 animate-fade-in">
-                                        <div className="flex gap-2">
-                                            <select 
-                                                className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                                                onChange={(e) => { if(e.target.value) handleAddComponent(e.target.value); e.target.value = ''; }}
-                                            >
-                                                <option value="">Selecionar componente p/ kit...</option>
-                                                {serviceItems.filter(i => i.id !== formData.id && !i.isComposite).map(i => (
-                                                    <option key={i.id} value={i.id}>{i.name} (Custo: {formatCurrency(i.costPrice)})</option>
-                                                ))}
+                                <div className="md:col-span-2 space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Produto ou Serviço</label>
+                                            <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Ex: Armação Ray-Ban Aviador" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Tipo de Item</label>
+                                            <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})}>
+                                                <option value="PRODUCT">📦 Produto / Mercadoria</option>
+                                                <option value="SERVICE">🛠️ Serviço / Mão de Obra</option>
                                             </select>
                                         </div>
-
-                                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                                            <table className="w-full text-left text-xs">
-                                                <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[9px] border-b border-slate-200">
-                                                    <tr>
-                                                        <th className="p-3">Componente</th>
-                                                        <th className="p-3 text-center">Qtd</th>
-                                                        <th className="p-3 text-right">Custo Unit</th>
-                                                        <th className="p-3 text-right">Ações</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {(formData.items || []).map(comp => (
-                                                        <tr key={comp.id}>
-                                                            <td className="p-3 font-bold text-slate-700">{comp.description}</td>
-                                                            <td className="p-3 text-center">
-                                                                <input 
-                                                                    type="number" 
-                                                                    className="w-12 text-center border-none bg-slate-50 rounded p-1 font-black" 
-                                                                    value={comp.quantity} 
-                                                                    onChange={e => handleUpdateComponentQty(comp.id, Number(e.target.value))}
-                                                                />
-                                                            </td>
-                                                            <td className="p-3 text-right font-medium text-slate-400">{formatCurrency(comp.costPrice)}</td>
-                                                            <td className="p-3 text-right">
-                                                                <button type="button" onClick={() => handleRemoveComponent(comp.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                    {(!formData.items || formData.items.length === 0) && (
-                                                        <tr><td colSpan={4} className="p-6 text-center text-slate-300 italic">Adicione produtos para formar este kit.</td></tr>
-                                                    )}
-                                                </tbody>
-                                            </table>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Código / Ref Interna</label>
+                                            <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value})} placeholder="SKU-001" />
                                         </div>
                                     </div>
-                                )}
+
+                                    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <Layers className="w-4 h-4 text-amber-500" />
+                                                <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Estrutura de Composição</span>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={formData.isComposite} onChange={e => setFormData({...formData, isComposite: e.target.checked, items: e.target.checked ? formData.items : []})} />
+                                                <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                                                <span className="ml-3 text-xs font-bold text-slate-600">Item Composto (Kit/Combo)</span>
+                                            </label>
+                                        </div>
+
+                                        {formData.isComposite && (
+                                            <div className="space-y-4 animate-fade-in">
+                                                <div className="flex gap-2">
+                                                    <select 
+                                                        className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none"
+                                                        onChange={(e) => { if(e.target.value) handleAddComponent(e.target.value); e.target.value = ''; }}
+                                                    >
+                                                        <option value="">Selecionar componente p/ kit...</option>
+                                                        {serviceItems.filter(i => i.id !== formData.id && !i.isComposite).map(i => (
+                                                            <option key={i.id} value={i.id}>{i.name} (Custo: {formatCurrency(i.costPrice)})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                                                    <table className="w-full text-left text-xs">
+                                                        <thead className="bg-slate-100 text-slate-500 font-black uppercase text-[9px] border-b border-slate-200">
+                                                            <tr>
+                                                                <th className="p-3">Componente</th>
+                                                                <th className="p-3 text-center">Qtd</th>
+                                                                <th className="p-3 text-right">Custo Unit</th>
+                                                                <th className="p-3 text-right">Ações</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {(formData.items || []).map(comp => (
+                                                                <tr key={comp.id}>
+                                                                    <td className="p-3 font-bold text-slate-700">{comp.description}</td>
+                                                                    <td className="p-3 text-center">
+                                                                        <input 
+                                                                            type="number" 
+                                                                            className="w-12 text-center border-none bg-slate-50 rounded p-1 font-black" 
+                                                                            value={comp.quantity} 
+                                                                            onChange={e => handleUpdateComponentQty(comp.id, Number(e.target.value))}
+                                                                        />
+                                                                    </td>
+                                                                    <td className="p-3 text-right font-medium text-slate-400">{formatCurrency(comp.costPrice)}</td>
+                                                                    <td className="p-3 text-right">
+                                                                        <button type="button" onClick={() => handleRemoveComponent(comp.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                            {(!formData.items || formData.items.length === 0) && (
+                                                                <tr><td colSpan={4} className="p-6 text-center text-slate-300 italic">Adicione produtos para formar este kit.</td></tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-indigo-50/50 p-8 rounded-[2rem] border border-indigo-100">
