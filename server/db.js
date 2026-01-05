@@ -16,7 +16,7 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
     connectionString: connectionString,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000, // Aumentado para 10s para evitar 503 por timeout de conexão
+    connectionTimeoutMillis: 10000,
   };
 }
 
@@ -42,6 +42,26 @@ export const initDb = async () => {
             user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP
         )`,
         `CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT, type TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS service_items (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            code TEXT,
+            type TEXT,
+            default_price DECIMAL(15,2) DEFAULT 0,
+            cost_price DECIMAL(15,2) DEFAULT 0,
+            module_tag TEXT,
+            default_duration INTEGER,
+            is_composite BOOLEAN DEFAULT FALSE,
+            items JSONB DEFAULT '[]',
+            brand TEXT,
+            description TEXT,
+            image_url TEXT,
+            unit TEXT,
+            user_id TEXT REFERENCES users(id),
+            family_id TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            deleted_at TIMESTAMP
+        )`,
         `CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, description TEXT, amount DECIMAL(15,2), type TEXT, category TEXT, date DATE, status TEXT, account_id TEXT, destination_account_id TEXT, contact_id TEXT, user_id TEXT, family_id TEXT, is_recurring BOOLEAN, recurrence_frequency TEXT, recurrence_end_date DATE, interest_rate DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, goal_id TEXT, receipt_url TEXT, receipt_urls JSONB DEFAULT '[]', branch_id TEXT, cost_center_id TEXT, department_id TEXT, project_id TEXT, classification TEXT)`,
         `CREATE TABLE IF NOT EXISTS goals (id TEXT PRIMARY KEY, name TEXT, target_amount DECIMAL(15,2), current_amount DECIMAL(15,2), deadline DATE, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS company_profiles (id TEXT PRIMARY KEY, trade_name TEXT, legal_name TEXT, cnpj TEXT, tax_regime TEXT, cnae TEXT, city TEXT, state TEXT, has_employees BOOLEAN, issues_invoices BOOLEAN, user_id TEXT, family_id TEXT, zip_code TEXT, street TEXT, number TEXT, neighborhood TEXT, phone TEXT, email TEXT, secondary_cnaes TEXT)`,
@@ -57,8 +77,8 @@ export const initDb = async () => {
         )`,
         `CREATE TABLE IF NOT EXISTS salesperson_schedules (
             id TEXT PRIMARY KEY,
-            salesperson_id TEXT REFERENCES salespeople(id),
-            branch_id TEXT REFERENCES branches(id),
+            salesperson_id REFERENCES salespeople(id),
+            branch_id REFERENCES branches(id),
             date DATE NOT NULL,
             shift TEXT DEFAULT 'FULL',
             notes TEXT,

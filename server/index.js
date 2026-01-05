@@ -7,8 +7,10 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 import pool, { initDb } from './db.js';
 import { createAuditLog } from './services/audit.js';
+import { uploadFiles } from './services/storage.js';
 
 // Import Routes
 import authRoutes from './routes/auth.js';
@@ -25,6 +27,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
+// Multer para processamento de arquivos em memória antes do envio ao GCS
+const upload = multer({ storage: multer.memoryStorage() });
+
 // --- Socket.io Setup ---
 const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
@@ -36,50 +41,34 @@ const logAudit = (poolInstance, userId, action, entity, entityId, details, previ
     return createAuditLog(poolInstance, io, { userId, action, entity, entityId, details, previousState, changes, familyIdOverride });
 };
 
-// Rastreamento de conexões: Map<SocketId, { userId, familyId }>
 const connectedSockets = new Map();
 
 io.on('connection', (socket) => {
-  console.log(`🔌 [SOCKET] Conexão ativa: ${socket.id}`);
-
   socket.on('join_family', (data) => {
     const familyId = typeof data === 'object' ? data.familyId : data;
     const userId = typeof data === 'object' ? data.userId : null;
-
     if (familyId) {
         const room = String(familyId).trim();
         socket.join(room);
-        
         if (userId) {
             socket.join(userId);
             connectedSockets.set(socket.id, { userId, familyId: room });
-            
-            // Notifica os outros membros que este usuário entrou
             socket.to(room).emit('USER_STATUS', { userId, status: 'ONLINE' });
-            
-            // Envia a lista completa de quem está online para este socket específico
-            const onlineInRoom = Array.from(connectedSockets.values())
-                .filter(u => u.familyId === room)
-                .map(u => u.userId);
+            const onlineInRoom = Array.from(connectedSockets.values()).filter(u => u.familyId === room).map(u => u.userId);
             socket.emit('ONLINE_LIST', [...new Set(onlineInRoom)]);
         }
     }
   });
 
-  // Permite ao Chat solicitar a lista a qualquer momento (ex: ao abrir a aba)
   socket.on('REQUEST_ONLINE_USERS', (familyId) => {
     const room = String(familyId).trim();
-    const onlineInRoom = Array.from(connectedSockets.values())
-        .filter(u => u.familyId === room)
-        .map(u => u.userId);
+    const onlineInRoom = Array.from(connectedSockets.values()).filter(u => u.familyId === room).map(u => u.userId);
     socket.emit('ONLINE_LIST', [...new Set(onlineInRoom)]);
   });
 
-  // SISTEMA DE CHAT REALTIME
   socket.on('SEND_MESSAGE', async (msg) => {
       if (!msg.familyId) return;
       const room = String(msg.familyId).trim();
-      
       try {
           const id = msg.id || Date.now().toString();
           await pool.query(
@@ -87,18 +76,11 @@ io.on('connection', (socket) => {
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
               [id, msg.senderId, msg.senderName, msg.receiverId || null, room, msg.content, msg.type || 'TEXT', msg.attachmentUrl || null]
           );
-
           const payload = { ...msg, id, createdAt: new Date() };
-
-          if (msg.receiverId) {
-              // Se for privada, envia apenas para as salas individuais do remetente e destinatário
-              io.to(msg.receiverId).to(msg.senderId).emit('NEW_MESSAGE', payload);
-          } else {
-              // Se for pública, envia para a sala da família/organização
-              io.to(room).emit('NEW_MESSAGE', payload);
-          }
+          if (msg.receiverId) io.to(msg.receiverId).to(msg.senderId).emit('NEW_MESSAGE', payload);
+          else io.to(room).emit('NEW_MESSAGE', payload);
       } catch (e) {
-          console.error("[CHAT ERROR] Falha ao processar mensagem:", e.message);
+          console.error("[CHAT ERROR]", e.message);
       }
   });
 
@@ -107,16 +89,9 @@ io.on('connection', (socket) => {
       if (socketData) {
           const { userId, familyId } = socketData;
           connectedSockets.delete(socket.id);
-
-          // Verifica se o usuário ainda tem outros sockets ativos (outras abas)
-          const isStillOnline = Array.from(connectedSockets.values())
-              .some(s => s.userId === userId);
-
-          if (!isStillOnline) {
-              io.to(familyId).emit('USER_STATUS', { userId, status: 'OFFLINE' });
-          }
+          const isStillOnline = Array.from(connectedSockets.values()).some(s => s.userId === userId);
+          if (!isStillOnline) io.to(familyId).emit('USER_STATUS', { userId, status: 'OFFLINE' });
       }
-      console.log(`🔌 [SOCKET] Cliente desconectado: ${socket.id}`);
   });
 });
 
@@ -124,7 +99,16 @@ app.use(cors());
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
-// Injeção de dependências nas rotas
+// Rota de Upload - Corrigindo 404
+app.post('/api/upload', authenticateToken, upload.array('files'), async (req, res) => {
+    try {
+        const urls = await uploadFiles(req.files, req.user.id);
+        res.json({ urls });
+    } catch (err) {
+        res.status(500).json({ error: "Falha no upload para o Storage: " + err.message });
+    }
+});
+
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
 app.use('/api', crmRoutes(logAudit));
@@ -132,34 +116,17 @@ app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 app.use('/api', billingRoutes(logAudit));
 
-// Rota de Histórico de Chat - SEGURA
 app.get('/api/chat/history', authenticateToken, async (req, res) => {
     const familyId = req.query.familyId;
     const userId = req.user.id;
-    
     try {
-        // CORREÇÃO CRÍTICA: Retorna apenas mensagens que o usuário pode ver:
-        // 1. receiver_id IS NULL (Canal Geral da Organização)
-        // 2. receiver_id = userId (Mensagens enviadas para ele)
-        // 3. sender_id = userId (Mensagens enviadas por ele)
         const history = await pool.query(
-            `SELECT * FROM chat_messages 
-             WHERE family_id = $1 
-             AND (receiver_id IS NULL OR receiver_id = $2 OR sender_id = $2)
-             ORDER BY created_at ASC LIMIT 300`,
+            `SELECT * FROM chat_messages WHERE family_id = $1 AND (receiver_id IS NULL OR receiver_id = $2 OR sender_id = $2) ORDER BY created_at ASC LIMIT 300`,
             [familyId, userId]
         );
-        
         res.json(history.rows.map(r => ({
-            id: r.id,
-            senderId: r.sender_id,
-            senderName: r.sender_name,
-            receiverId: r.receiver_id,
-            familyId: r.family_id,
-            content: r.content,
-            type: r.type,
-            attachmentUrl: r.attachment_url,
-            createdAt: r.created_at
+            id: r.id, senderId: r.sender_id, senderName: r.sender_name, receiverId: r.receiver_id,
+            familyId: r.family_id, content: r.content, type: r.type, attachmentUrl: r.attachment_url, createdAt: r.created_at
         })));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

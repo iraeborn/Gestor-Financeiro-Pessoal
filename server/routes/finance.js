@@ -10,7 +10,7 @@ const numericFields = [
     'balance', 'amount', 'target_amount', 'current_amount', 
     'total_amount', 'gross_amount', 'discount_amount', 'tax_amount',
     'value', 'unit_price', 'total_price', 'cost_price', 'credit_limit',
-    'interest_rate', 'commission_rate',
+    'interest_rate', 'commission_rate', 'default_price', 'default_duration',
     'sphere_od_longe', 'cyl_od_longe', 'sphere_oe_longe', 'cyl_oe_longe',
     'sphere_od_perto', 'cyl_od_perto', 'sphere_oe_perto', 'cyl_oe_perto',
     'addition', 'dnp_od', 'dnp_oe', 'height_od', 'height_oe'
@@ -41,8 +41,6 @@ export default function(logAudit) {
             const userRole = userRes.rows[0]?.role;
             const isSalesperson = userRole === 'SALES_OPTICAL';
 
-            // Usamos LEFT JOIN para garantir que, se o registro principal existe, ele seja retornado, 
-            // mesmo que os nomes vinculados falhem ou o vendedor associado tenha sido removido.
             const queryDefs = {
                 accounts: ['SELECT id, name, type, family_id, CASE WHEN $2 = true THEN 0 ELSE balance END as balance FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId, isSalesperson]],
                 transactions: isSalesperson 
@@ -50,6 +48,7 @@ export default function(logAudit) {
                     : ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
                 contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                serviceItems: ['SELECT *, family_id FROM service_items WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 branches: ['SELECT *, family_id FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
                 salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch LEFT JOIN salespeople s ON sch.salesperson_id = s.id LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
@@ -87,6 +86,7 @@ export default function(logAudit) {
             const tableMap = {
                 'accounts': 'accounts', 'transactions': 'transactions', 'goals': 'goals',
                 'contacts': 'contacts', 'categories': 'categories', 'branches': 'branches',
+                'serviceItems': 'service_items',
                 'serviceOrders': 'service_orders', 'commercialOrders': 'commercial_orders',
                 'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 'laboratories': 'laboratories',
                 'salespersonSchedules': 'salesperson_schedules'
@@ -103,7 +103,7 @@ export default function(logAudit) {
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lowerK) || k.startsWith('_')) return false;
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at', 'createdby', 'created_by', 'updatedby', 'updated_by'].includes(lowerK)) return false;
                     
-                    if (k === 'name') return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals'].includes(tableName);
+                    if (k === 'name') return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals', 'service_items'].includes(tableName);
                     if (k === 'email') return ['contacts', 'laboratories'].includes(tableName);
                     if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName', 'contactName'].includes(k)) return false;
                     
@@ -114,8 +114,6 @@ export default function(logAudit) {
                 const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
                 const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
 
-                // Regra especial: Na tabela salespeople, o user_id da coluna deve ser o do payload (vendedor designado),
-                // mas em outras tabelas (como transações), o user_id é o criador (quem está logado).
                 const targetUserId = (tableName === 'salespeople' && (payload.userId || payload.user_id)) 
                                     ? (payload.userId || payload.user_id) 
                                     : userId;
@@ -139,7 +137,6 @@ export default function(logAudit) {
                 
                 await client.query(query, values);
 
-                // Lógica de Atualização de Saldo
                 if (tableName === 'transactions' && payload.status === 'PAID') {
                     const amount = Number(payload.amount);
                     if (payload.type === 'TRANSFER') {
