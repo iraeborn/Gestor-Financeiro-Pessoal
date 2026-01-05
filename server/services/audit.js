@@ -1,40 +1,42 @@
 
 /**
- * Registra uma ação no banco de auditoria e notifica os clientes via Socket.io de forma isolada.
+ * Registra uma ação no banco de auditoria e notifica os clientes via Socket.io.
+ * O isolamento é garantido pelo familyId (sala do socket).
  */
 export const createAuditLog = async (pool, io, { userId, action, entity, entityId, details, previousState = null, changes = null, familyIdOverride = null }) => {
     let targetFamilyId = familyIdOverride;
 
-    // 1. Tentar recuperar o family_id se não houver override
+    // 1. Tentar recuperar o family_id se não houver override explícito
     if (!targetFamilyId && userId && userId !== 'EXTERNAL_CLIENT' && pool) {
         try {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             targetFamilyId = res.rows[0]?.family_id || userId;
         } catch (e) {
-            console.error("[AUDIT] Falha ao buscar family_id para broadcast:", e.message);
+            console.error("[AUDIT ERROR] Falha ao recuperar family_id para broadcast:", e.message);
         }
     }
 
-    // Se ainda não temos familyId, usamos o userId como fallback de sala individual
     const roomName = String(targetFamilyId || userId || 'global').trim();
 
-    // 2. Gravação no Banco (Opcional se pool for fornecido)
+    // 2. Gravação opcional no Banco (Se pool estiver disponível)
     if (pool) {
         try {
             await pool.query(
                 `INSERT INTO audit_logs (user_id, action, entity, entity_id, details, previous_state, changes, family_id) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [userId, action, entity, entityId, details, previousState, changes, targetFamilyId || userId]
+                [userId, action, entity, entityId, details, previousState, changes, roomName]
             );
         } catch (dbErr) {
-            console.error("[AUDIT SERVICE] Erro ao gravar banco:", dbErr.message);
+            console.error("[AUDIT ERROR] Falha ao persistir log físico:", dbErr.message);
         }
     }
 
-    // 3. Notificação Real-time - CRÍTICO: Não depende do sucesso do banco acima
+    // 3. Notificação em Tempo Real (Broadcast)
     try {
         if (io) {
-            console.log(`📡 [BROADCAST] Enviando DATA_UPDATED para sala: ${roomName}`);
+            // Log crucial para depuração no console do servidor
+            console.log(`📡 [BROADCAST] Sinal 'DATA_UPDATED' disparado para a sala: [${roomName}] | Entidade: ${entity} | Autor: ${userId}`);
+            
             io.to(roomName).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
@@ -45,6 +47,6 @@ export const createAuditLog = async (pool, io, { userId, action, entity, entityI
             });
         }
     } catch (e) { 
-        console.error("[AUDIT SERVICE] Erro no broadcast Socket.io:", e.message); 
+        console.error("[AUDIT ERROR] Falha no disparo do WebSocket:", e.message); 
     }
 };

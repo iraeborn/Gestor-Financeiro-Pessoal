@@ -53,32 +53,44 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'online' | 'offline'>(navigator.onLine ? 'online' : 'offline');
   
-  // View States
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
 
-  // Socket Reference
+  // Referência única para o socket
   const socketRef = useRef<Socket | null>(null);
 
-  // Auth Navigation States
   const [showAuth, setShowAuth] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
 
   const publicToken = new URLSearchParams(window.location.search).get('orderToken');
 
+  /**
+   * Ciclo de atualização atômica: Puxa do servidor -> Salva Local -> Atualiza React
+   */
   const refreshData = async () => {
-      console.log("🔄 [APP] Solicitando atualização global de dados...");
-      const data = await loadInitialData();
-      setState(data);
+      console.log("🔄 [APP] Iniciando ciclo de sincronização forçada...");
+      try {
+          if (navigator.onLine) {
+              await syncService.pullFromServer();
+              console.log("📥 [APP] Dados atualizados do servidor para o IndexedDB.");
+          }
+          const data = await loadInitialData();
+          setState(data);
+          console.log("✅ [APP] Estado do React sincronizado.");
+      } catch (e) {
+          console.error("❌ [APP] Falha ao sincronizar dados:", e);
+      }
   };
 
-  // --- Real-time Logic ---
+  /**
+   * Gerencia a conexão WebSocket e as salas (rooms) dinamicamente.
+   */
   useEffect(() => {
     if (currentUser) {
         const familyId = String(currentUser.familyId || (currentUser as any).family_id).trim();
         
         if (!socketRef.current) {
-            console.log("📡 [SOCKET] Iniciando nova conexão...");
+            console.log("📡 [SOCKET] Estabelecendo nova conexão com o servidor...");
             const socket = io({
                 transports: ['websocket', 'polling'],
                 reconnection: true,
@@ -87,28 +99,40 @@ const App: React.FC = () => {
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log("📡 [SOCKET] Conectado. Entrando na sala:", familyId);
+                console.log(`📡 [SOCKET] Conectado! ID: ${socket.id}. Solicitando sala: [${familyId}]`);
                 socket.emit('join_family', familyId);
             });
 
+            socket.on('joined_room', (data: any) => {
+                console.log(`🏠 [SOCKET] Servidor confirmou entrada na sala: [${data.room}]`);
+            });
+
             socket.on('DATA_UPDATED', (payload: any) => {
-                // Se alguém da família alterou algo, recarregamos silenciosamente
+                // Importante: Apenas sincronizar se a mudança foi feita por OUTRO usuário
                 if (payload.actorId !== currentUser.id) {
-                    console.log(`📡 [SOCKET] Mudança detectada: ${payload.entity}. Sincronizando...`);
-                    refreshData();
+                    console.log(`🔔 [REALTIME] Atualização detectada em '${payload.entity}'. Sincronizando...`);
+                    
+                    // Se as configurações mudaram, precisamos atualizar o perfil do usuário para refletir módulos
+                    if (payload.entity === 'settings' || payload.entity === 'membership') {
+                        checkAuth();
+                    } else {
+                        refreshData();
+                    }
                 }
             });
 
             socket.on('disconnect', () => console.warn("📡 [SOCKET] Desconectado."));
             socket.on('reconnect', () => socket.emit('join_family', familyId));
         } else {
-            console.log("📡 [SOCKET] Atualizando sala de escuta:", familyId);
+            // Se o usuário trocar de negócio, o useEffect rodará novamente e emitiremos o join para a nova sala
+            console.log(`📡 [SOCKET] Atualizando contexto de escuta para sala: [${familyId}]`);
             socketRef.current.emit('join_family', familyId);
         }
     }
 
     return () => {
         if (!currentUser && socketRef.current) {
+            console.log("📡 [SOCKET] Encerrando conexão por logout.");
             socketRef.current.disconnect();
             socketRef.current = null;
         }
@@ -229,7 +253,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Validando integridade do tenant...</p>
+                <p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Sincronizando ambiente...</p>
             </div>
         );
     }
@@ -356,7 +380,7 @@ const App: React.FC = () => {
             </div>
 
             <div className={`text-[10px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all ${
-                syncStatus === 'offline' ? 'bg-rose-500 text-white' : 
+                syncStatus === 'offline' ? 'bg-rose-50 text-white' : 
                 syncStatus === 'syncing' ? 'bg-indigo-600 text-white' : 
                 'bg-emerald-500 text-white'
             }`}>
