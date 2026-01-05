@@ -16,11 +16,6 @@ const numericFields = [
     'addition', 'dnp_od', 'dnp_oe', 'height_od', 'height_oe'
 ];
 
-// Lista de campos que são apenas para visualização no Frontend (JOINs) e não devem ser persistidos
-const VIEW_ONLY_FIELDS = [
-    'name', 'email', 'branchName', 'contactName', 'assigneeName', 'createdByName', 'clientName'
-];
-
 const mapToFrontend = (row) => {
     if (!row) return row;
     const newRow = {};
@@ -72,14 +67,16 @@ export default function(logAudit) {
         }
     });
 
-    router.post('/sync/process', authenticateToken, async (req, res) => {
+    router.post('/sync/process', authenticateToken, async (req, res, next) => {
         const { action, store, payload } = req.body;
         const userId = req.user.id;
-        const client = await pool.connect();
+        let client;
         
         try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0].family_id || userId;
+            client = await pool.connect();
+            const familyIdRes = await client.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+            
             await client.query('BEGIN');
 
             const tableMap = {
@@ -99,34 +96,40 @@ export default function(logAudit) {
                 payload.userId = userId;
                 payload.familyId = familyId;
 
+                // Filtragem de campos para garantir que apenas colunas existentes sejam inseridas
                 const fields = Object.keys(payload).filter(k => {
-                    // Ignora IDs e metadados internos
                     if (['id', 'userId', 'familyId'].includes(k) || k.startsWith('_')) return false;
-                    
-                    // Ignora campos de visualização que vêm de JOINs
-                    if (['name', 'email', 'branchName', 'contactName', 'salespersonName'].includes(k)) return false;
-
+                    if (['name', 'email', 'branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName'].includes(k)) return false;
                     return true;
                 });
 
                 const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
                 
+                const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
+                const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
+
                 const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
-                               VALUES ($1, $2, $3, ${fields.map((_, i) => `$${i + 4}`).join(', ')}) 
-                               ON CONFLICT (id) DO UPDATE SET ${snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ')}, deleted_at = NULL`;
+                               VALUES ($1, $2, $3, ${placeholders}) 
+                               ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
                 
-                const values = [payload.id, userId, familyId, ...fields.map(f => (typeof payload[f] === 'object' && payload[f] !== null) ? JSON.stringify(payload[f]) : sanitizeValue(payload[f]))];
+                const values = [
+                    payload.id, 
+                    userId, 
+                    familyId, 
+                    ...fields.map(f => (typeof payload[f] === 'object' && payload[f] !== null) ? JSON.stringify(payload[f]) : sanitizeValue(payload[f]))
+                ];
+                
                 await client.query(query, values);
             }
 
             await client.query('COMMIT');
             res.json({ success: true });
         } catch (err) {
-            await client.query('ROLLBACK');
-            console.error(`[SYNC ERROR] Table: ${tableName || store}`, err);
+            if (client) await client.query('ROLLBACK').catch(e => console.error("Rollback error", e));
+            console.error(`[SYNC ERROR] Store: ${store}`, err.message);
             res.status(500).json({ error: err.message });
         } finally {
-            client.release();
+            if (client) client.release();
         }
     });
 
