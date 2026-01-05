@@ -56,6 +56,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
 
+  // Estados de Edição Persistentes para troca de View
+  const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
+
   // Referência única para o socket
   const socketRef = useRef<Socket | null>(null);
 
@@ -83,14 +86,14 @@ const App: React.FC = () => {
   };
 
   /**
-   * Gerencia a conexão WebSocket e as salas (rooms) dinamicamente.
+   * Gerencia a conexão WebSocket e as salas (rooms) dinamicamente com logs verbose.
    */
   useEffect(() => {
     if (currentUser) {
         const familyId = String(currentUser.familyId || (currentUser as any).family_id).trim();
         
         if (!socketRef.current) {
-            console.log("📡 [SOCKET] Estabelecendo nova conexão com o servidor...");
+            console.log(`📡 [SOCKET] Tentando conectar ao servidor... Alvo: [${familyId}]`);
             const socket = io({
                 transports: ['websocket', 'polling'],
                 reconnection: true,
@@ -99,20 +102,18 @@ const App: React.FC = () => {
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log(`📡 [SOCKET] Conectado! ID: ${socket.id}. Solicitando sala: [${familyId}]`);
+                console.log(`📡 [SOCKET] Conectado! ID: ${socket.id}. Entrando na sala: [${familyId}]`);
                 socket.emit('join_family', familyId);
             });
 
             socket.on('joined_room', (data: any) => {
-                console.log(`🏠 [SOCKET] Servidor confirmou entrada na sala: [${data.room}]`);
+                console.log(`🏠 [SOCKET] Sala confirmada: [${data.room}] às ${new Date(data.timestamp).toLocaleTimeString()}`);
             });
 
             socket.on('DATA_UPDATED', (payload: any) => {
-                // Importante: Apenas sincronizar se a mudança foi feita por OUTRO usuário
                 if (payload.actorId !== currentUser.id) {
-                    console.log(`🔔 [REALTIME] Atualização detectada em '${payload.entity}'. Sincronizando...`);
+                    console.log(`🔔 [REALTIME] Alteração em '${payload.entity}' detectada. Autor: ${payload.actorId}`);
                     
-                    // Se as configurações mudaram, precisamos atualizar o perfil do usuário para refletir módulos
                     if (payload.entity === 'settings' || payload.entity === 'membership') {
                         checkAuth();
                     } else {
@@ -121,18 +122,16 @@ const App: React.FC = () => {
                 }
             });
 
-            socket.on('disconnect', () => console.warn("📡 [SOCKET] Desconectado."));
+            socket.on('disconnect', () => console.warn("📡 [SOCKET] Conexão perdida."));
             socket.on('reconnect', () => socket.emit('join_family', familyId));
         } else {
-            // Se o usuário trocar de negócio, o useEffect rodará novamente e emitiremos o join para a nova sala
-            console.log(`📡 [SOCKET] Atualizando contexto de escuta para sala: [${familyId}]`);
+            console.log(`📡 [SOCKET] Atualizando sala de escuta: [${familyId}]`);
             socketRef.current.emit('join_family', familyId);
         }
     }
 
     return () => {
         if (!currentUser && socketRef.current) {
-            console.log("📡 [SOCKET] Encerrando conexão por logout.");
             socketRef.current.disconnect();
             socketRef.current = null;
         }
@@ -317,6 +316,76 @@ const App: React.FC = () => {
               />
           );
 
+      // CORREÇÃO: Mapeamento de Receitas Óticas
+      case 'OPTICAL_RX':
+          return (
+              <OpticalModule 
+                  opticalRxs={safeState.opticalRxs}
+                  contacts={safeState.contacts}
+                  onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }}
+                  onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }}
+                  onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)}
+              />
+          );
+
+      case 'OPTICAL_RX_EDITOR':
+          return (
+              <OpticalRxEditor 
+                  contacts={safeState.contacts}
+                  branches={safeState.branches}
+                  initialData={editingRx}
+                  onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })}
+                  onCancel={() => { setEditingRx(null); setCurrentView('OPTICAL_RX'); }}
+              />
+          );
+
+      // CORREÇÃO: Mapeamento de Odontologia
+      case 'ODONTO_AGENDA':
+          return (
+              <ServiceModule 
+                  {...commonProps}
+                  moduleTitle="Clínica Odontológica"
+                  clientLabel="Paciente"
+                  serviceLabel="Procedimento"
+                  transactionCategory="Serviços Odontológicos"
+                  activeSection="CALENDAR"
+                  clients={safeState.serviceClients}
+                  services={safeState.serviceItems}
+                  appointments={safeState.serviceAppointments}
+                  contacts={safeState.contacts}
+                  accounts={safeState.accounts}
+                  onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)}
+                  onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)}
+                  onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)}
+                  onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                  onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)}
+                  onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)}
+              />
+          );
+
+      case 'ODONTO_PATIENTS':
+          return (
+              <ServiceModule 
+                  {...commonProps}
+                  moduleTitle="Prontuários Odontológicos"
+                  clientLabel="Paciente"
+                  serviceLabel="Procedimento"
+                  transactionCategory="Serviços Odontológicos"
+                  activeSection="CLIENTS"
+                  clients={safeState.serviceClients}
+                  services={safeState.serviceItems}
+                  appointments={safeState.serviceAppointments}
+                  contacts={safeState.contacts}
+                  accounts={safeState.accounts}
+                  onSaveClient={(c) => api.saveServiceClient(c).then(refreshData)}
+                  onDeleteClient={(id) => api.deleteServiceClient(id).then(refreshData)}
+                  onSaveService={(s) => api.saveCatalogItem(s).then(refreshData)}
+                  onDeleteService={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                  onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)}
+                  onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)}
+              />
+          );
+
       case 'SYS_BRANCHES':
           return (
               <BranchesView 
@@ -324,6 +393,20 @@ const App: React.FC = () => {
                   onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} 
                   onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)}
                   onManageSchedule={(b) => setCurrentView('SRV_BRANCH_SCHEDULE')}
+              />
+          );
+
+      case 'SRV_BRANCH_SCHEDULE':
+          const activeBranch = safeState.branches.find(b => b.id === (safeState as any).activeBranchId);
+          if (!activeBranch) return <BranchesView {...(safeState as any)} onBack={() => setCurrentView('SYS_BRANCHES')} />;
+          return (
+              <BranchScheduleView 
+                  branch={activeBranch}
+                  appointments={safeState.serviceAppointments}
+                  clients={safeState.serviceClients}
+                  onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)}
+                  onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)}
+                  onBack={() => setCurrentView('SYS_BRANCHES')}
               />
           );
 

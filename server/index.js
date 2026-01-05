@@ -46,21 +46,20 @@ io.on('connection', (socket) => {
         const room = String(familyId).trim();
         
         // Antes de entrar em uma nova sala, sai de todas as outras (exceto a sua própria id)
-        // Isso evita 'vazamento' de dados ao alternar entre negócios na mesma sessão.
         socket.rooms.forEach(r => {
             if (r !== socket.id) {
                 socket.leave(r);
-                console.log(`🚪 [SOCKET] Cliente ${socket.id} saiu da sala: [${r}]`);
+                console.log(`🚪 [ROOM_CHECK] Cliente ${socket.id} saiu da sala antiga: [${r}]`);
             }
         });
         
         socket.join(room);
-        console.log(`🏠 [SOCKET] Cliente ${socket.id} ingressou com sucesso na sala: [${room}]`);
+        console.log(`🏠 [ROOM_CHECK] Cliente ${socket.id} ingressou com sucesso na sala do negócio: [${room}]`);
         
-        // Confirmação para o cliente
+        // Confirmação para o cliente (útil para logs no front-end)
         socket.emit('joined_room', { room, timestamp: new Date() });
     } else {
-        console.warn(`⚠️ [SOCKET] Cliente ${socket.id} tentou join_family sem fornecer um ID.`);
+        console.warn(`⚠️ [ROOM_CHECK] Cliente ${socket.id} tentou join_family sem fornecer um ID válido.`);
     }
   });
 
