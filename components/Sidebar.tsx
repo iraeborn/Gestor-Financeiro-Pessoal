@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -81,6 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'SYS_SALESPEOPLE', label: 'Vendedores', icon: BadgeDollarSign, enabled: isAdmin },
         { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
+        { id: 'SYS_HELP', label: 'Central de Ajuda', icon: BookOpen },
     ]}
   ];
 
@@ -90,6 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         ...section,
         items: section.items.filter(item => {
             if ((item as any).enabled !== undefined && !(item as any).enabled) return false;
+            if (item.id === 'SYS_HELP') return true; // Help is always visible
             if (isAdmin) return true;
             return userPermissions.includes(item.id);
         })

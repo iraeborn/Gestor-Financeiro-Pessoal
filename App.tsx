@@ -32,6 +32,7 @@ import Auth from './components/Auth';
 import LoadingOverlay from './components/LoadingOverlay';
 import ChatView from './components/ChatView';
 import ChatFloating from './components/ChatFloating';
+import HelpCenter from './components/HelpCenter';
 import { HelpProvider, useHelp } from './components/GuidedHelp';
 
 const AppContent: React.FC<{
@@ -74,6 +75,7 @@ const AppContent: React.FC<{
             case 'OPTICAL_LABS_MGMT': return <LabsView laboratories={state.laboratories} onSaveLaboratory={(l) => api.saveLaboratory(l).then(refreshData)} onDeleteLaboratory={(id) => api.deleteLaboratory(id).then(refreshData)} />;
             case 'SYS_SALESPEOPLE': return <SalespeopleView salespeople={state.salespeople} branches={state.branches} members={members} onSaveSalesperson={(s) => api.saveLocallyAndQueue('salespeople', s).then(refreshData)} onDeleteSalesperson={(id) => api.deleteLocallyAndQueue('salespeople', id).then(refreshData)} />;
             case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches, costCenters: [], departments: [], projects: [] }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
+            case 'SYS_HELP': return <HelpCenter />;
             default: return <Dashboard {...commonProps} />;
         }
     };
