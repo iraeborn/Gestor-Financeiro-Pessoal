@@ -39,27 +39,27 @@ const logAudit = (poolInstance, userId, action, entity, entityId, details, previ
 };
 
 io.on('connection', (socket) => {
-  console.log(`🔌 [SOCKET] Conexão estabelecida: ${socket.id}`);
+  console.log(`🔌 [SOCKET] Conexão ativa: ${socket.id}`);
 
   socket.on('join_family', (familyId) => {
     if (familyId) {
         const room = String(familyId).trim();
         
-        // Antes de entrar em uma nova sala, sai de todas as outras (exceto a sua própria id)
+        // Limpeza de salas antigas antes de ingressar na nova
         socket.rooms.forEach(r => {
             if (r !== socket.id) {
                 socket.leave(r);
-                console.log(`🚪 [ROOM_CHECK] Cliente ${socket.id} saiu da sala antiga: [${r}]`);
+                console.log(`🚪 [SOCKET] Cliente ${socket.id} saiu da sala antiga: [${r}]`);
             }
         });
         
         socket.join(room);
-        console.log(`🏠 [ROOM_CHECK] Cliente ${socket.id} ingressou com sucesso na sala do negócio: [${room}]`);
+        console.log(`🏠 [SOCKET] Cliente ${socket.id} ingressou na sala familiar/PJ: [${room}]`);
         
-        // Confirmação para o cliente (útil para logs no front-end)
+        // Confirmação para o cliente
         socket.emit('joined_room', { room, timestamp: new Date() });
     } else {
-        console.warn(`⚠️ [ROOM_CHECK] Cliente ${socket.id} tentou join_family sem fornecer um ID válido.`);
+        console.warn(`⚠️ [SOCKET] Tentativa de ingresso em sala por ${socket.id} sem identificador válido.`);
     }
   });
 
@@ -150,9 +150,9 @@ const PORT = process.env.PORT || 8080;
 
 initDb().then(() => {
     httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log(`🚀 [SERVER] Sistema operacional na porta ${PORT}`);
+        console.log(`🚀 [SERVER] Operacional na porta ${PORT}`);
     });
 }).catch(err => {
-    console.error("❌ [SERVER] Falha fatal no banco de dados:", err);
+    console.error("❌ [SERVER] Falha crítica no banco de dados:", err);
     process.exit(1);
 });

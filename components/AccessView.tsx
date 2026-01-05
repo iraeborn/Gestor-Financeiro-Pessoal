@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle } from 'lucide-react';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
     currentUser: User;
+    refreshTrigger?: number; // Gatilho de re-sincronização via WebSocket
 }
 
 const PERMISSION_GROUPS = [
@@ -63,7 +64,7 @@ const PERMISSION_GROUPS = [
     }
 ];
 
-const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
+const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0 }) => {
     const { showAlert } = useAlert();
     const { showConfirm } = useConfirm();
     const [members, setMembers] = useState<Member[]>([]);
@@ -97,9 +98,10 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         return perms;
     };
 
+    // Reatividade: Recarrega sempre que o refreshTrigger mudar (WebSocket) ou no mount
     useEffect(() => {
         loadData();
-    }, []);
+    }, [refreshTrigger]);
 
     const loadData = async () => {
         setLoading(true);
@@ -118,6 +120,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
         try {
             const data = await createInvite();
             setInviteCode(data.code);
+            // Log de auditoria local (opcional)
         } catch (e) {
             console.error(e);
             showAlert("Erro ao gerar convite.", "error");
@@ -207,7 +210,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
             await updateMemberRole(editingMember.id, editRole, editPermissions);
             setMembers(members.map(m => m.id === editingMember.id ? { ...m, role: editRole, permissions: editPermissions } : m));
             setEditingMember(null);
-            showAlert("Permissões atualizadas.", "success");
+            showAlert("Permissões atualizadas com sucesso.", "success");
         } catch (e: any) {
             showAlert(e.message || "Erro ao atualizar permissões", "error");
         }
@@ -374,7 +377,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                     </td>
                                     <td className="px-6 py-4">
                                         {member.role === 'ADMIN' ? (
-                                            <span className="text-xs text-gray-400 italic">Acesso Total</span>
+                                            <span className="text-xs text-gray-400 italic font-medium">Acesso Total</span>
                                         ) : (
                                             <div className="flex items-center gap-2">
                                                 <div className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden">
@@ -415,6 +418,13 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser }) => {
                                     )}
                                 </tr>
                             ))}
+                            {loading && members.length === 0 && (
+                                <tr>
+                                    <td colSpan={isAdmin ? 4 : 3} className="px-6 py-10 text-center">
+                                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-indigo-300" />
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

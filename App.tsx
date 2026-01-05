@@ -56,6 +56,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
   const [state, setState] = useState<AppState | null>(null);
 
+  // Trigger de atualização para componentes filhos (Equipe, Logs, etc)
+  const [globalRefreshTrigger, setGlobalRefreshTrigger] = useState(0);
+
   // Estados de Edição Persistentes para troca de View
   const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
 
@@ -71,59 +74,67 @@ const App: React.FC = () => {
    * Ciclo de atualização atômica: Puxa do servidor -> Salva Local -> Atualiza React
    */
   const refreshData = async () => {
-      console.log("🔄 [APP] Iniciando ciclo de sincronização forçada...");
+      console.log("🔄 [APP] Iniciando sincronização atômica...");
       try {
           if (navigator.onLine) {
               await syncService.pullFromServer();
-              console.log("📥 [APP] Dados atualizados do servidor para o IndexedDB.");
+              console.log("📥 [APP] Banco IndexedDB atualizado.");
           }
           const data = await loadInitialData();
           setState(data);
-          console.log("✅ [APP] Estado do React sincronizado.");
+          console.log("✅ [APP] Interface sincronizada.");
       } catch (e) {
-          console.error("❌ [APP] Falha ao sincronizar dados:", e);
+          console.error("❌ [APP] Falha no refreshData:", e);
       }
   };
 
   /**
-   * Gerencia a conexão WebSocket e as salas (rooms) dinamicamente com logs verbose.
+   * Gerencia a conexão WebSocket e as salas (rooms) dinamicamente.
    */
   useEffect(() => {
     if (currentUser) {
         const familyId = String(currentUser.familyId || (currentUser as any).family_id).trim();
         
         if (!socketRef.current) {
-            console.log(`📡 [SOCKET] Tentando conectar ao servidor... Alvo: [${familyId}]`);
+            console.log(`📡 [SOCKET] Conectando ao servidor... FamilyID: ${familyId}`);
             const socket = io({
                 transports: ['websocket', 'polling'],
                 reconnection: true,
-                reconnectionAttempts: 10
+                reconnectionAttempts: 15
             }) as any;
             socketRef.current = socket;
 
             socket.on('connect', () => {
-                console.log(`📡 [SOCKET] Conectado! ID: ${socket.id}. Entrando na sala: [${familyId}]`);
+                console.log(`📡 [SOCKET] Conectado! ID: ${socket.id}. Solicitando sala: [${familyId}]`);
                 socket.emit('join_family', familyId);
             });
 
             socket.on('joined_room', (data: any) => {
-                console.log(`🏠 [SOCKET] Sala confirmada: [${data.room}] às ${new Date(data.timestamp).toLocaleTimeString()}`);
+                console.log(`🏠 [SOCKET] Servidor confirmou entrada na sala: [${data.room}]`);
             });
 
             socket.on('DATA_UPDATED', (payload: any) => {
                 if (payload.actorId !== currentUser.id) {
-                    console.log(`🔔 [REALTIME] Alteração em '${payload.entity}' detectada. Autor: ${payload.actorId}`);
+                    console.log(`🔔 [REALTIME] Atualização detectada: '${payload.entity}'.`);
                     
-                    if (payload.entity === 'settings' || payload.entity === 'membership') {
+                    // Incrementa o trigger para que componentes como AccessView reajam
+                    setGlobalRefreshTrigger(prev => prev + 1);
+
+                    if (payload.entity === 'settings' || payload.entity === 'membership' || payload.entity === 'family') {
+                        // Se mudou perfil ou módulos, precisamos re-validar o currentUser (checkAuth)
                         checkAuth();
                     } else {
+                        // Se mudou dados financeiros/operacionais, apenas puxamos do servidor
                         refreshData();
                     }
                 }
             });
 
-            socket.on('disconnect', () => console.warn("📡 [SOCKET] Conexão perdida."));
-            socket.on('reconnect', () => socket.emit('join_family', familyId));
+            socket.on('disconnect', () => console.warn("📡 [SOCKET] Conexão encerrada."));
+            socket.on('reconnect', () => {
+                console.log("📡 [SOCKET] Reconectado. Re-ingressando na sala...");
+                socket.emit('join_family', familyId);
+            });
         } else {
             console.log(`📡 [SOCKET] Atualizando sala de escuta: [${familyId}]`);
             socketRef.current.emit('join_family', familyId);
@@ -252,7 +263,7 @@ const App: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-                <p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Sincronizando ambiente...</p>
+                <p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Validando integridade...</p>
             </div>
         );
     }
@@ -316,7 +327,6 @@ const App: React.FC = () => {
               />
           );
 
-      // CORREÇÃO: Mapeamento de Receitas Óticas
       case 'OPTICAL_RX':
           return (
               <OpticalModule 
@@ -339,7 +349,6 @@ const App: React.FC = () => {
               />
           );
 
-      // CORREÇÃO: Mapeamento de Odontologia
       case 'ODONTO_AGENDA':
           return (
               <ServiceModule 
@@ -413,7 +422,10 @@ const App: React.FC = () => {
       case 'FIN_CATEGORIES': return <CategoriesView categories={safeState.categories} onSaveCategory={(c) => api.saveCategory(c).then(refreshData)} onDeleteCategory={(id) => api.deleteCategory(id).then(refreshData)} />;
       case 'FIN_CONTACTS': return <ContactsView contacts={safeState.contacts} onAddContact={() => setCurrentView('FIN_CONTACT_EDITOR')} onEditContact={(c) => setCurrentView('FIN_CONTACT_EDITOR')} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
       case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: safeState.companyProfile, branches: safeState.branches, costCenters: safeState.costCenters, departments: safeState.departments, projects: safeState.projects }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
-      case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
+      
+      // REATIVIDADE: Passando refreshTrigger para AccessView
+      case 'SYS_ACCESS': return <AccessView currentUser={currentUser} refreshTrigger={globalRefreshTrigger} />;
+      
       case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
       
       default: return <Dashboard {...commonProps} state={safeState as any} />;
