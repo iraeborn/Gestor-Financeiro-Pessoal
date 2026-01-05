@@ -87,7 +87,7 @@ class SyncService {
                 'serviceItems', 'serviceAppointments', 'goals', 'categories', 
                 'branches', 'costCenters', 'departments', 'projects', 
                 'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-                'opticalRxs', 'companyProfile'
+                'opticalRxs', 'companyProfile', 'salespeople'
             ];
 
             // Executa limpeza em paralelo para performance e segurança

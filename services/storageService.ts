@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
@@ -255,7 +255,7 @@ export const loadInitialData = async (): Promise<AppState> => {
         'branches', 'costCenters', 'departments', 'projects',
         'serviceClients', 'serviceItems', 'serviceAppointments',
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices',
-        'opticalRxs'
+        'opticalRxs', 'salespeople'
     ];
 
     const results: any = {};

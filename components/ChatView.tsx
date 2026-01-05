@@ -60,7 +60,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
             familyId: currentUser.familyId,
             content: input.trim(),
             type: 'TEXT',
-            receiverId: selectedUser?.id || null
+            receiverId: selectedUser?.id // Corrigido para undefined automático se selecionado for null
         };
         
         socket.emit('SEND_MESSAGE', newMsg);
@@ -106,7 +106,7 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
 
             {/* Chat Area */}
             <div className={`flex-1 flex flex-col absolute md:relative inset-0 z-30 bg-white transition-transform duration-300 ${!isListView ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
-                <div className="p-4 md:p-6 border-b border-gray-50 flex items-center justify-between shrink-0">
+                <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                         <button onClick={() => setIsListView(true)} className="md:hidden p-2 text-gray-400 hover:text-indigo-600"><ArrowLeft className="w-5 h-5"/></button>
                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${selectedUser ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-600'}`}>

@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6; // Incrementado para incluir salespeople
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -19,7 +19,7 @@ export class LocalDB {
             'serviceItems', 'serviceAppointments', 'goals', 'categories', 
             'branches', 'costCenters', 'departments', 'projects', 
             'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-            'opticalRxs', 'sync_queue', 'companyProfile'
+            'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople'
           ];
 
           stores.forEach(store => {
@@ -51,7 +51,7 @@ export class LocalDB {
         'serviceItems', 'serviceAppointments', 'goals', 'categories', 
         'branches', 'costCenters', 'departments', 'projects', 
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-        'opticalRxs', 'sync_queue', 'companyProfile'
+        'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople'
     ];
     await Promise.all(stores.map(s => this.clearStore(s)));
   }
