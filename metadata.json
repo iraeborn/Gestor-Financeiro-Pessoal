@@ -1,5 +1,5 @@
 {
-  "name": "Gestor Financeiro Pessoal",
+  "name": "Gestor Financeiro",
   "description": "Um gerenciador financeiro completo com visão dupla (real vs. projetada), análises inteligentes via IA e controle detalhado de receitas e despesas.",
   "requestFramePermissions": [
     "camera"

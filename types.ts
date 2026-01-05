@@ -1,5 +1,4 @@
 
-
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_RECEBIDO' | 'CONFERIDO' | 'PRONTO_ENTREGA' | 'ENTREGUE' | 'NAO_ENTREGUE';
 
 export enum EntityType {
@@ -64,7 +63,7 @@ export type ViewMode =
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
-  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT';
+  | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT' | 'SYS_SALESPEOPLE';
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
@@ -118,6 +117,17 @@ export interface Member {
   role: 'ADMIN' | 'MEMBER';
   permissions?: string[] | string;
   ownerSettings?: AppSettings;
+}
+
+export interface Salesperson {
+    id: string;
+    userId: string;
+    name?: string;
+    email?: string;
+    branchId: string;
+    branchName?: string;
+    commissionRate: number;
+    familyId: string;
 }
 
 export interface Contact {
@@ -181,6 +191,7 @@ export interface Transaction {
   costCenterId?: string;
   departmentId?: string;
   projectId?: string;
+  userId?: string;
   classification?: TransactionClassification;
 }
 
@@ -252,6 +263,7 @@ export interface AppState {
   contracts: Contract[];
   invoices: Invoice[];
   opticalRxs: OpticalRx[];
+  salespeople: Salesperson[];
   companyProfile?: CompanyProfile | null;
 }
 

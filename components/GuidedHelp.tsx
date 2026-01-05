@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { ViewMode, HelpStep } from '../types';
-import { X, ChevronRight, ChevronLeft, CheckCircle2, PlayCircle, Info, Glasses, ShoppingBag, Wrench, PackageCheck, UserCheck } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, CheckCircle2, PlayCircle, Info, Glasses, HelpCircle } from 'lucide-react';
 
 interface HelpContextType {
     activeGuide: string | null;
     currentStep: number;
+    isTrackerVisible: boolean;
+    setIsTrackerVisible: (visible: boolean) => void;
     startGuide: (guideId: string) => void;
     nextStep: () => void;
     prevStep: () => void;
@@ -17,101 +19,49 @@ interface HelpContextType {
 const HelpContext = createContext<HelpContextType | undefined>(undefined);
 
 const OPTICAL_STEPS: HelpStep[] = [
-    {
-        id: 'STEP_RX',
-        targetId: 'btn-new-rx',
-        title: '1. Registro da Receita',
-        content: 'O fluxo começa aqui. Registre os dados do exame de vista e a prescrição oftalmológica do cliente.',
-        view: 'OPTICAL_RX',
-        position: 'bottom'
-    },
-    {
-        id: 'STEP_SALE',
-        targetId: 'btn-new-sale',
-        title: '2. Gerar Venda',
-        content: 'Com a receita em mãos, vincule a armação e as lentes. Aqui você também emite a nota fiscal e define o pagamento.',
-        view: 'OPTICAL_SALES',
-        position: 'bottom'
-    },
-    {
-        id: 'STEP_LAB',
-        targetId: 'btn-new-os',
-        title: '3. Ordem p/ Laboratório',
-        content: 'Transforme a venda em uma Ordem de Serviço. Envie os detalhes técnicos para o laboratório via WhatsApp ou E-mail.',
-        view: 'OPTICAL_LAB',
-        position: 'bottom'
-    },
-    {
-        id: 'STEP_CHECK',
-        targetId: 'tab-conference',
-        title: '4. Conferência Técnica',
-        content: 'Ao receber os óculos, utilize a lista de conferência para validar se o grau e a armação estão corretos.',
-        view: 'OPTICAL_LAB',
-        position: 'right'
-    },
-    {
-        id: 'STEP_DELIVERY',
-        targetId: 'btn-register-delivery',
-        title: '5. Entrega e Satisfação',
-        content: 'No ato da entrega, registre se o cliente ficou satisfeito ou se há necessidade de ajustes.',
-        view: 'OPTICAL_LAB',
-        position: 'top'
-    }
+    { id: 'STEP_RX', targetId: 'btn-new-rx', title: '1. Receita RX', content: 'Registre aqui a prescrição técnica do paciente.', view: 'OPTICAL_RX', position: 'bottom' },
+    { id: 'STEP_SALE', targetId: 'btn-new-sale', title: '2. Gerar Venda', content: 'Crie orçamentos e vincule armações e lentes.', view: 'SRV_SALES', position: 'bottom' },
+    { id: 'STEP_LAB', targetId: 'btn-new-os', title: '3. Laboratório', content: 'Envie para o laboratório gerar a Ordem de Serviço.', view: 'SRV_OS', position: 'bottom' }
 ];
 
 export const HelpProvider: React.FC<{ children: React.ReactNode, currentView: ViewMode, onChangeView: (v: ViewMode) => void }> = ({ children, currentView, onChangeView }) => {
     const [activeGuide, setActiveGuide] = useState<string | null>(null);
+    const [isTrackerVisible, setIsTrackerVisible] = useState(() => localStorage.getItem('help_tracker_visible') !== 'false');
     const [currentStepIdx, setCurrentStepIdx] = useState(0);
-    const [completedSteps, setCompletedSteps] = useState<string[]>(() => {
-        const saved = localStorage.getItem('help_completed_steps');
-        return saved ? JSON.parse(saved) : [];
-    });
+    const [completedSteps, setCompletedSteps] = useState<string[]>(() => JSON.parse(localStorage.getItem('help_completed_steps') || '[]'));
 
     useEffect(() => {
         localStorage.setItem('help_completed_steps', JSON.stringify(completedSteps));
-    }, [completedSteps]);
+        localStorage.setItem('help_tracker_visible', String(isTrackerVisible));
+    }, [completedSteps, isTrackerVisible]);
 
     const startGuide = (guideId: string) => {
         setActiveGuide(guideId);
+        setIsTrackerVisible(true);
         setCurrentStepIdx(0);
-        const firstStep = OPTICAL_STEPS[0];
-        if (currentView !== firstStep.view) onChangeView(firstStep.view);
+        const first = OPTICAL_STEPS[0];
+        if (currentView !== first.view) onChangeView(first.view);
     };
 
     const nextStep = () => {
         if (currentStepIdx < OPTICAL_STEPS.length - 1) {
             const nextIdx = currentStepIdx + 1;
             setCurrentStepIdx(nextIdx);
-            const nextStepObj = OPTICAL_STEPS[nextIdx];
-            if (currentView !== nextStepObj.view) onChangeView(nextStepObj.view);
+            const next = OPTICAL_STEPS[nextIdx];
+            if (currentView !== next.view) onChangeView(next.view);
         } else {
             closeGuide();
         }
     };
 
-    const prevStep = () => {
-        if (currentStepIdx > 0) {
-            const prevIdx = currentStepIdx - 1;
-            setCurrentStepIdx(prevIdx);
-            const prevStepObj = OPTICAL_STEPS[prevIdx];
-            if (currentView !== prevStepObj.view) onChangeView(prevStepObj.view);
-        }
-    };
-
-    const closeGuide = () => {
-        setActiveGuide(null);
-        setCurrentStepIdx(0);
-    };
-
-    const isStepCompleted = (stepId: string) => completedSteps.includes(stepId);
-    const markStepComplete = (stepId: string) => {
-        if (!completedSteps.includes(stepId)) {
-            setCompletedSteps([...completedSteps, stepId]);
-        }
-    };
+    const closeGuide = () => { setActiveGuide(null); setCurrentStepIdx(0); };
+    const markStepComplete = (id: string) => !completedSteps.includes(id) && setCompletedSteps([...completedSteps, id]);
 
     return (
-        <HelpContext.Provider value={{ activeGuide, currentStep: currentStepIdx, startGuide, nextStep, prevStep, closeGuide, isStepCompleted, markStepComplete }}>
+        <HelpContext.Provider value={{ 
+            activeGuide, currentStep: currentStepIdx, isTrackerVisible, setIsTrackerVisible,
+            startGuide, nextStep, prevStep: () => {}, closeGuide, isStepCompleted: (id) => completedSteps.includes(id), markStepComplete 
+        }}>
             {children}
             <HelpOverlay currentStep={OPTICAL_STEPS[currentStepIdx]} isActive={!!activeGuide} />
             <JourneyTracker steps={OPTICAL_STEPS} />
@@ -126,170 +76,76 @@ export const useHelp = () => {
 };
 
 const HelpOverlay: React.FC<{ currentStep: HelpStep, isActive: boolean }> = ({ currentStep, isActive }) => {
-    const { nextStep, prevStep, closeGuide, currentStep: idx } = useHelp();
+    const { nextStep, closeGuide, currentStep: idx } = useHelp();
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-
-    // Monitora o redimensionamento da tela para recalcular posição
-    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-    useEffect(() => {
-        const handleResize = () => setWindowWidth(window.innerWidth);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     useEffect(() => {
         if (isActive) {
-            const timer = setTimeout(() => {
-                const el = document.getElementById(currentStep.targetId);
-                if (el) setTargetRect(el.getBoundingClientRect());
-                else setTargetRect(null);
-            }, 600); // Delay leve para garantir que a transição de view terminou
-            return () => clearTimeout(timer);
+            const el = document.getElementById(currentStep.targetId);
+            if (el) setTargetRect(el.getBoundingClientRect());
         }
-    }, [isActive, currentStep, windowWidth]);
+    }, [isActive, currentStep]);
 
-    const bubbleStyles = useMemo(() => {
-        if (!targetRect) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-
-        const bubbleWidth = 320; // Largura fixa (w-80)
-        const margin = 20;
-        
-        // Lógica para evitar sair pela ESQUERDA
-        let left = targetRect.left;
-        if (left < margin) {
-            left = margin;
-        }
-
-        // Lógica para evitar sair pela DIREITA
-        if (left + bubbleWidth > window.innerWidth - margin) {
-            left = window.innerWidth - bubbleWidth - margin;
-        }
-
-        // Ajuste básico de altura (sempre abaixo do elemento por padrão, ou centralizado se o elemento sumir)
-        let top = targetRect.bottom + 20;
-        
-        // Se o elemento estiver muito embaixo, joga o balão para cima
-        if (top + 200 > window.innerHeight) {
-            top = targetRect.top - 220;
-        }
-
-        return {
-            top,
-            left,
-            transform: 'none'
-        };
-    }, [targetRect, windowWidth]);
-
-    if (!isActive) return null;
+    if (!isActive || !targetRect) return null;
 
     return (
         <div className="fixed inset-0 z-[200] pointer-events-none">
-            {/* Highlight Spotlight */}
-            {targetRect && (
-                <div 
-                    className="absolute border-4 border-indigo-500 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] animate-pulse transition-all duration-500"
-                    style={{
-                        top: targetRect.top - 8,
-                        left: targetRect.left - 8,
-                        width: targetRect.width + 16,
-                        height: targetRect.height + 16,
-                        pointerEvents: 'none'
-                    }}
-                />
-            )}
-
-            {/* Help Bubble com lógica de Viewport */}
-            <div 
-                className="absolute bg-white rounded-2xl shadow-2xl p-6 w-80 pointer-events-auto border border-indigo-100 animate-scale-up"
-                style={bubbleStyles}
-            >
+            <div className="absolute border-4 border-indigo-500 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] animate-pulse"
+                 style={{ top: targetRect.top - 8, left: targetRect.left - 8, width: targetRect.width + 16, height: targetRect.height + 16 }} />
+            <div className="absolute bg-white rounded-2xl shadow-2xl p-6 w-80 pointer-events-auto border border-indigo-100 animate-scale-up"
+                 style={{ top: targetRect.bottom + 20, left: targetRect.left }}>
                 <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xs font-black">
-                            {idx + 1}
-                        </div>
-                        <h4 className="font-bold text-gray-900 text-sm">{currentStep.title}</h4>
-                    </div>
-                    <button onClick={closeGuide} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+                    <h4 className="font-bold text-gray-900 text-sm">{currentStep.title}</h4>
+                    <button onClick={closeGuide} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4"/></button>
                 </div>
-                <p className="text-xs text-gray-600 leading-relaxed mb-6">
-                    {currentStep.content}
-                </p>
-                <div className="flex justify-between items-center">
-                    <button 
-                        onClick={prevStep} 
-                        disabled={idx === 0}
-                        className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-600 disabled:opacity-0"
-                    >
-                        Anterior
-                    </button>
-                    <button 
-                        onClick={nextStep}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
-                    >
-                        {idx === 4 ? 'Concluir Tutorial' : 'Próximo Passo'}
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
+                <p className="text-xs text-gray-600 leading-relaxed mb-6">{currentStep.content}</p>
+                <button onClick={nextStep} className="w-full bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+                    Próximo <ChevronRight className="w-4 h-4"/>
+                </button>
             </div>
         </div>
     );
 };
 
 const JourneyTracker: React.FC<{ steps: HelpStep[] }> = ({ steps }) => {
-    const { startGuide, isStepCompleted, activeGuide } = useHelp();
+    const { startGuide, isStepCompleted, isTrackerVisible, setIsTrackerVisible } = useHelp();
     const [isOpen, setIsOpen] = useState(false);
 
-    if (activeGuide) return null;
+    if (!isTrackerVisible) return null;
 
-    const completedCount = steps.filter(s => isStepCompleted(s.id)).length;
-    const progress = (completedCount / steps.length) * 100;
+    const completed = steps.filter(s => isStepCompleted(s.id)).length;
+    const progress = (completed / steps.length) * 100;
 
     return (
-        <div className="fixed bottom-6 right-6 z-[150] flex flex-col items-end gap-3">
+        <div className="fixed bottom-24 right-6 md:bottom-6 z-[150] flex flex-col items-end gap-3">
             {isOpen && (
-                <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 p-6 w-72 animate-slide-in-bottom">
+                <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 p-6 w-72 animate-slide-in-bottom pointer-events-auto">
                     <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2">
-                            <Glasses className="w-4 h-4 text-indigo-600" />
-                            Jornada da Ótica
-                        </h4>
-                        <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4"/></button>
+                        <h4 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2"><Glasses className="w-4 h-4 text-indigo-600"/> Guia Gestor</h4>
+                        <button onClick={() => setIsOpen(false)} className="text-gray-400"><X className="w-4 h-4"/></button>
                     </div>
-                    
-                    <div className="space-y-4 mb-6">
-                        {steps.map((step, i) => (
-                            <div key={step.id} className="flex items-start gap-3">
-                                <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center border ${isStepCompleted(step.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-200 text-gray-300'}`}>
-                                    {isStepCompleted(step.id) ? <CheckCircle2 className="w-3 h-3" /> : <span className="text-[10px] font-bold">{i+1}</span>}
+                    <div className="space-y-3 mb-6">
+                        {steps.map(s => (
+                            <div key={s.id} className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                                <div className={`w-4 h-4 rounded-full border ${isStepCompleted(s.id) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-200'}`}>
+                                    {isStepCompleted(s.id) && <CheckCircle2 className="w-full h-full p-0.5"/>}
                                 </div>
-                                <span className={`text-xs font-medium ${isStepCompleted(step.id) ? 'text-gray-500 line-through' : 'text-gray-700'}`}>{step.title}</span>
+                                <span className={isStepCompleted(s.id) ? 'line-through opacity-50' : ''}>{s.title}</span>
                             </div>
                         ))}
                     </div>
-
-                    <button 
-                        onClick={() => { startGuide('OPTICAL_FLOW'); setIsOpen(false); }}
-                        className="w-full bg-indigo-50 text-indigo-700 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 flex items-center justify-center gap-2 transition-all"
-                    >
-                        <PlayCircle className="w-4 h-4" /> Iniciar Ajuda Guiada
+                    <button onClick={() => { startGuide('OPTICAL'); setIsOpen(false); }} className="w-full bg-indigo-50 text-indigo-700 py-3 rounded-2xl text-xs font-black uppercase hover:bg-indigo-100 flex items-center justify-center gap-2 transition-all">
+                        <PlayCircle className="w-4 h-4"/> Iniciar Guia
                     </button>
+                    <button onClick={() => setIsTrackerVisible(false)} className="w-full text-center mt-4 text-[9px] font-black text-gray-400 uppercase hover:text-rose-500">Ocultar Guia</button>
                 </div>
             )}
-            
-            <button 
-                onClick={() => setIsOpen(!isOpen)}
-                className="group relative flex items-center gap-3 bg-white p-2 pr-4 rounded-full shadow-xl border border-indigo-50 hover:border-indigo-200 transition-all overflow-hidden"
-            >
-                <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg">
-                    <Info className="w-5 h-5" />
-                </div>
+            <button onClick={() => setIsOpen(!isOpen)} className="bg-white p-2 pr-4 rounded-full shadow-xl border border-indigo-50 flex items-center gap-3 pointer-events-auto group">
+                <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg"><Info className="w-5 h-5"/></div>
                 <div className="text-left">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Guia do Gestor</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Progresso</p>
                     <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${progress}%` }}></div>
-                        </div>
+                        <div className="h-1.5 w-16 bg-gray-100 rounded-full"><div className="h-full bg-emerald-500" style={{ width: `${progress}%` }}></div></div>
                         <span className="text-[9px] font-black text-emerald-600">{Math.round(progress)}%</span>
                     </div>
                 </div>

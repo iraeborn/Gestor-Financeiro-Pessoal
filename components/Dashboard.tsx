@@ -29,22 +29,21 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const activeModules = settings?.activeModules || {};
   
-  // LOGICA DE PERMISSÃO: Extrai permissões do workspace atual do usuário
   const familyId = currentUser.familyId || (currentUser as any).family_id;
   const currentWorkspace = currentUser.workspaces?.find(w => w.id === familyId);
   const isAdmin = currentUser.id === familyId || currentWorkspace?.role === 'ADMIN';
+  const isSalesperson = currentUser.role === 'SALES_OPTICAL';
   const permissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
 
-  // Helpers de Visibilidade
   const canSeeFinance = isAdmin || permissions.includes('FIN_TRANSACTIONS') || permissions.includes('FIN_REPORTS');
-  const canSeeAccounts = isAdmin || permissions.includes('FIN_ACCOUNTS');
+  const canSeeAccounts = !isSalesperson && (isAdmin || permissions.includes('FIN_ACCOUNTS'));
   const canSeeOptical = (isAdmin || permissions.includes('OPTICAL_RX') || permissions.includes('SRV_OS')) && activeModules.optical;
   const canSeeOS = isAdmin || permissions.includes('SRV_OS');
-  const canManageTrans = isAdmin || permissions.includes('FIN_TRANSACTIONS');
+  const canManageTrans = isAdmin || permissions.includes('FIN_TRANSACTIONS') || isSalesperson;
 
   useEffect(() => {
     const fetchDiag = async () => {
-      const showIntelligence = activeModules.intelligence && (isAdmin || permissions.includes('FIN_ADVISOR') || permissions.includes('DIAG_HUB'));
+      const showIntelligence = activeModules.intelligence && !isSalesperson && (isAdmin || permissions.includes('FIN_ADVISOR') || permissions.includes('DIAG_HUB'));
       if (showIntelligence && state?.transactions?.length > 0) {
         setLoadingDiag(true);
         try {
@@ -55,7 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length, activeModules.intelligence, isAdmin, permissions]);
+  }, [state?.transactions?.length, activeModules.intelligence, isAdmin, permissions, isSalesperson]);
 
   const metrics = useMemo(() => {
     const now = new Date();
@@ -64,7 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     const transactions = state.transactions || [];
     const accounts = state.accounts || [];
 
-    const saldoReal = accounts.reduce((acc, a) => acc + a.balance, 0);
+    const saldoReal = isSalesperson ? 0 : accounts.reduce((acc, a) => acc + a.balance, 0);
     const entradasMes = transactions
         .filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PAID && t.date >= firstDay)
         .reduce((acc, t) => acc + t.amount, 0);
@@ -76,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
 
     return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
-  }, [state]);
+  }, [state, isSalesperson]);
 
   const recentTransactions = useMemo(() => {
       return [...metrics.currentTransactions]
@@ -92,7 +91,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Painel de Controle</h1>
           <p className="text-gray-500 font-medium">
-            Resumo personalizado para seu perfil: <span className="text-indigo-600 font-bold">{isAdmin ? 'Administrador' : currentWorkspace?.role || 'Membro'}</span>.
+            Bem vindo, <span className="text-indigo-600 font-bold">{currentUser.name}</span>. Perfil: <span className="text-slate-800 font-bold">{isAdmin ? 'Administrador' : currentWorkspace?.role || 'Membro'}</span>.
           </p>
         </div>
         {canManageTrans && (
@@ -105,14 +104,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* CARDS DINÂMICOS POR PERMISSÃO */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* Card Financeiro: Só se tiver permissão financeira */}
           {canSeeFinance && (
               <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
                   <div className="flex justify-between items-start mb-2">
-                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Faturamento Realizado</p>
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Meu Faturamento</p>
                       <TrendingUp className="w-5 h-5 text-emerald-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
@@ -122,7 +118,6 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
           )}
 
-          {/* Cards de Ótica: Visível apenas para quem tem acesso a OS ou RX */}
           {canSeeOptical && (
               <>
                 <div onClick={() => canSeeOS && onChangeView('OPTICAL_LAB')} className="bg-indigo-600 p-5 rounded-[2rem] text-white shadow-lg shadow-indigo-100 cursor-pointer hover:scale-[1.02] transition-all border border-indigo-500 group relative overflow-hidden">
@@ -140,7 +135,6 @@ const Dashboard: React.FC<DashboardProps> = ({
               </>
           )}
 
-          {/* Card de Saldo: Restrito a Administradores ou Financeiro Senior */}
           {canSeeAccounts ? (
               <div className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col justify-between group hover:border-indigo-200 transition-all">
                   <div className="flex justify-between items-start mb-2">
@@ -153,17 +147,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Consolidação de contas</p>
               </div>
           ) : (
-              /* Placeholder se não puder ver saldo para manter o grid */
-              <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-dashed border-gray-200 flex flex-col justify-center items-center text-center">
-                  <ShieldAlert className="w-6 h-6 text-gray-300 mb-2" />
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Informações Restritas</p>
-                  <p className="text-[8px] text-gray-300 mt-1 uppercase">Contate o Administrador</p>
-              </div>
+              !isSalesperson && (
+                <div className="bg-gray-50/50 p-5 rounded-[2rem] border border-dashed border-gray-200 flex flex-col justify-center items-center text-center">
+                    <ShieldAlert className="w-6 h-6 text-gray-300 mb-2" />
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Informações Restritas</p>
+                    <p className="text-[8px] text-gray-300 mt-1 uppercase">Apenas Administradores</p>
+                </div>
+              )
           )}
       </div>
 
-      {/* SEÇÃO DE GRÁFICOS: Visível apenas para quem tem permissão de relatórios */}
-      {canSeeFinance && (
+      {canSeeFinance && !isSalesperson && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 lg:col-span-2">
               <h3 className="text-lg font-black text-gray-800 mb-8 flex items-center gap-2 uppercase tracking-tighter">
@@ -182,12 +176,11 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
       )}
 
-      {/* SEÇÃO DE TABELA: Visível apenas se puder ver transações */}
-      {permissions.includes('FIN_TRANSACTIONS') || isAdmin ? (
+      {(permissions.includes('FIN_TRANSACTIONS') || isAdmin || isSalesperson) && (
           <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Histórico Recente</h3>
-                <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Extrato Completo <ArrowRight className="w-4 h-4" /></button>
+                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Meus Lançamentos Recentes</h3>
+                <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest">Ver Extrato <ArrowRight className="w-4 h-4" /></button>
             </div>
             <TransactionList 
                 transactions={recentTransactions} 
@@ -198,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onToggleStatus={onUpdateStatus}
             />
           </div>
-      ) : null}
+      )}
 
       <TransactionModal 
         isOpen={isTransModalOpen} 

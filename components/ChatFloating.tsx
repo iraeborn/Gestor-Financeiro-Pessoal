@@ -18,7 +18,6 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
 
     useEffect(() => {
         if (socket) {
-            // Puxa histórico inicial resumido
             fetch(`/api/chat/history?familyId=${currentUser.familyId}`)
                 .then(r => r.json())
                 .then(data => setMessages(data))
@@ -60,14 +59,14 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3 pointer-events-none">
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3 pointer-events-none sm:mb-0 mb-16">
             {isOpen && (
-                <div className="w-80 h-[450px] bg-white rounded-3xl shadow-2xl border border-gray-100 flex flex-col pointer-events-auto animate-slide-in-bottom overflow-hidden">
+                <div className="w-[calc(100vw-48px)] sm:w-80 h-[450px] bg-white rounded-3xl shadow-2xl border border-gray-100 flex flex-col pointer-events-auto animate-slide-in-bottom overflow-hidden">
                     {/* Header */}
-                    <div className="p-4 bg-indigo-600 text-white flex justify-between items-center shadow-lg">
+                    <div className="p-4 bg-indigo-600 text-white flex justify-between items-center shadow-lg shrink-0">
                         <div className="flex items-center gap-2">
                             <MessageSquare className="w-4 h-4" />
-                            <span className="text-xs font-bold uppercase tracking-widest">Chat da Equipe</span>
+                            <span className="text-xs font-bold uppercase tracking-widest">Equipe</span>
                         </div>
                         <button onClick={toggleChat} className="p-1 hover:bg-white/10 rounded-lg transition-colors"><ChevronDown className="w-4 h-4"/></button>
                     </div>
@@ -86,7 +85,7 @@ const ChatFloating: React.FC<ChatFloatingProps> = ({ currentUser, socket }) => {
                     </div>
 
                     {/* Input Area */}
-                    <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2">
+                    <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0">
                         <input 
                             type="text" 
                             value={input}
