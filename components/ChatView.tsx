@@ -24,8 +24,16 @@ const ChatView: React.FC<ChatViewProps> = ({ currentUser, socket }) => {
     useEffect(() => {
         getFamilyMembers().then(setMembers);
         
-        fetch(`/api/chat/history?familyId=${currentUser.familyId}`)
-            .then(r => r.json())
+        const token = localStorage.getItem('token');
+        fetch(`/api/chat/history?familyId=${currentUser.familyId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        })
+            .then(r => {
+                if (r.ok) return r.json();
+                throw new Error('Unauthorized');
+            })
             .then(data => setMessages(data))
             .catch(console.error);
 

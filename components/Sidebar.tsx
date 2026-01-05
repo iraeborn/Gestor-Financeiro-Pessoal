@@ -100,7 +100,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <div className="flex items-center gap-3"><div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black">F</div>{(!isCollapsed || isMobileOpen) && <span className="font-black text-lg text-gray-800 tracking-tighter">FinManager</span>}</div>
                 </div>
                 
-                <div className={`flex items-center gap-2 ${isCollapsed && !isMobileOpen ? 'hidden' : 'flex'}`}>
+                {/* Utility Buttons: Show vertical if collapsed */}
+                <div className={`flex gap-2 ${isCollapsed && !isMobileOpen ? 'flex-col items-center w-full mt-2' : 'flex-row items-center'}`}>
                     <button 
                         onClick={() => setIsTrackerVisible(!isTrackerVisible)} 
                         className={`p-2.5 rounded-xl border transition-all ${isTrackerVisible ? 'bg-indigo-600 text-white border-indigo-700 shadow-md' : 'bg-gray-50 border-gray-100 text-gray-400 hover:text-indigo-600'}`}
@@ -108,15 +109,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                     >
                         <HelpCircle className="w-5 h-5" />
                     </button>
-                    <button onClick={onOpenNotifications} className={`relative p-2.5 rounded-xl border ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400'}`}><Bell className="w-5 h-5" />{notificationCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">{notificationCount}</span>}</button>
-                    <button onClick={handleShareCurrentView} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600"><Share2 className="w-5 h-5" /></button>
+                    <button onClick={onOpenNotifications} className={`relative p-2.5 rounded-xl border ${notificationCount > 0 ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-gray-50 border-gray-100 text-gray-400'}`} title="Notificações">
+                        <Bell className="w-5 h-5" />
+                        {notificationCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center">{notificationCount}</span>}
+                    </button>
+                    <button onClick={handleShareCurrentView} className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-gray-400 hover:text-indigo-600" title="Compartilhar Link">
+                        <Share2 className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-4">
                 {filteredMenuItems.map((section, idx) => (
                     <div key={idx}>{(!isCollapsed || isMobileOpen) ? <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">{section.section}</p> : <div className="h-px bg-gray-100 mx-2 mb-4"></div>}
                         <div className="space-y-1">
-                            {section.items.map((item: any) => (<button key={item.id} onClick={() => { onChangeView(item.id as ViewMode); if(isMobileOpen) setIsMobileOpen(false); }} className={`w-full flex items-center rounded-xl text-sm font-medium transition-all ${isCollapsed && !isMobileOpen ? 'justify-center py-3' : 'px-4 py-2.5 gap-3'} ${currentView === item.id ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}><item.icon className={`shrink-0 ${isCollapsed && !isMobileOpen ? 'w-6 h-6' : 'w-5 h-5'} ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400'}`} />{(!isCollapsed || isMobileOpen) && <span className="truncate text-left">{item.label}</span>}</button>))}
+                            {section.items.map((item: any) => (<button key={item.id} onClick={() => { onChangeView(item.id as ViewMode); if(isMobileOpen) setIsMobileOpen(false); }} className={`w-full flex items-center rounded-xl text-sm font-medium transition-all ${isCollapsed && !isMobileOpen ? 'justify-center py-3' : 'px-4 py-2.5 gap-3'} ${currentView === item.id ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`} title={isCollapsed ? item.label : undefined}><item.icon className={`shrink-0 ${isCollapsed && !isMobileOpen ? 'w-6 h-6' : 'w-5 h-5'} ${currentView === item.id ? 'text-indigo-600' : 'text-gray-400'}`} />{(!isCollapsed || isMobileOpen) && <span className="truncate text-left">{item.label}</span>}</button>))}
                         </div>
                     </div>
                 ))}
