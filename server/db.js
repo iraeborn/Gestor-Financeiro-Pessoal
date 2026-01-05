@@ -77,8 +77,8 @@ export const initDb = async () => {
         )`,
         `CREATE TABLE IF NOT EXISTS salesperson_schedules (
             id TEXT PRIMARY KEY,
-            salesperson_id REFERENCES salespeople(id),
-            branch_id REFERENCES branches(id),
+            salesperson_id TEXT REFERENCES salespeople(id),
+            branch_id TEXT REFERENCES branches(id),
             date DATE NOT NULL,
             shift TEXT DEFAULT 'FULL',
             notes TEXT,
@@ -190,6 +190,26 @@ export const initDb = async () => {
             notes TEXT,
             user_id TEXT REFERENCES users(id),
             family_id TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            deleted_at TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS service_clients (
+            id TEXT PRIMARY KEY,
+            contact_id TEXT REFERENCES contacts(id),
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            notes TEXT,
+            birth_date DATE,
+            insurance TEXT,
+            module_tag TEXT,
+            user_id TEXT REFERENCES users(id),
+            family_id TEXT,
+            odontogram JSONB DEFAULT '[]',
+            anamnesis JSONB DEFAULT '{}',
+            prescriptions JSONB DEFAULT '[]',
+            attachments JSONB DEFAULT '[]',
+            treatment_plans JSONB DEFAULT '[]',
             created_at TIMESTAMP DEFAULT NOW(),
             deleted_at TIMESTAMP
         )`

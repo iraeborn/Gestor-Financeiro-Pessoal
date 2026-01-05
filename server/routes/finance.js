@@ -84,16 +84,24 @@ export default function(logAudit) {
             await client.query('BEGIN');
 
             const tableMap = {
-                'accounts': 'accounts', 'transactions': 'transactions', 'goals': 'goals',
-                'contacts': 'contacts', 'categories': 'categories', 'branches': 'branches',
+                'accounts': 'accounts', 
+                'transactions': 'transactions', 
+                'goals': 'goals',
+                'contacts': 'contacts', 
+                'categories': 'categories', 
+                'branches': 'branches',
                 'serviceItems': 'service_items',
-                'serviceOrders': 'service_orders', 'commercialOrders': 'commercial_orders',
-                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 'laboratories': 'laboratories',
-                'salespersonSchedules': 'salesperson_schedules'
+                'serviceOrders': 'service_orders', 
+                'commercialOrders': 'commercial_orders',
+                'opticalRxs': 'optical_rxs', 
+                'salespeople': 'salespeople', 
+                'laboratories': 'laboratories',
+                'salespersonSchedules': 'salesperson_schedules',
+                'serviceClients': 'service_clients'
             };
 
             const tableName = tableMap[store];
-            if (!tableName) throw new Error(`Loja ${store} não mapeada.`);
+            if (!tableName) throw new Error(`Loja ${store} não mapeada no servidor.`);
 
             if (action === 'DELETE') {
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
@@ -103,7 +111,7 @@ export default function(logAudit) {
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lowerK) || k.startsWith('_')) return false;
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at', 'createdby', 'created_by', 'updatedby', 'updated_by'].includes(lowerK)) return false;
                     
-                    if (k === 'name') return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals', 'service_items'].includes(tableName);
+                    if (k === 'name') return ['accounts', 'contacts', 'categories', 'branches', 'laboratories', 'goals', 'service_items', 'service_clients'].includes(tableName);
                     if (k === 'email') return ['contacts', 'laboratories'].includes(tableName);
                     if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName', 'salespersonName', 'branchName', 'contactName'].includes(k)) return false;
                     
