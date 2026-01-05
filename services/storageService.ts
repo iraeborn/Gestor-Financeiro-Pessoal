@@ -321,16 +321,17 @@ export const api: ApiClient = {
     },
 
     saveTransaction: async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
-        // CORREÇÃO: Se houver novo contato ou categoria, salvamos e enfileiramos eles PRIMEIRO.
-        // Isso garante que no enfileiramento do Sync, as dependências tenham timestamps anteriores
-        // e cheguem ao servidor antes da transação, evitando erro de Foreign Key.
+        // CORREÇÃO: Garante ID antes de salvar
+        const transId = t.id || crypto.randomUUID();
+        const transactionWithId = { ...t, id: transId };
+
         if (newContact) {
             await api.saveContact(newContact);
         }
         if (newCategory) {
             await api.saveCategory(newCategory);
         }
-        return api.saveLocallyAndQueue('transactions', t);
+        return api.saveLocallyAndQueue('transactions', transactionWithId);
     },
 
     deleteTransaction: async (id: string) => api.deleteLocallyAndQueue('transactions', id),

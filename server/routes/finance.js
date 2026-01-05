@@ -26,7 +26,6 @@ const mapToFrontend = (row) => {
         if (value instanceof Date) value = value.toISOString().split('T')[0];
         newRow[camelKey] = value;
     }
-    // Garante que o familyId esteja sempre presente para o filtro do storageService.ts
     if (row.family_id && !newRow.familyId) {
         newRow.familyId = row.family_id;
     }
@@ -97,14 +96,11 @@ export default function(logAudit) {
             if (action === 'DELETE') {
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else if (action === 'SAVE') {
-                // Força o vínculo com o usuário e família da sessão para evitar orfandade de dados
-                payload.userId = userId;
-                payload.familyId = familyId;
-
                 const fields = Object.keys(payload).filter(k => {
+                    // Ignora IDs e campos de sistema
                     if (['id', 'userId', 'familyId', 'user_id', 'family_id'].includes(k) || k.startsWith('_')) return false;
-                    const virtualFields = ['branchName', 'contactName', 'salespersonName', 'clientName', 'assigneeName', 'accountName', 'createdByName'];
-                    if (virtualFields.includes(k)) return false;
+                    // Ignora campos virtuais de UI (nomes amigáveis vindos de joins)
+                    if (k.endsWith('Name') || k.endsWith('Label') || ['createdByName', 'accountName'].includes(k)) return false;
                     return true;
                 });
 
@@ -123,24 +119,27 @@ export default function(logAudit) {
                     ...fields.map(f => {
                         let val = payload[f];
                         if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+                        // Converte string numérica para Number se for um campo financeiro
+                        if (numericFields.includes(f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`))) return Number(val) || 0;
                         return sanitizeValue(val);
                     })
                 ];
+                
+                // Log para debug no servidor
+                console.log(`[SQL EXEC] Table: ${tableName} | ID: ${payload.id} | User: ${userId} | Family: ${familyId}`);
                 
                 await client.query(query, values);
 
                 // Lógica de Atualização de Saldo
                 if (tableName === 'transactions' && payload.status === 'PAID') {
+                    const amount = Number(payload.amount);
                     if (payload.type === 'TRANSFER') {
-                        // Saída da conta origem
-                        await updateAccountBalance(client, payload.accountId, payload.amount, 'EXPENSE');
-                        // Entrada na conta destino
+                        await updateAccountBalance(client, payload.accountId, amount, 'EXPENSE');
                         if (payload.destinationAccountId) {
-                            await updateAccountBalance(client, payload.destinationAccountId, payload.amount, 'INCOME');
+                            await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
                         }
                     } else {
-                        // Receita ou Despesa padrão
-                        await updateAccountBalance(client, payload.accountId, payload.amount, payload.type);
+                        await updateAccountBalance(client, payload.accountId, amount, payload.type);
                     }
                 }
             }
@@ -149,7 +148,7 @@ export default function(logAudit) {
             res.json({ success: true });
         } catch (err) {
             if (client) await client.query('ROLLBACK').catch(e => console.error("Rollback error", e));
-            console.error(`[SYNC ERROR] Store: ${store}`, err.message);
+            console.error(`[SYNC ERROR] Store: ${store} | Error: ${err.message}`);
             res.status(500).json({ error: err.message });
         } finally {
             if (client) client.release();
