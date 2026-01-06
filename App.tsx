@@ -117,8 +117,36 @@ const AppContent: React.FC<{
         const newStatus = t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID;
         const updatedT = { ...t, status: newStatus };
         const actionLabel = newStatus === TransactionStatus.PAID ? "Confirmação de Pagamento" : "Estorno de Lançamento";
+        
         try {
-            setState(prev => prev ? ({ ...prev, transactions: prev.transactions.map(item => item.id === t.id ? updatedT : item) }) : prev);
+            // Optimistic UI: Atualiza saldo local e lista de transações
+            setState(prev => {
+                if (!prev) return prev;
+                
+                // Recalcula saldos das contas localmente
+                const updatedAccounts = prev.accounts.map(acc => {
+                    if (acc.id === t.accountId) {
+                        let diff = t.amount;
+                        if (t.type === TransactionType.EXPENSE) diff *= -1;
+                        // Se estamos estornando (PAID -> PENDING), subtraímos o impacto original
+                        if (newStatus === TransactionStatus.PENDING) diff *= -1;
+                        return { ...acc, balance: acc.balance + diff };
+                    }
+                    if (t.type === TransactionType.TRANSFER && acc.id === t.destinationAccountId) {
+                        let diff = t.amount;
+                        if (newStatus === TransactionStatus.PENDING) diff *= -1;
+                        return { ...acc, balance: acc.balance + diff };
+                    }
+                    return acc;
+                });
+
+                return {
+                    ...prev,
+                    accounts: updatedAccounts,
+                    transactions: prev.transactions.map(item => item.id === t.id ? updatedT : item)
+                };
+            });
+
             await api.saveTransaction(updatedT);
             showAlert(`${actionLabel} realizado com sucesso!`, "success");
             refreshData();

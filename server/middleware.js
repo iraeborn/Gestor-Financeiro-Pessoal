@@ -1,3 +1,4 @@
+
 import jwt from 'jsonwebtoken';
 import pool from './db.js';
 
@@ -16,7 +17,6 @@ export const authenticateToken = (req, res, next) => {
   });
 };
 
-// Helper para calcular Diff entre objeto antigo (DB SnakeCase) e novo (Req Body CamelCase)
 export const calculateChanges = (oldObj, newObj, keyMap) => {
     if (!oldObj) return null;
     const changes = {};
@@ -44,21 +44,20 @@ export const calculateChanges = (oldObj, newObj, keyMap) => {
 };
 
 /**
- * Atualiza o saldo de uma conta de forma atômica.
- * @param {Object} client - Cliente do Pool de conexão (para manter a transação)
+ * Atualiza o saldo de uma conta.
+ * @param {Object} client - Cliente do banco
  * @param {string} accountId - ID da conta
- * @param {number} amount - Valor absoluto
- * @param {string} type - INCOME, EXPENSE ou TRANSFER
- * @param {boolean} isReversal - Se true, inverte a operação (estorno)
+ * @param {number} amount - Valor
+ * @param {string} type - INCOME / EXPENSE
+ * @param {boolean} isReversal - Se TRUE, faz a operação inversa (Estorno)
  */
 export const updateAccountBalance = async (client, accountId, amount, type, isReversal = false) => {
     if (!accountId || isNaN(amount)) return;
     
     let multiplier = 1;
-    // Se for despesa, subtrai. Se for receita, soma.
     if (type === 'EXPENSE') multiplier = -1;
     
-    // Se for uma reversão (exclusão), inverte o sinal original
+    // Se for estorno, invertemos o impacto original
     if (isReversal) multiplier *= -1;
     
     const finalChange = Number(amount) * multiplier;
@@ -68,8 +67,6 @@ export const updateAccountBalance = async (client, accountId, amount, type, isRe
         [finalChange, accountId]
     );
 };
-
-export const familyCheckParam2 = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`;
 
 export const getUserWorkspaces = async (userId) => {
     const res = await pool.query(`

@@ -101,17 +101,6 @@ export default function(logAudit) {
             const tableName = tableMap[store];
             if (!tableName) throw new Error(`Loja ${store} não mapeada.`);
 
-            // TRAVA DE SEGURANÇA: Bloquear edição de Vendas Confirmadas
-            if (tableName === 'commercial_orders' && action === 'SAVE') {
-                const existing = await client.query('SELECT status FROM commercial_orders WHERE id = $1', [payload.id]);
-                if (existing.rows.length > 0 && existing.rows[0].status === 'CONFIRMED' && payload.status === 'CONFIRMED') {
-                    // Se já era CONFIRMED e está tentando salvar de novo (exceto se for cancelamento/estorno vindo do financeiro)
-                    // Permitimos apenas se o status estiver mudando. Se for apenas edição dos dados internos, bloqueamos.
-                    // Para simplificar, bloqueamos qualquer alteração se já estiver CONFIRMED.
-                    // throw new Error("Esta venda está consolidada e não permite alterações.");
-                }
-            }
-
             if (action === 'DELETE') {
                 if (tableName === 'transactions') {
                     const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1', [payload.id]);
@@ -127,18 +116,45 @@ export default function(logAudit) {
                     }
                 }
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
-                
                 await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro: ${store}`);
 
             } else if (action === 'SAVE') {
+                // Lógica de saldo para transações
+                if (tableName === 'transactions') {
+                    const existing = await client.query('SELECT status, amount, type, account_id FROM transactions WHERE id = $1', [payload.id]);
+                    const oldT = existing.rows[0];
+
+                    // CASO 1: Transação era PENDING e virou PAID (Pagamento realizado)
+                    if ((!oldT || oldT.status !== 'PAID') && payload.status === 'PAID') {
+                        const amount = Number(payload.amount);
+                        if (payload.type === 'TRANSFER') {
+                            await updateAccountBalance(client, payload.accountId, amount, 'EXPENSE');
+                            if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
+                        } else {
+                            await updateAccountBalance(client, payload.accountId, amount, payload.type);
+                        }
+                    }
+                    // CASO 2: Transação era PAID e virou PENDING (ESTORNO)
+                    else if (oldT && oldT.status === 'PAID' && payload.status !== 'PAID') {
+                        const amount = Number(oldT.amount);
+                        if (oldT.type === 'TRANSFER') {
+                            await updateAccountBalance(client, oldT.account_id, amount, 'EXPENSE', true);
+                            const destAcc = await client.query('SELECT destination_account_id FROM transactions WHERE id = $1', [payload.id]);
+                            if (destAcc.rows[0]?.destination_account_id) {
+                                await updateAccountBalance(client, destAcc.rows[0].destination_account_id, amount, 'INCOME', true);
+                            }
+                        } else {
+                            await updateAccountBalance(client, oldT.account_id, amount, oldT.type, true);
+                        }
+                    }
+                }
+
                 const fields = Object.keys(payload).filter(k => {
                     const lk = k.toLowerCase();
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at'].includes(lk)) return false;
-                    
                     const virtualFields = ['contactName', 'accountName', 'assigneeName', 'branchName', 'createdByName', 'salespersonName'];
                     if (virtualFields.includes(k) || k.endsWith('Label')) return false;
-                    
                     return true;
                 });
 
@@ -154,28 +170,12 @@ export default function(logAudit) {
                     let val = payload[f];
                     if (typeof val === 'object' && val !== null) return JSON.stringify(val);
                     const pf = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
-                    
-                    // Fallback para CATEGORY (Obrigatório)
-                    if (pf === 'category' && (!val || val === "")) {
-                        return payload.type === 'TRANSFER' ? 'Transferência' : 'Geral';
-                    }
-
+                    if (pf === 'category' && (!val || val === "")) return payload.type === 'TRANSFER' ? 'Transferência' : 'Geral';
                     if (numericFields.includes(pf)) return val === null || val === undefined || val === '' ? 0 : Number(val);
                     return sanitizeValue(val);
                 })];
                 
                 await client.query(query, values);
-
-                if (tableName === 'transactions' && payload.status === 'PAID') {
-                    const amount = Number(payload.amount);
-                    if (payload.type === 'TRANSFER') {
-                        await updateAccountBalance(client, payload.accountId, amount, 'EXPENSE');
-                        if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
-                    } else {
-                        await updateAccountBalance(client, payload.accountId, amount, payload.type);
-                    }
-                }
-
                 await logAudit(client, userId, 'SAVE', store, payload.id, payload.description || payload.name || `Atualização de ${store}`);
             }
 
