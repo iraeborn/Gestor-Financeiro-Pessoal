@@ -12,6 +12,7 @@ export interface SyncItem {
 class SyncService {
     private isSyncing = false;
     private syncListeners: ((status: 'syncing' | 'online' | 'offline') => void)[] = [];
+    private syncPromise: Promise<void> | null = null;
 
     onStatusChange(callback: (status: 'syncing' | 'online' | 'offline') => void) {
         this.syncListeners.push(callback);
@@ -33,51 +34,63 @@ class SyncService {
         this.triggerSync();
     }
 
-    async triggerSync() {
-        if (this.isSyncing || !navigator.onLine) {
-            this.notify(navigator.onLine ? 'online' : 'offline');
+    async triggerSync(): Promise<void> {
+        // Se já houver um processo de sync em andamento, retorna a promessa existente
+        if (this.syncPromise) return this.syncPromise;
+
+        if (!navigator.onLine) {
+            this.notify('offline');
             return;
         }
 
-        const queue = await localDb.getAll<SyncItem>('sync_queue');
-        if (queue.length === 0) return;
+        this.syncPromise = (async () => {
+            const queue = await localDb.getAll<SyncItem>('sync_queue');
+            if (queue.length === 0) {
+                this.syncPromise = null;
+                this.notify('online');
+                return;
+            }
 
-        this.isSyncing = true;
-        this.notify('syncing');
+            this.isSyncing = true;
+            this.notify('syncing');
 
-        const token = localStorage.getItem('token');
-        try {
-            const sortedQueue = queue.sort((a, b) => a.timestamp - b.timestamp);
+            const token = localStorage.getItem('token');
+            try {
+                const sortedQueue = queue.sort((a, b) => a.timestamp - b.timestamp);
 
-            for (const item of sortedQueue) {
-                try {
-                    const response = await fetch(`/api/sync/process`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify(item)
-                    });
+                for (const item of sortedQueue) {
+                    try {
+                        const response = await fetch(`/api/sync/process`, {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify(item)
+                        });
 
-                    if (response.ok) {
-                        await localDb.delete('sync_queue', item.id);
-                    } else {
-                        const errorData = await response.json();
-                        console.error(`[SYNC] Erro no servidor ao processar item ${item.id}:`, errorData.error);
+                        if (response.ok) {
+                            await localDb.delete('sync_queue', item.id);
+                        } else {
+                            const errorData = await response.json();
+                            console.error(`[SYNC] Erro no servidor ao processar item ${item.id}:`, errorData.error);
+                            break;
+                        }
+                    } catch (fetchErr) {
+                        console.error(`[SYNC] Erro de rede ao processar item ${item.id}:`, fetchErr);
                         break;
                     }
-                } catch (fetchErr) {
-                    console.error(`[SYNC] Erro de rede ao processar item ${item.id}:`, fetchErr);
-                    break;
                 }
+            } catch (e) {
+                console.error("Sync batch process failed:", e);
+            } finally {
+                this.isSyncing = false;
+                this.syncPromise = null;
+                this.notify(navigator.onLine ? 'online' : 'offline');
             }
-        } catch (e) {
-            console.error("Sync batch process failed:", e);
-        } finally {
-            this.isSyncing = false;
-            this.notify(navigator.onLine ? 'online' : 'offline');
-        }
+        })();
+
+        return this.syncPromise;
     }
 
     async pullFromServer() {

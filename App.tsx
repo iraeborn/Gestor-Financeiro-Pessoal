@@ -127,13 +127,15 @@ const AppContent: React.FC<{
                 const updatedAccounts = prev.accounts.map(acc => {
                     if (acc.id === t.accountId) {
                         let diff = t.amount;
-                        if (t.type === TransactionType.EXPENSE) diff *= -1;
-                        // Se estamos estornando (PAID -> PENDING), subtraímos o impacto original
+                        // Débito ou Saída de Transferência subtrai
+                        if (t.type === TransactionType.EXPENSE || t.type === TransactionType.TRANSFER) diff *= -1;
+                        
+                        // Se estamos estornando (PAID -> PENDING), invertemos o impacto original (subtraímos a subtração = soma)
                         if (newStatus === TransactionStatus.PENDING) diff *= -1;
                         return { ...acc, balance: acc.balance + diff };
                     }
                     if (t.type === TransactionType.TRANSFER && acc.id === t.destinationAccountId) {
-                        let diff = t.amount;
+                        let diff = t.amount; // Na conta de destino é sempre entrada (+)
                         if (newStatus === TransactionStatus.PENDING) diff *= -1;
                         return { ...acc, balance: acc.balance + diff };
                     }
@@ -170,7 +172,7 @@ const AppContent: React.FC<{
                 updatedAccounts = prev.accounts.map(acc => {
                     if (acc.id === newT.accountId) {
                         let diff = newT.amount;
-                        if (newT.type === TransactionType.EXPENSE) diff *= -1;
+                        if (newT.type === TransactionType.EXPENSE || newT.type === TransactionType.TRANSFER) diff *= -1;
                         return { ...acc, balance: acc.balance + diff };
                     }
                     if (newT.type === TransactionType.TRANSFER && acc.id === newT.destinationAccountId) {
@@ -206,7 +208,7 @@ const AppContent: React.FC<{
                         updatedAccounts = prev.accounts.map(acc => {
                             if (acc.id === t.accountId) {
                                 let diff = t.amount;
-                                if (t.type === TransactionType.EXPENSE) diff *= -1;
+                                if (t.type === TransactionType.EXPENSE || t.type === TransactionType.TRANSFER) diff *= -1;
                                 return { ...acc, balance: acc.balance - diff };
                             }
                             if (t.type === TransactionType.TRANSFER && acc.id === t.destinationAccountId) {

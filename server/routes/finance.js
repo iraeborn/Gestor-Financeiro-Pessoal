@@ -37,6 +37,16 @@ const mapToFrontend = (row) => {
     return newRow;
 };
 
+// Função auxiliar para calcular o impacto financeiro de um registro no saldo
+const calculateImpact = (status, amount, type) => {
+    if (status !== 'PAID') return 0;
+    const numericAmount = Number(amount);
+    if (type === 'EXPENSE') return -numericAmount;
+    if (type === 'INCOME') return numericAmount;
+    if (type === 'TRANSFER') return -numericAmount; // Impacto na conta de origem
+    return 0;
+};
+
 export default function(logAudit) {
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
@@ -103,7 +113,8 @@ export default function(logAudit) {
 
             if (action === 'DELETE') {
                 if (tableName === 'transactions') {
-                    const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1', [payload.id]);
+                    // Lock e Reversão
+                    const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1 FOR UPDATE', [payload.id]);
                     const t = tRes.rows[0];
                     if (t && t.status === 'PAID') {
                         const amount = Number(t.amount);
@@ -119,30 +130,48 @@ export default function(logAudit) {
                 await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro: ${store}`);
 
             } else if (action === 'SAVE') {
-                // Lógica Robusta de Saldo p/ Transações
                 if (tableName === 'transactions') {
-                    const existingRes = await client.query('SELECT status, amount, type, account_id, destination_account_id FROM transactions WHERE id = $1', [payload.id]);
+                    // BLOQUEIO E LÓGICA DE DELTA (EVITA CONTAGEM DUPLA)
+                    const existingRes = await client.query(
+                        'SELECT status, amount, type, account_id, destination_account_id FROM transactions WHERE id = $1 FOR UPDATE', 
+                        [payload.id]
+                    );
                     const oldT = existingRes.rows[0];
 
-                    // 1. REVERTER impacto antigo se o registro era PAID
-                    if (oldT && oldT.status === 'PAID') {
-                        const oldAmount = Number(oldT.amount);
-                        if (oldT.type === 'TRANSFER') {
-                            await updateAccountBalance(client, oldT.account_id, oldAmount, 'EXPENSE', true);
-                            if (oldT.destination_account_id) await updateAccountBalance(client, oldT.destination_account_id, oldAmount, 'INCOME', true);
-                        } else {
-                            await updateAccountBalance(client, oldT.account_id, oldAmount, oldT.type, true);
-                        }
+                    // Cálculo da variação para a conta de origem (ou conta principal)
+                    const oldImpact = calculateImpact(oldT?.status, oldT?.amount, oldT?.type);
+                    const newImpact = calculateImpact(payload.status, payload.amount, payload.type);
+                    const delta = newImpact - oldImpact;
+
+                    // Aplica delta na conta de origem se houver mudança ou se a conta mudou
+                    if (oldT && oldT.account_id !== payload.accountId) {
+                        // Se mudou de conta, reverte impacto na antiga e aplica na nova
+                        if (oldImpact !== 0) await updateAccountBalance(client, oldT.account_id, Math.abs(oldImpact), oldT.type, true);
+                        if (newImpact !== 0) await updateAccountBalance(client, payload.accountId, Math.abs(newImpact), payload.type, false);
+                    } else if (delta !== 0) {
+                        // Ajusta saldo pela diferença (Soma o delta diretamente)
+                        await client.query(
+                            `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
+                            [delta, payload.accountId]
+                        );
                     }
 
-                    // 2. APLICAR novo impacto se o registro atual é PAID
-                    if (payload.status === 'PAID') {
-                        const newAmount = Number(payload.amount);
-                        if (payload.type === 'TRANSFER') {
-                            await updateAccountBalance(client, payload.accountId, newAmount, 'EXPENSE');
-                            if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, newAmount, 'INCOME');
-                        } else {
-                            await updateAccountBalance(client, payload.accountId, newAmount, payload.type);
+                    // Cálculo da variação para a conta de destino (Apenas Transferências)
+                    if (payload.type === 'TRANSFER') {
+                        const oldDestImpact = (oldT?.type === 'TRANSFER' && oldT?.status === 'PAID') ? Number(oldT.amount) : 0;
+                        const newDestImpact = (payload.status === 'PAID') ? Number(payload.amount) : 0;
+                        
+                        if (oldT && oldT.destination_account_id && oldT.destination_account_id !== payload.destinationAccountId) {
+                            if (oldDestImpact !== 0) await updateAccountBalance(client, oldT.destination_account_id, oldDestImpact, 'INCOME', true);
+                            if (newDestImpact !== 0) await updateAccountBalance(client, payload.destinationAccountId, newDestImpact, 'INCOME', false);
+                        } else if (payload.destinationAccountId) {
+                            const destDelta = newDestImpact - oldDestImpact;
+                            if (destDelta !== 0) {
+                                await client.query(
+                                    `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
+                                    [destDelta, payload.destinationAccountId]
+                                );
+                            }
                         }
                     }
                 }
