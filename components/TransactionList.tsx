@@ -1,10 +1,10 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Account, Contact } from '../types';
 import { 
   ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, 
   Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, MoreVertical, 
-  Paperclip, Loader2, Check, Settings2, FileText
+  Paperclip, Loader2, Check, Settings2, FileText, X, ChevronRight, Landmark, Tag
 } from 'lucide-react';
 import AttachmentModal from './AttachmentModal';
 
@@ -28,21 +28,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onUpdateAttachments
 }) => {
   
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [activeAttachmentT, setActiveAttachmentT] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Fecha o menu ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -67,12 +55,12 @@ const TransactionList: React.FC<TransactionListProps> = ({
       return c ? c.name : null;
   };
 
-  const getStatusIcon = (status: TransactionStatus) => {
+  const getStatusInfo = (status: TransactionStatus) => {
     switch (status) {
-      case TransactionStatus.PAID: return <CheckCircle className="w-4 h-4 text-emerald-500" />;
-      case TransactionStatus.PENDING: return <Clock className="w-4 h-4 text-amber-500" />;
-      case TransactionStatus.OVERDUE: return <AlertCircle className="w-4 h-4 text-rose-500" />;
-      default: return null;
+      case TransactionStatus.PAID: return { icon: <CheckCircle className="w-4 h-4 text-emerald-500" />, label: 'Pago', color: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
+      case TransactionStatus.PENDING: return { icon: <Clock className="w-4 h-4 text-amber-500" />, label: 'Pendente', color: 'text-amber-700 bg-amber-50 border-amber-100' };
+      case TransactionStatus.OVERDUE: return { icon: <AlertCircle className="w-4 h-4 text-rose-500" />, label: 'Atrasado', color: 'text-rose-700 bg-rose-50 border-rose-100' };
+      default: return { icon: null, label: '', color: '' };
     }
   };
 
@@ -96,6 +84,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
           const updatedUrls = [...(t.receiptUrls || []), ...urls];
           onUpdateAttachments(t, updatedUrls);
           setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
+          if (selectedTransaction?.id === t.id) {
+              setSelectedTransaction({...t, receiptUrls: updatedUrls});
+          }
       } finally {
           setIsProcessing(false);
       }
@@ -106,6 +97,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
       const updatedUrls = (t.receiptUrls || []).filter((_, i) => i !== index);
       onUpdateAttachments(t, updatedUrls);
       setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
+      if (selectedTransaction?.id === t.id) {
+          setSelectedTransaction({...t, receiptUrls: updatedUrls});
+      }
   };
 
   if (transactions.length === 0) {
@@ -117,9 +111,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
   }
 
   return (
-    /* Corrigido: Removido overflow-hidden para permitir que o dropdown "escape" do container */
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
-      <div className="overflow-x-auto pb-32 -mb-32">
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm relative">
+      <div className="overflow-x-auto">
         <table className="w-full text-left text-sm border-collapse">
           <thead className="bg-gray-50/50 text-gray-400 border-b border-gray-100">
             <tr>
@@ -129,19 +122,21 @@ const TransactionList: React.FC<TransactionListProps> = ({
               <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Conta</th>
               <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Valor</th>
               <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-center">Status</th>
-              <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {transactions.map((t) => {
                 const contactName = getContactName(t.contactId);
-                const hasAttachments = (t.receiptUrls?.length || 0) > 0;
-                const isMenuOpen = openMenuId === t.id;
+                const statusInfo = getStatusInfo(t.status);
 
                 return (
-              <tr key={t.id} className="hover:bg-indigo-50/20 transition-colors group">
-                <td className="px-6 py-4 text-gray-500 whitespace-nowrap font-medium">{formatDate(t.date)}</td>
-                <td className="px-6 py-4 font-medium text-gray-800">
+              <tr 
+                key={t.id} 
+                onClick={() => setSelectedTransaction(t)}
+                className="hover:bg-indigo-50/40 transition-all group cursor-pointer active:bg-indigo-100/50"
+              >
+                <td className="px-6 py-5 text-gray-500 whitespace-nowrap font-medium">{formatDate(t.date)}</td>
+                <td className="px-6 py-5 font-medium text-gray-800">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl shrink-0 ${
                         t.type === TransactionType.INCOME ? 'bg-emerald-50 text-emerald-600' : 
@@ -164,7 +159,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   </div>
                 </td>
                 
-                <td className="px-6 py-4 text-gray-600">
+                <td className="px-6 py-5 text-gray-600">
                     {contactName ? (
                         <span className="truncate max-w-[120px] block font-medium">{contactName}</span>
                     ) : (
@@ -172,13 +167,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                     )}
                 </td>
 
-                <td className="px-6 py-4 text-gray-600">
+                <td className="px-6 py-5 text-gray-600">
                     <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter border border-slate-200">
                         {getAccountName(t.accountId)}
                     </span>
                 </td>
 
-                <td className={`px-6 py-4 font-black ${
+                <td className={`px-6 py-5 font-black whitespace-nowrap ${
                     t.type === TransactionType.INCOME ? 'text-emerald-600' : 
                     t.type === TransactionType.EXPENSE ? 'text-slate-900' : 'text-blue-600'
                 }`}>
@@ -186,71 +181,10 @@ const TransactionList: React.FC<TransactionListProps> = ({
                   {formatCurrency(t.amount)}
                 </td>
 
-                <td className="px-6 py-4 text-center">
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                      t.status === TransactionStatus.PAID ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 
-                      t.status === TransactionStatus.PENDING ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'
-                  }`}>
-                    {getStatusIcon(t.status)}
-                    <span className="hidden sm:inline">
-                      {t.status === TransactionStatus.PAID ? 'Pago' : t.status === TransactionStatus.PENDING ? 'Pendente' : 'Atrasado'}
-                    </span>
-                  </div>
-                </td>
-
-                <td className="px-6 py-4 text-right">
-                  <div className="relative inline-block text-left" ref={isMenuOpen ? menuRef : null}>
-                    <button 
-                        onClick={() => setOpenMenuId(isMenuOpen ? null : t.id)}
-                        className={`p-2.5 rounded-xl transition-all ${isMenuOpen ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
-                    >
-                        <MoreVertical className="w-5 h-5" />
-                    </button>
-
-                    {isMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 z-[100] py-2 animate-scale-up origin-top-right">
-                            <div className="px-4 py-2 border-b border-gray-50 mb-1">
-                                <p className="text-[9px] font-black uppercase text-gray-400 tracking-[0.2em]">Operações</p>
-                            </div>
-                            
-                            <button 
-                                onClick={() => { onEdit(t); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                            >
-                                <Pencil className="w-4 h-4 text-indigo-500" /> Editar Registro
-                            </button>
-
-                            <button 
-                                onClick={() => { setActiveAttachmentT(t); setOpenMenuId(null); }}
-                                className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Paperclip className="w-4 h-4 text-emerald-500" /> Arquivos e Anexos
-                                </div>
-                                {hasAttachments && (
-                                    <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
-                                        {t.receiptUrls?.length}
-                                    </span>
-                                )}
-                            </button>
-
-                            <button 
-                                onClick={() => { onToggleStatus(t); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                            >
-                                <Settings2 className="w-4 h-4 text-amber-500" /> Inverter Status
-                            </button>
-
-                            <div className="h-px bg-gray-50 my-1"></div>
-
-                            <button 
-                                onClick={() => { onDelete(t.id); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-black text-rose-600 hover:bg-rose-50 transition-colors"
-                            >
-                                <Trash2 className="w-4 h-4" /> Excluir permanentemente
-                            </button>
-                        </div>
-                    )}
+                <td className="px-6 py-5 text-center">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${statusInfo.color}`}>
+                    {statusInfo.icon}
+                    <span className="hidden sm:inline">{statusInfo.label}</span>
                   </div>
                 </td>
               </tr>
@@ -258,6 +192,114 @@ const TransactionList: React.FC<TransactionListProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Modal de Ações do Lançamento (Padrão Action Sheet) */}
+      {selectedTransaction && (
+          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedTransaction(null)} />
+              
+              <div className="bg-white w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl relative overflow-hidden animate-slide-in-bottom sm:animate-scale-up">
+                  {/* Header do Modal */}
+                  <div className={`p-8 text-white relative ${selectedTransaction.type === 'INCOME' ? 'bg-emerald-600' : selectedTransaction.type === 'EXPENSE' ? 'bg-slate-900' : 'bg-blue-600'}`}>
+                      <button 
+                        onClick={() => setSelectedTransaction(null)}
+                        className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                      >
+                          <X className="w-5 h-5" />
+                      </button>
+                      
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                              <span className="bg-white/20 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                  #{selectedTransaction.id.substring(0,8).toUpperCase()}
+                              </span>
+                              <span className="bg-white text-gray-900 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                  {selectedTransaction.type === 'INCOME' ? 'Receita' : selectedTransaction.type === 'EXPENSE' ? 'Despesa' : 'Transferência'}
+                              </span>
+                          </div>
+                          
+                          <h3 className="text-2xl font-black leading-tight">{selectedTransaction.description}</h3>
+                          
+                          <div className="pt-4 border-t border-white/10 flex items-end justify-between">
+                              <div>
+                                  <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Valor do Lançamento</p>
+                                  <p className="text-4xl font-black">{formatCurrency(selectedTransaction.amount)}</p>
+                              </div>
+                              <div className="text-right">
+                                  <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Vencimento</p>
+                                  <p className="font-bold">{new Date(selectedTransaction.date).toLocaleDateString('pt-BR', { dateStyle: 'long' })}</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Corpo das Ações */}
+                  <div className="p-8 bg-white grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-xl shadow-sm text-indigo-500"><Landmark className="w-4 h-4"/></div>
+                              <div>
+                                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Conta</p>
+                                  <p className="text-xs font-bold text-gray-700 truncate">{getAccountName(selectedTransaction.accountId)}</p>
+                              </div>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500"><Tag className="w-4 h-4"/></div>
+                              <div>
+                                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Categoria</p>
+                                  <p className="text-xs font-bold text-gray-700 truncate">{selectedTransaction.category}</p>
+                              </div>
+                          </div>
+                      </div>
+
+                      <button 
+                        onClick={() => { onEdit(selectedTransaction); setSelectedTransaction(null); }}
+                        className="w-full flex items-center justify-between p-5 bg-indigo-50 text-indigo-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-indigo-100 transition-all group"
+                      >
+                          <div className="flex items-center gap-4">
+                              <Pencil className="w-5 h-5" /> Editar Informações
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                      </button>
+
+                      <button 
+                        onClick={() => { onToggleStatus(selectedTransaction); setSelectedTransaction(null); }}
+                        className="w-full flex items-center justify-between p-5 bg-emerald-50 text-emerald-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-emerald-100 transition-all group"
+                      >
+                          <div className="flex items-center gap-4">
+                              <Settings2 className="w-5 h-5" /> 
+                              {selectedTransaction.status === 'PAID' ? 'Marcar como Pendente' : 'Confirmar Pagamento'}
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                      </button>
+
+                      <button 
+                        onClick={() => { setActiveAttachmentT(selectedTransaction); }}
+                        className="w-full flex items-center justify-between p-5 bg-blue-50 text-blue-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-blue-100 transition-all group"
+                      >
+                          <div className="flex items-center gap-4">
+                              <Paperclip className="w-5 h-5" /> Comprovantes e Anexos
+                              {(selectedTransaction.receiptUrls?.length || 0) > 0 && (
+                                  <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full">
+                                      {selectedTransaction.receiptUrls?.length}
+                                  </span>
+                              )}
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                      </button>
+
+                      <div className="h-px bg-gray-100 my-2" />
+
+                      <button 
+                        onClick={() => { onDelete(selectedTransaction.id); setSelectedTransaction(null); }}
+                        className="w-full flex items-center gap-4 p-5 text-rose-500 hover:bg-rose-50 rounded-3xl font-black uppercase text-xs tracking-widest transition-all"
+                      >
+                          <Trash2 className="w-5 h-5" /> Excluir permanentemente
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {activeAttachmentT && (
           <AttachmentModal 
