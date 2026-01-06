@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime, Contact } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon, FileUp, Loader2, Download } from 'lucide-react';
+import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime, Contact, Account } from '../types';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon, FileUp, Loader2, Download, Landmark } from 'lucide-react';
 import { updateSettings, consultCnpj, api } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 import * as XLSX from 'xlsx';
@@ -14,10 +14,10 @@ interface SettingsViewProps {
       costCenters: CostCenter[];
       departments: Department[];
       projects: Project[];
+      accounts: Account[]; // Adicionado
   };
   onUpdateSettings: (s: AppSettings) => void;
   onOpenCollab: () => void; 
-  // Fix: Removed duplicate identifier 'onSavePJEntity' on lines 20-21
   onSavePJEntity: (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => void;
   onDeletePJEntity: (type: 'branch' | 'costCenter' | 'department' | 'project', id: string) => void;
 }
@@ -40,14 +40,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   });
   const [loadingCnpj, setLoadingCnpj] = useState(false);
 
-  const handleUpdateDiscount = async (pct: number) => {
-      const newSettings = { ...settings, maxDiscountPct: pct };
+  const handleUpdateSettingField = async (field: keyof AppSettings, value: any) => {
+      const newSettings = { ...settings, [field]: value };
       try {
           await updateSettings(newSettings);
           onUpdateSettings(newSettings);
-          showAlert("Limite de desconto atualizado!", "success");
+          showAlert("Configuração atualizada!", "success");
       } catch (e) {
-          showAlert("Erro ao salvar limite.", "error");
+          showAlert("Erro ao salvar configuração.", "error");
       }
   };
 
@@ -211,6 +211,52 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
         </div>
 
+        {/* Regras Comerciais & Financeiro */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Calculator className="w-5 h-5 text-emerald-600" />
+                    Regras Comerciais & Financeiras
+                </h2>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 mb-2 uppercase tracking-widest ml-1">Desconto Máximo Permitido (%)</label>
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <Percent className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                            <input 
+                                type="number" 
+                                min="0" max="100" 
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                value={settings.maxDiscountPct || 0} 
+                                onChange={e => handleUpdateSettingField('maxDiscountPct', Number(e.target.value))}
+                            />
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Vendedores não poderão salvar vendas com descontos acima deste valor.</p>
+                </div>
+
+                <div>
+                    <label className="block text-[10px] font-black text-gray-500 mb-2 uppercase tracking-widest ml-1">Conta Principal de Recebimento</label>
+                    <div className="relative">
+                        <Landmark className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                        <select 
+                            value={settings.defaultAccountId || ''} 
+                            onChange={e => handleUpdateSettingField('defaultAccountId', e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
+                        >
+                            <option value="">Selecione uma conta...</option>
+                            {pjData.accounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>{acc.name} (R$ {acc.balance.toFixed(2)})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Conta onde serão creditadas as vendas automáticas.</p>
+                </div>
+            </div>
+        </div>
+
         {/* Importação de Dados */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
@@ -248,38 +294,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             {importing ? 'Processando XLS...' : 'Selecionar Arquivo XLS'}
                         </button>
                     </div>
-                </div>
-                <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">Dica de Formato:</h4>
-                    <p className="text-[10px] text-slate-600 leading-relaxed">
-                        O sistema reconhece automaticamente colunas como "Nome", "Razão Social", "CPF ou CNPJ", "Celular", "E-mail", "Cidade", etc.
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        {/* Regras Comerciais */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-50 bg-gray-50/50">
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Percent className="w-5 h-5 text-emerald-600" />
-                    Regras Comerciais
-                </h2>
-            </div>
-            <div className="p-6">
-                <div className="max-w-xs">
-                    <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Desconto Máximo Permitido (%)</label>
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="number" 
-                            min="0" max="100" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none" 
-                            value={settings.maxDiscountPct || 0} 
-                            onChange={e => handleUpdateDiscount(Number(e.target.value))}
-                        />
-                        <span className="font-black text-gray-400">%</span>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-2">Vendedores não poderão salvar vendas com descontos acima deste valor.</p>
                 </div>
             </div>
         </div>
@@ -423,42 +437,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                         onChange={e => setCompanyForm({...companyForm, state: e.target.value.toUpperCase()})} 
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-bold outline-none text-center"
                                     />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Bloco 3: Contato */}
-                        <div className="space-y-6">
-                            <div className="flex items-center gap-2 mb-2 border-b border-gray-50 pb-2">
-                                <Smartphone className="w-4 h-4 text-emerald-500" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Canais de Contato</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">E-mail Corporativo</label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                                        <input 
-                                            type="email" 
-                                            value={companyForm.email} 
-                                            onChange={e => setCompanyForm({...companyForm, email: e.target.value})} 
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold outline-none"
-                                            placeholder="administrativo@empresa.com"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Telefone Principal</label>
-                                    <div className="relative">
-                                        <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                                        <input 
-                                            type="text" 
-                                            value={companyForm.phone} 
-                                            onChange={e => setCompanyForm({...companyForm, phone: e.target.value})} 
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm font-bold outline-none"
-                                            placeholder="(00) 0000-0000"
-                                        />
-                                    </div>
                                 </div>
                             </div>
                         </div>

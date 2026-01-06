@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch, Salesperson, User as UserType } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck } from 'lucide-react';
+import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch, Salesperson, User as UserType, Account } from '../types';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck, Landmark } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -12,15 +12,22 @@ interface SaleEditorProps {
     opticalRxs: OpticalRx[];
     branches: Branch[];
     salespeople: Salesperson[];
+    accounts: Account[]; // Adicionado
     currentUser: UserType;
     settings?: AppSettings;
     onSave: (o: CommercialOrder) => void;
     onCancel: () => void;
 }
 
-const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, salespeople, currentUser, settings, onSave, onCancel }) => {
+const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, salespeople, accounts, currentUser, settings, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [teamMembers, setTeamMembers] = useState<Member[]>([]);
+    
+    // Identifica se é admin para liberar o campo de conta
+    const familyId = currentUser.familyId || (currentUser as any).family_id;
+    const workspace = currentUser.workspaces?.find(w => w.id === familyId);
+    const isAdmin = currentUser.id === familyId || workspace?.role === 'ADMIN' || currentUser.role === 'ADMIN';
+
     const [formData, setFormData] = useState<Partial<CommercialOrder>>({
         status: 'DRAFT',
         type: 'SALE',
@@ -28,28 +35,20 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         items: [],
         grossAmount: 0,
         discountAmount: 0,
-        taxAmount: 0
+        taxAmount: 0,
+        accountId: initialData?.accountId || settings?.defaultAccountId || accounts[0]?.id || ''
     });
 
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Lógica de Alçada de Desconto
     const isRestrictedUser = useMemo(() => {
-        // Se for o dono da conta (familyId === id) ou ADMIN, não é restrito
-        const familyId = currentUser.familyId || (currentUser as any).family_id;
-        const workspace = currentUser.workspaces?.find(w => w.id === familyId);
-        const isAdmin = currentUser.id === familyId || workspace?.role === 'ADMIN' || currentUser.role === 'ADMIN';
-
         if (isAdmin) return false;
-
-        // Se o usuário não estiver na lista de vendedores configurados, ele não tem limite imposto (usuário operacional de apoio)
         const isRegisteredSalesperson = salespeople.some(s => s.userId === currentUser.id);
         if (!isRegisteredSalesperson) return false;
-
         return true;
-    }, [currentUser, salespeople]);
+    }, [currentUser, salespeople, isAdmin]);
 
     const effectiveMaxDiscount = isRestrictedUser ? (settings?.maxDiscountPct || 100) : 100;
 
@@ -83,10 +82,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         const discount = Number(formData.discountAmount) || 0;
         const net = gross - discount;
         const discountPct = gross > 0 ? (discount / gross) * 100 : 0;
-        
-        // Validação contra o limite efetivo (bloqueio físico do botão de salvar)
         const isOverDiscount = discountPct > effectiveMaxDiscount;
-        
         return { gross, discount, net, discountPct, isOverDiscount };
     }, [formData.items, formData.discountAmount, effectiveMaxDiscount]);
 
@@ -122,6 +118,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         e.preventDefault();
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
+        if (!formData.accountId) return showAlert("Selecione a conta de destino para o faturamento.", "warning");
         if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Sua alçada permite no máximo ${effectiveMaxDiscount}%.`, "error");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
@@ -138,6 +135,8 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+    const selectedAccount = accounts.find(a => a.id === formData.accountId);
+
     return (
         <div className="max-w-6xl mx-auto animate-fade-in pb-20">
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b border-gray-100 pb-6">
@@ -149,7 +148,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         <h1 className="text-3xl font-black text-gray-900 tracking-tight">
                             {initialData ? 'Editar Venda' : 'Nova Venda de Óculos'}
                         </h1>
-                        <p className="text-gray-500 font-medium">Configure itens, armação e valide o poder de negociação.</p>
+                        <p className="text-gray-500 font-medium">Configure itens, armação e valide o faturamento.</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
@@ -190,7 +189,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                         />
                                     </div>
                                     {showContactDropdown && (
-                                        <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5">
+                                        <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in">
                                             {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
                                                 <button key={c.id} type="button" onClick={() => { setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false); }} className="w-full text-left px-4 py-2 hover:bg-indigo-50 rounded-lg text-sm font-bold text-gray-600 transition-colors">
                                                     {c.name}
@@ -331,6 +330,32 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                 </select>
                             </div>
+                        </div>
+
+                        {/* NOVO: Conta de Faturamento (Restrito a Admin) */}
+                        <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Faturar para Conta</label>
+                            {isAdmin ? (
+                                <div className="relative">
+                                    <Landmark className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                    <select 
+                                        value={formData.accountId || ''} 
+                                        onChange={e => setFormData({...formData, accountId: e.target.value})}
+                                        className="w-full pl-11 py-4 bg-gray-50 text-gray-700 rounded-xl text-sm font-bold outline-none border border-gray-100 cursor-pointer appearance-none"
+                                        required
+                                    >
+                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} (R$ {acc.balance.toFixed(2)})</option>)}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-slate-50 rounded-xl border border-gray-100 flex items-center gap-3">
+                                    <Landmark className="w-4 h-4 text-slate-400" />
+                                    <div className="overflow-hidden">
+                                        <p className="text-xs font-bold text-slate-700 truncate">{selectedAccount?.name || 'Conta Padrão'}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fixado pelo Gestor</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div>

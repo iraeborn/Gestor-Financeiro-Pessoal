@@ -54,10 +54,6 @@ export enum TransactionClassification {
   INTER_BRANCH = 'INTER_BRANCH'
 }
 
-/**
- * OSStatus defines the lifecycle of a Service Order.
- * 'CANCELED' added to support unified automation checks in App.tsx.
- */
 export type OSStatus = 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' | 'PAUSADA' | 'FINALIZADA' | 'PRONTA' | 'ENTREGUE' | 'CANCELED';
 export type OSType = 'MANUTENCAO' | 'INSTALACAO' | 'REPARO' | 'MONTAGEM_OTICA' | 'OUTRO';
 export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO' | 'VENDA_OTICA';
@@ -73,7 +69,8 @@ export type ViewMode =
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
-  maxDiscountPct?: number; // Limite de negociação em %
+  maxDiscountPct?: number; 
+  defaultAccountId?: string; // Conta principal para recebimentos
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
@@ -124,7 +121,7 @@ export interface Member {
   role: 'ADMIN' | 'MEMBER';
   permissions?: string[] | string;
   ownerSettings?: AppSettings;
-  contactId?: string; // Novo: Vínculo com registro do CRM
+  contactId?: string;
 }
 
 export interface Salesperson {
@@ -164,7 +161,7 @@ export interface Laboratory {
 
 export interface Contact {
   id: string;
-  externalId?: string; // Identificador de sistemas externos
+  externalId?: string;
   name: string;
   type: 'PF' | 'PJ';
   email?: string;
@@ -177,7 +174,7 @@ export interface Contact {
   zipCode?: string;
   street?: string;
   number?: string;
-  complement?: string; // Novo: Complemento de endereço
+  complement?: string;
   neighborhood?: string;
   city?: string;
   state?: string;
@@ -349,56 +346,42 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
 
 export interface OpticalRx {
   id: string;
-  rxNumber?: string; // Identificador Único da Receita
+  rxNumber?: string;
   contactId: string;
   contactName?: string;
   professionalName?: string;
-  professionalReg?: string; // CRM/CBO
+  professionalReg?: string;
   rxDate: string;
   expirationDate?: string;
   status: 'PENDING' | 'APPROVED' | 'SOLD';
-  
-  // Visão de Longe
   sphereOdLonge?: number;
   cylOdLonge?: number;
   axisOdLonge?: number;
   prismaOdLonge?: number;
   baseOdLonge?: string;
-  
   sphereOeLonge?: number;
   cylOeLonge?: number;
   axisOeLonge?: number;
   prismaOeLonge?: number;
   baseOeLonge?: string;
-
-  // Visão de Perto (Caso não use adição)
   sphereOdPerto?: number;
   cylOdPerto?: number;
   axisOdPerto?: number;
-  
   sphereOePerto?: number;
   cylOePerto?: number;
   axisOePerto?: number;
-
   addition?: number;
-  
-  // Medidas
   dnpOd?: number;
   dnpOe?: number;
   heightOd?: number;
   heightOe?: number;
-  
-  // Especificações Sugeridas
   lensType?: LensType;
   lensMaterial?: string;
   lensTreatments?: string;
   usageInstructions?: string;
-
   imageUrl?: string;
   observations?: string;
   branchId?: string;
-  
-  // Laboratory Fields
   laboratoryId?: string;
   labStatus?: OpticalDeliveryStatus;
   labSentDate?: string;
@@ -548,6 +531,7 @@ export interface CommercialOrder {
   discountAmount?: number;
   taxAmount?: number;
   transactionId?: string;
+  accountId?: string; // NOVO: Conta de crédito/débito escolhida para a venda
   assigneeId?: string;
   assigneeName?: string;
   rxId?: string;
