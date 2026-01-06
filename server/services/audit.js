@@ -1,4 +1,3 @@
-
 /**
  * Registra uma ação no banco de auditoria e notifica os clientes via Socket.io.
  * O isolamento é garantido pelo familyId (sala do socket).
@@ -7,6 +6,7 @@ export const createAuditLog = async (pool, io, { userId, action, entity, entityI
     let targetFamilyId = familyIdOverride;
 
     // 1. Tentar recuperar o family_id se não houver override explícito
+    // Importante: pool pode ser a conexão da transação (client) ou o pool global
     if (!targetFamilyId && userId && userId !== 'EXTERNAL_CLIENT' && pool) {
         try {
             const res = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
@@ -36,6 +36,7 @@ export const createAuditLog = async (pool, io, { userId, action, entity, entityI
         if (io) {
             console.log(`📡 [BROADCAST] Sinal 'DATA_UPDATED' disparado para a sala: [${roomName}] | Entidade: ${entity} | Autor: ${userId}`);
             
+            // Enviamos para a sala da família. Todos os usuários nela receberão o alerta de refresh.
             io.to(roomName).emit('DATA_UPDATED', { 
                 action, 
                 entity, 

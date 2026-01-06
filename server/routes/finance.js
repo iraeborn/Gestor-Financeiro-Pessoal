@@ -101,7 +101,6 @@ export default function(logAudit) {
             if (!tableName) throw new Error(`Loja ${store} não mapeada.`);
 
             if (action === 'DELETE') {
-                // REVERSÃO DE SALDO NA EXCLUSÃO
                 if (tableName === 'transactions') {
                     const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1', [payload.id]);
                     const t = tRes.rows[0];
@@ -116,6 +115,10 @@ export default function(logAudit) {
                     }
                 }
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
+                
+                // NOTIFICAÇÃO REAL-TIME: DISPARO DE LOG E BROADCAST
+                await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro sincronizada: ${store}`);
+
             } else if (action === 'SAVE') {
                 const fields = Object.keys(payload).filter(k => {
                     const lk = k.toLowerCase();
@@ -152,6 +155,9 @@ export default function(logAudit) {
                         await updateAccountBalance(client, payload.accountId, amount, payload.type);
                     }
                 }
+
+                // NOTIFICAÇÃO REAL-TIME: DISPARO DE LOG E BROADCAST
+                await logAudit(client, userId, 'SAVE', store, payload.id, payload.description || payload.name || `Sincronização de ${store}`);
             }
 
             await client.query('COMMIT');
