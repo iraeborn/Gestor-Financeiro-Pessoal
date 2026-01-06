@@ -101,7 +101,45 @@ export const initDb = async () => {
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS laboratory_id TEXT`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_status TEXT`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_sent_date DATE`,
-        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_return_date DATE`
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_return_date DATE`,
+
+        // Migrações adicionais para Laboratórios (Fix para erro de sincronização)
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS contact_person TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS email TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS phone TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS address TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS notes TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS preferred_communication TEXT`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id)`,
+        `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+
+        // Migrações adicionais para Ordens de Serviço
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS description TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS total_amount DECIMAL(15,2) DEFAULT 0`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS start_date DATE`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS end_date DATE`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS type TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS origin TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS priority TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id)`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
+        `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`,
+
+        // Migrações adicionais para Pedidos Comerciais
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS type TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(15,2) DEFAULT 0`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(15,2) DEFAULT 0`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(15,2) DEFAULT 0`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS transaction_id TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`
     ];
     
     try {
