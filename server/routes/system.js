@@ -116,8 +116,6 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
             const familyId = userRes.rows[0]?.family_id || req.user.id;
             
-            // CORREÇÃO: Filtramos diretamente pelo family_id do LOG, não do usuário autor.
-            // Isso impede que, se o Usuário A mudar para a Família Y, seu histórico da Família X vaze.
             const logs = await pool.query(`
                 SELECT al.*, u.name as user_name 
                 FROM audit_logs al 
@@ -128,6 +126,128 @@ export default function(logAudit) {
             
             res.json(logs.rows.map(r => ({ ...r, userName: r.user_name || 'Sistema', entityId: r.entity_id })));
         } catch(err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // Endpoints para LogsView
+    /**
+     * Busca logs de notificações enviadas
+     */
+    router.get('/notification-logs', authenticateToken, async (req, res) => {
+        try {
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
+            const familyId = userRes.rows[0]?.family_id || req.user.id;
+
+            const logs = await pool.query(`
+                SELECT nl.*, u.name as user_name 
+                FROM notification_logs nl 
+                LEFT JOIN users u ON nl.user_id = u.id 
+                WHERE nl.family_id = $1 
+                ORDER BY nl.created_at DESC LIMIT 100
+            `, [familyId]);
+
+            res.json(logs.rows.map(r => ({ ...r, userName: r.user_name || 'Sistema' })));
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    /**
+     * Restaura um registro deletado logicamente
+     */
+    router.post('/audit/restore', authenticateToken, async (req, res) => {
+        const { entity, entityId } = req.body;
+        const userId = req.user.id;
+        try {
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = userRes.rows[0]?.family_id || userId;
+
+            // Mapeamento de tabelas para restauração
+            const tableMap = {
+                'transaction': 'transactions',
+                'account': 'accounts',
+                'contact': 'contacts',
+                'goal': 'goals'
+            };
+            const tableName = tableMap[entity];
+            if (!tableName) return res.status(400).json({ error: 'Entidade inválida' });
+
+            await pool.query(`UPDATE ${tableName} SET deleted_at = NULL WHERE id = $1 AND family_id = $2`, [entityId, familyId]);
+            await logAudit(pool, userId, 'RESTORE', entity, entityId, `Restaurou registro de ${entity}`);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    /**
+     * Reverte uma alteração baseada no estado anterior salvo no log
+     */
+    router.post('/audit/revert/:logId', authenticateToken, async (req, res) => {
+        const { logId } = req.params;
+        const userId = req.user.id;
+        try {
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = userRes.rows[0]?.family_id || userId;
+
+            const logRes = await pool.query('SELECT * FROM audit_logs WHERE id = $1 AND family_id = $2', [logId, familyId]);
+            if (logRes.rows.length === 0) return res.status(404).json({ error: 'Log não encontrado' });
+
+            const log = logRes.rows[0];
+            if (!log.previous_state) return res.status(400).json({ error: 'Estado anterior não disponível para reversão' });
+
+            // Mapeamento de tabelas
+            const tableMap = {
+                'transaction': 'transactions',
+                'account': 'accounts',
+                'contact': 'contacts',
+                'goal': 'goals'
+            };
+            const tableName = tableMap[log.entity];
+            if (!tableName) return res.status(400).json({ error: 'Entidade inválida para reversão' });
+
+            // Reverte o registro para o estado anterior
+            const prevState = log.previous_state;
+            const fields = Object.keys(prevState).filter(k => k !== 'id' && k !== 'user_id' && k !== 'family_id' && k !== 'created_at' && k !== 'updated_at');
+            const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
+            
+            await pool.query(`UPDATE ${tableName} SET ${setClause} WHERE id = $${fields.length + 1} AND family_id = $${fields.length + 2}`, [...fields.map(f => prevState[f]), log.entity_id, familyId]);
+
+            await logAudit(pool, userId, 'REVERT', log.entity, log.entity_id, `Reverteu alteração para o estado do log #${logId}`);
+            res.json({ success: true });
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    // Endpoints para AdminDashboard (Super Admin)
+    /**
+     * Estatísticas globais do sistema
+     */
+    router.get('/admin/stats', authenticateToken, async (req, res) => {
+        if (req.user.email !== process.env.ADMIN_EMAIL && req.user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Acesso restrito a administradores do sistema.' });
+        }
+
+        try {
+            const stats = await pool.query(`
+                SELECT 
+                    COUNT(*) as "totalUsers",
+                    COUNT(NULLIF(status != 'ACTIVE', TRUE)) as active,
+                    COUNT(NULLIF(status != 'TRIALING', TRUE)) as trial,
+                    COUNT(NULLIF(entity_type != 'PF', TRUE)) as pf,
+                    COUNT(NULLIF(entity_type != 'PJ', TRUE)) as pj
+                FROM users
+            `);
+            res.json(stats.rows[0]);
+        } catch (err) { res.status(500).json({ error: err.message }); }
+    });
+
+    /**
+     * Lista de usuários do sistema
+     */
+    router.get('/admin/users', authenticateToken, async (req, res) => {
+        if (req.user.email !== process.env.ADMIN_EMAIL && req.user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Acesso restrito.' });
+        }
+
+        try {
+            const users = await pool.query('SELECT id, name, email, entity_type, plan, status, created_at FROM users ORDER BY created_at DESC LIMIT 50');
+            res.json(users.rows);
+        } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
     router.get('/members', authenticateToken, async (req, res) => {

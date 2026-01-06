@@ -124,16 +124,61 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
     return await res.json();
 };
 
+// Fix: Added missing export for LogsView
+/**
+ * Busca logs de notificações enviadas
+ */
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
-    return [];
+    const res = await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() });
+    if (!res.ok) return [];
+    return await res.json();
 };
 
+// Fix: Added missing export for LogsView
+/**
+ * Restaura um registro deletado logicamente
+ */
 export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
-    return { success: true };
+    const res = await fetch(`${API_URL}/audit/restore`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ entity, entityId })
+    });
+    if (!res.ok) throw new Error('Falha ao restaurar registro');
+    return await res.json();
 };
 
+// Fix: Added missing export for LogsView
+/**
+ * Reverte uma alteração específica baseada no log de auditoria
+ */
 export const revertLogChange = async (logId: number): Promise<any> => {
-    return { success: true };
+    const res = await fetch(`${API_URL}/audit/revert/${logId}`, {
+        method: 'POST',
+        headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('Falha ao reverter alteração');
+    return await res.json();
+};
+
+// Fix: Added missing export for AdminDashboard
+/**
+ * Busca estatísticas globais para o painel de super admin
+ */
+export const getAdminStats = async (): Promise<any> => {
+    const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Falha ao buscar estatísticas');
+    return await res.json();
+};
+
+// Fix: Added missing export for AdminDashboard
+/**
+ * Busca lista de usuários para o painel de super admin
+ */
+export const getAdminUsers = async (): Promise<any[]> => {
+    const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
+    if (!res.ok) return [];
+    return await res.json();
 };
 
 export const getFamilyMembers = async (): Promise<Member[]> => {
@@ -155,6 +200,7 @@ export const createInvite = async (role?: string): Promise<{ code: string }> => 
 export const joinFamily = async (code: string): Promise<User> => {
     const res = await fetch(`${API_URL}/invites/join`, {
         method: 'POST',
+        // Fix: Added missing auth headers
         headers: getHeaders(),
         body: JSON.stringify({ code })
     });
@@ -185,26 +231,9 @@ export const removeMember = async (memberId: string): Promise<any> => {
     return await res.json();
 };
 
-export const getAdminStats = async (): Promise<any> => {
-    return { totalUsers: 0, active: 0, trial: 0, pf: 0, pj: 0, revenue: 0 };
-};
-
-export const getAdminUsers = async (): Promise<any[]> => {
-    return [];
-};
-
 export const consultCnpj = async (cnpj: string): Promise<any> => {
     const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
     if (!res.ok) return null;
-    return await res.json();
-};
-
-export const createPagarMeSession = async (planId: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/billing/create-pagarme-session`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ planId })
-    });
     return await res.json();
 };
 
@@ -235,6 +264,7 @@ export const loadInitialData = async (): Promise<AppState> => {
         }
     }
 
+    // Lista exaustiva de todas as stores que precisam ser carregadas
     const stores = [
         'accounts', 'transactions', 'goals', 'contacts', 'categories',
         'branches', 'costCenters', 'departments', 'projects',
@@ -321,16 +351,12 @@ export const api: ApiClient = {
     },
 
     saveTransaction: async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
-        // CORREÇÃO: Garante ID antes de salvar
         const transId = t.id || crypto.randomUUID();
         const transactionWithId = { ...t, id: transId };
 
-        if (newContact) {
-            await api.saveContact(newContact);
-        }
-        if (newCategory) {
-            await api.saveCategory(newCategory);
-        }
+        if (newContact) await api.saveContact(newContact);
+        if (newCategory) await api.saveCategory(newCategory);
+        
         return api.saveLocallyAndQueue('transactions', transactionWithId);
     },
 

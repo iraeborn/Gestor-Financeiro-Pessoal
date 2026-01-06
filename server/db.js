@@ -26,6 +26,9 @@ export const initDb = async () => {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP, stripe_customer_id TEXT, stripe_subscription_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, PRIMARY KEY (user_id, family_id))`,
+        `CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, family_id TEXT, created_by TEXT REFERENCES users(id), expires_at TIMESTAMP, role_template TEXT DEFAULT 'MEMBER')`,
+        `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, previous_state JSONB, changes JSONB, family_id TEXT, timestamp TIMESTAMP DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS notification_logs (id SERIAL PRIMARY KEY, status TEXT, channel TEXT, recipient TEXT, subject TEXT, content TEXT, user_id TEXT REFERENCES users(id), family_id TEXT, created_at TIMESTAMP DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance DECIMAL(15,2), user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, credit_limit DECIMAL(15,2), closing_day INTEGER, due_day INTEGER)`,
         `CREATE TABLE IF NOT EXISTS contacts (
             id TEXT PRIMARY KEY, name TEXT, fantasy_name TEXT, type TEXT, email TEXT, phone TEXT, document TEXT, ie TEXT, im TEXT, pix_key TEXT, zip_code TEXT, street TEXT, number TEXT, neighborhood TEXT, city TEXT, state TEXT, 
@@ -217,7 +220,7 @@ export const initDb = async () => {
     
     try {
         for (const q of queries) { await pool.query(q); }
-        console.log("✅ [DATABASE] Tabelas de evolução preparadas.");
+        console.log("✅ [DATABASE] Tabelas operacionais prontas para sincronização.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro na preparação:", e);
     }

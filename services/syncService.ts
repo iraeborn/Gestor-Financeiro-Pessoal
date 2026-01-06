@@ -47,7 +47,6 @@ class SyncService {
 
         const token = localStorage.getItem('token');
         try {
-            // Ordenar por timestamp para garantir ordem cronológica de dependências
             const sortedQueue = queue.sort((a, b) => a.timestamp - b.timestamp);
 
             for (const item of sortedQueue) {
@@ -98,9 +97,10 @@ class SyncService {
                 'serviceItems', 'serviceAppointments', 'goals', 'categories', 
                 'branches', 'costCenters', 'departments', 'projects', 
                 'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-                'opticalRxs', 'companyProfile', 'salespeople', 'laboratories'
+                'opticalRxs', 'companyProfile', 'salespeople', 'laboratories', 'salespersonSchedules'
             ];
 
+            // Limpa o banco local antes de repopular para evitar dados órfãos ou inconsistentes
             await Promise.all(storesToClear.map(async (storeName) => {
                 try {
                     await localDb.clearStore(storeName);
@@ -109,6 +109,7 @@ class SyncService {
                 }
             }));
 
+            // Repopula o IndexedDB com os dados mais recentes do servidor
             for (const [storeName, items] of Object.entries(data)) {
                 if (Array.isArray(items)) {
                     for (const item of items) {
@@ -119,7 +120,7 @@ class SyncService {
                 }
             }
             
-            console.log("✅ [SYNC] Banco local atualizado para o contexto atual.");
+            console.log("✅ [SYNC] Banco local sincronizado com sucesso.");
         } catch (e) {
             console.error("❌ [SYNC] Falha na sincronização:", e);
             throw e;
