@@ -112,9 +112,7 @@ const AppContent: React.FC<{
 
     const handleSaveOrderWithAutomation = async (order: CommercialOrder) => {
         try {
-            // 1. Automação Financeira: CONFIRMADA e SEM lançamento vinculado
             if (order.status === 'CONFIRMED' && !order.transactionId) {
-                // Prioridade: Conta do Pedido -> Conta Padrão do Sistema -> Primeira Conta do Estado
                 const targetAccountId = order.accountId || currentUser?.settings?.defaultAccountId || state?.accounts[0]?.id;
                 
                 if (!targetAccountId) {
@@ -130,7 +128,7 @@ const AppContent: React.FC<{
                     type: TransactionType.INCOME,
                     category: order.moduleTag === 'optical' ? 'Vendas Ótica' : 'Vendas e Serviços',
                     date: order.date,
-                    status: TransactionStatus.PENDING,
+                    status: TransactionStatus.PAID, // Como a venda já é CONFIRMED/PAGO, o lançamento nasce como PAID
                     accountId: targetAccountId,
                     contactId: order.contactId,
                     userId: currentUser?.id
@@ -138,13 +136,12 @@ const AppContent: React.FC<{
 
                 await api.saveTransaction(transaction);
                 order.transactionId = transId;
-                order.accountId = targetAccountId; // Garante que o pedido saiba onde foi faturado
+                order.accountId = targetAccountId;
                 showAlert("Receita gerada automaticamente no financeiro!", "info");
             }
 
             await api.saveOrder(order);
             
-            // 3. Automação de OS (Ótica)
             if (order.rxId && order.status !== 'CANCELED' && order.status !== 'REJECTED') {
                 const existingOS = state?.serviceOrders.find(os => os.rxId === order.rxId && os.status !== 'CANCELED');
                 if (!existingOS) {
@@ -213,6 +210,21 @@ const AppContent: React.FC<{
         } catch (e: any) { showAlert("Erro ao remover: " + e.message, "error"); }
     };
 
+    const handleUpdateTransactionStatus = async (t: Transaction) => {
+        const newStatus = t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID;
+        
+        // Se for estorno (PAID -> PENDING), o log de auditoria é importante
+        const actionLabel = newStatus === TransactionStatus.PAID ? "Confirmação de Pagamento" : "Estorno de Lançamento";
+        
+        try {
+            await api.saveTransaction({ ...t, status: newStatus });
+            showAlert(`${actionLabel} realizado com sucesso!`, "success");
+            refreshData();
+        } catch (e: any) {
+            showAlert("Erro ao atualizar status: " + e.message, "error");
+        }
+    };
+
     const renderContent = () => {
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
         const commonProps = {
@@ -220,7 +232,7 @@ const AppContent: React.FC<{
             onAddTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
             onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(refreshData),
             onEditTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
-            onUpdateStatus: (t: any) => api.saveTransaction({...t, status: t.status === 'PAID' ? 'PENDING' : 'PAID'}).then(refreshData),
+            onUpdateStatus: handleUpdateTransactionStatus,
             onChangeView: setCurrentView
         };
         switch (currentView) {

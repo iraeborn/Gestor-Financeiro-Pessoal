@@ -4,9 +4,10 @@ import { Transaction, TransactionType, TransactionStatus, Account, Contact } fro
 import { 
   ArrowUpCircle, ArrowDownCircle, AlertCircle, CheckCircle, Clock, 
   Repeat, ArrowRightLeft, UserCircle, Pencil, Trash2, MoreVertical, 
-  Paperclip, Loader2, Check, Settings2, FileText, X, ChevronRight, Landmark, Tag
+  Paperclip, Loader2, Check, Settings2, FileText, X, ChevronRight, Landmark, Tag, RotateCcw
 } from 'lucide-react';
 import AttachmentModal from './AttachmentModal';
+import { useConfirm } from './AlertSystem';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -27,7 +28,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onToggleStatus,
   onUpdateAttachments
 }) => {
-  
+  const { showConfirm } = useConfirm();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [activeAttachmentT, setActiveAttachmentT] = useState<Transaction | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,6 +100,19 @@ const TransactionList: React.FC<TransactionListProps> = ({
       setActiveAttachmentT(prev => prev ? {...prev, receiptUrls: updatedUrls} : null);
       if (selectedTransaction?.id === t.id) {
           setSelectedTransaction({...t, receiptUrls: updatedUrls});
+      }
+  };
+
+  const handleEstorno = async (t: Transaction) => {
+      const confirm = await showConfirm({
+          title: "Confirmar Estorno",
+          message: `Deseja realmente estornar o pagamento de "${t.description}"? O saldo da conta será revertido.`,
+          confirmText: "Sim, Estornar",
+          variant: "warning"
+      });
+      if (confirm) {
+          onToggleStatus(t);
+          setSelectedTransaction(null);
       }
   };
 
@@ -193,7 +207,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         </table>
       </div>
 
-      {/* Modal de Ações do Lançamento (Padrão Action Sheet) */}
+      {/* Modal de Ações do Lançamento */}
       {selectedTransaction && (
           <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedTransaction(null)} />
@@ -233,7 +247,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       </div>
                   </div>
 
-                  {/* Corpo das Ações */}
+                  {/* Corpo das Ações - Lógica de Status */}
                   <div className="p-8 bg-white grid grid-cols-1 gap-3">
                       <div className="grid grid-cols-2 gap-3 mb-4">
                           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
@@ -252,26 +266,39 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           </div>
                       </div>
 
-                      <button 
-                        onClick={() => { onEdit(selectedTransaction); setSelectedTransaction(null); }}
-                        className="w-full flex items-center justify-between p-5 bg-indigo-50 text-indigo-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-indigo-100 transition-all group"
-                      >
-                          <div className="flex items-center gap-4">
-                              <Pencil className="w-5 h-5" /> Editar Informações
-                          </div>
-                          <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
-                      </button>
+                      {selectedTransaction.status !== 'PAID' ? (
+                        <>
+                          <button 
+                            onClick={() => { onEdit(selectedTransaction); setSelectedTransaction(null); }}
+                            className="w-full flex items-center justify-between p-5 bg-indigo-50 text-indigo-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-indigo-100 transition-all group"
+                          >
+                              <div className="flex items-center gap-4">
+                                  <Pencil className="w-5 h-5" /> Editar Lançamento
+                              </div>
+                              <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                          </button>
 
-                      <button 
-                        onClick={() => { onToggleStatus(selectedTransaction); setSelectedTransaction(null); }}
-                        className="w-full flex items-center justify-between p-5 bg-emerald-50 text-emerald-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-emerald-100 transition-all group"
-                      >
-                          <div className="flex items-center gap-4">
-                              <Settings2 className="w-5 h-5" /> 
-                              {selectedTransaction.status === 'PAID' ? 'Marcar como Pendente' : 'Confirmar Pagamento'}
-                          </div>
-                          <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
-                      </button>
+                          <button 
+                            onClick={() => { onToggleStatus(selectedTransaction); setSelectedTransaction(null); }}
+                            className="w-full flex items-center justify-between p-5 bg-emerald-50 text-emerald-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-emerald-100 transition-all group"
+                          >
+                              <div className="flex items-center gap-4">
+                                  <CheckCircle className="w-5 h-5" /> Confirmar Pagamento
+                              </div>
+                              <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        </>
+                      ) : (
+                        <button 
+                            onClick={() => handleEstorno(selectedTransaction)}
+                            className="w-full flex items-center justify-between p-5 bg-amber-50 text-amber-700 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-amber-100 transition-all group"
+                        >
+                            <div className="flex items-center gap-4">
+                                <RotateCcw className="w-5 h-5" /> Realizar Estorno
+                            </div>
+                            <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                      )}
 
                       <button 
                         onClick={() => { setActiveAttachmentT(selectedTransaction); }}
@@ -288,14 +315,17 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
                       </button>
 
-                      <div className="h-px bg-gray-100 my-2" />
-
-                      <button 
-                        onClick={() => { onDelete(selectedTransaction.id); setSelectedTransaction(null); }}
-                        className="w-full flex items-center gap-4 p-5 text-rose-500 hover:bg-rose-50 rounded-3xl font-black uppercase text-xs tracking-widest transition-all"
-                      >
-                          <Trash2 className="w-5 h-5" /> Excluir permanentemente
-                      </button>
+                      {selectedTransaction.status !== 'PAID' && (
+                        <>
+                          <div className="h-px bg-gray-100 my-2" />
+                          <button 
+                            onClick={() => { onDelete(selectedTransaction.id); setSelectedTransaction(null); }}
+                            className="w-full flex items-center gap-4 p-5 text-rose-500 hover:bg-rose-50 rounded-3xl font-black uppercase text-xs tracking-widest transition-all"
+                          >
+                              <Trash2 className="w-5 h-5" /> Excluir permanentemente
+                          </button>
+                        </>
+                      )}
                   </div>
               </div>
           </div>
