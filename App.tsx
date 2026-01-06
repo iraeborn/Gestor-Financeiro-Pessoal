@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
@@ -156,7 +155,6 @@ const AppContent: React.FC<{
             onChangeView: setCurrentView
         };
 
-        // Shared props for Dashboard calls to ensure required onNewTransaction is present
         const dashboardProps = {
             ...commonFinanceProps,
             onNewTransaction: () => { setEditingTransaction(null); setCurrentView('FIN_TRANSACTION_EDITOR'); },
@@ -167,7 +165,6 @@ const AppContent: React.FC<{
             case 'FIN_DASHBOARD': return <Dashboard {...dashboardProps} />;
             case 'FIN_TRANSACTIONS': return <TransactionsView 
                 {...commonFinanceProps} 
-                // Fix: map required onDelete and onToggleStatus from commonFinanceProps
                 onDelete={commonFinanceProps.onDeleteTransaction}
                 onToggleStatus={commonFinanceProps.onUpdateStatus}
                 transactions={state.transactions} 
@@ -200,7 +197,6 @@ const AppContent: React.FC<{
             case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
             case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
             case 'SYS_BRANCHES': return <BranchesView branches={state.branches} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} onManageSalesSchedule={(b) => { setEditingBranch(b); setCurrentView('SYS_SALES_SCHEDULE'); }} />;
-            // Fix: added dashboardProps to Dashboard fallback components
             case 'SRV_BRANCH_SCHEDULE': return editingBranch ? <BranchScheduleView branch={editingBranch} appointments={state.serviceAppointments} clients={state.serviceClients} onSaveAppointment={(a) => api.saveAppointment(a).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'SYS_SALES_SCHEDULE': return editingBranch ? <SalespersonScheduleView branch={editingBranch} schedules={state.salespersonSchedules} salespeople={state.salespeople} onSaveSchedule={(s) => api.saveSalespersonSchedule(s).then(refreshData)} onDeleteSchedule={(id) => api.deleteSalespersonSchedule(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs} contacts={state.contacts} laboratories={state.laboratories} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} onStartSaleFromRx={handleStartSaleFromRx} />;
@@ -258,7 +254,7 @@ const AppContent: React.FC<{
                          refreshData();
                     }} 
                     onDeleteOrder={async (id) => {
-                        setState(prev => prev ? ({ ...prev, commercialOrders: prev.commercialOrders.filter(o => id !== order.id)] }) : prev);
+                        setState(prev => prev ? ({ ...prev, commercialOrders: prev.commercialOrders.filter(o => o.id !== id) }) : prev);
                         await api.deleteOrder(id);
                         refreshData();
                     }}
@@ -287,7 +283,6 @@ const AppContent: React.FC<{
                     onSaveContract={() => {}} onDeleteContract={() => {}} onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
                     onAddTransaction={handleAddTransaction} onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)} onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
                 />;
-            // Fix: added dashboardProps to default case
             default: return <Dashboard {...dashboardProps} />;
         }
     };
@@ -372,7 +367,7 @@ const App: React.FC = () => {
             <AppContent 
                 currentUser={currentUser} state={state} setState={setState} dataLoaded={dataLoaded} 
                 syncStatus={syncStatus} currentView={currentView} setCurrentView={setCurrentView}
-                isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen}
+                isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileMenuOpen}
                 refreshData={refreshData} checkAuth={checkAuth} members={members} socket={socket} 
             />
         </HelpProvider>
@@ -380,4 +375,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

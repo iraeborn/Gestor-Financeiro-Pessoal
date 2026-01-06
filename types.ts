@@ -1,5 +1,4 @@
 
-
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_ENVIADO' | 'LAB_PRODUCAO' | 'LAB_PRONTO' | 'LAB_RECEBIDO' | 'ENTREGUE_CLIENTE';
 export type LabCommPreference = 'WHATSAPP' | 'EMAIL' | 'PORTAL' | 'MANUAL';
 export type LensType = 'MONOFOCAL' | 'BIFOCAL' | 'MULTIFOCAL' | 'OCUPACIONAL';
@@ -644,7 +643,6 @@ export interface AppNotification {
   isRead: boolean;
 }
 
-// Added missing ChatMessage interface
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -656,4 +654,3 @@ export interface ChatMessage {
   createdAt: string | Date;
   attachmentUrl?: string;
 }
-

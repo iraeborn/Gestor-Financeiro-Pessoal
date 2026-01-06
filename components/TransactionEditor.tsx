@@ -80,7 +80,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                 destinationAccountId: accounts.length > 1 ? accounts[1].id : defaultAccId
             }));
         }
-    }, [initialData, accounts]);
+    }, [initialData, accounts, contacts]);
 
     // Lógica de Descrição Automática
     useEffect(() => {
@@ -94,13 +94,13 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
         if (contactLabel) suggestion += ` - ${contactLabel}`;
 
         setFormData(prev => ({ ...prev, description: suggestion }));
-    }, [formData.type, categorySearch, contactSearch]);
+    }, [formData.type, categorySearch, contactSearch, initialData]);
 
     // Cálculos de Parcelamento
     const installmentPreview = useMemo(() => {
-        if (!isParcelado || formData.amount! <= 0) return [];
+        if (!isParcelado || (formData.amount || 0) <= 0) return [];
         
-        const remainder = formData.amount! - downPayment;
+        const remainder = (formData.amount || 0) - downPayment;
         if (remainder <= 0) return [];
 
         const rules = settings?.installmentRules || { creditCard: { interestRate: 0 }, boleto: { maxInstallments: 12 } };
@@ -122,7 +122,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
             });
         }
         return items;
-    }, [isParcelado, formData.amount, downPayment, numInstallments, installmentMethod, formData.date]);
+    }, [isParcelado, formData.amount, downPayment, numInstallments, installmentMethod, formData.date, settings]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -200,7 +200,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
             {/* Header Estratégico */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 border-b border-slate-100 pb-8">
                 <div className="flex items-center gap-5">
-                    <button onClick={onCancel} className="p-3 hover:bg-white rounded-2xl border border-slate-200 shadow-sm transition-all text-slate-400 hover:text-indigo-600 group">
+                    <button onClick={onCancel} className="p-3 hover:bg-white rounded-2xl border border-slate-200 shadow-sm transition-all text-gray-400 hover:text-indigo-600 group">
                         <ArrowLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
                     </button>
                     <div>
@@ -510,14 +510,14 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                             </div>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Filial de Origem</label>
+                                    <label className="block text-[9px] font-black uppercase text-slate-400 ml-1">Filial de Origem</label>
                                     <select value={formData.branchId || ''} onChange={e => setFormData({...formData, branchId: e.target.value})} className="w-full p-3.5 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none">
                                         <option value="">Selecione...</option>
                                         {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Centro de Custo</label>
+                                    <label className="block text-[9px] font-black uppercase text-slate-400 ml-1">Centro de Custo</label>
                                     <select value={formData.costCenterId || ''} onChange={e => setFormData({...formData, costCenterId: e.target.value})} className="w-full p-3.5 bg-slate-50 border-none rounded-xl text-xs font-bold outline-none">
                                         <option value="">Selecione...</option>
                                         {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
