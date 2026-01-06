@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon } from 'lucide-react';
 import { updateSettings, consultCnpj } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 
@@ -34,33 +34,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       hasEmployees: false, issuesInvoices: false 
   });
   const [loadingCnpj, setLoadingCnpj] = useState(false);
-
-  const handleToggleModule = async (moduleKey: 'odonto' | 'services' | 'intelligence' | 'optical') => {
-      const currentActive = settings.activeModules?.[moduleKey] || false;
-      
-      let nextActiveModules = { ...settings.activeModules, [moduleKey]: !currentActive };
-      
-      if (!currentActive) { // Se estiver ativando
-          if (moduleKey === 'odonto') {
-              nextActiveModules.optical = false;
-              if (settings.activeModules?.optical) showAlert("Módulo Ótica desativado para evitar conflito de fluxo.", "warning");
-          } else if (moduleKey === 'optical') {
-              nextActiveModules.odonto = false;
-              if (settings.activeModules?.odonto) showAlert("Módulo Odonto desativado para priorizar fluxo ótico.", "warning");
-          }
-      }
-
-      const newSettings = { ...settings, activeModules: nextActiveModules };
-
-      try {
-          await updateSettings(newSettings);
-          onUpdateSettings(newSettings);
-          let label = moduleKey === 'odonto' ? 'Odonto' : moduleKey === 'services' ? 'Serviços' : moduleKey === 'intelligence' ? 'Inteligência' : 'Ótica';
-          if (!currentActive) showAlert(`Módulo ${label} ativado!`, "success");
-      } catch (e) {
-          showAlert("Erro ao alterar módulo.", "error");
-      }
-  };
 
   const handleUpdateDiscount = async (pct: number) => {
       const newSettings = { ...settings, maxDiscountPct: pct };
@@ -108,52 +81,65 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const isPJ = user.entityType === EntityType.BUSINESS;
+  const familyId = user.familyId || (user as any).family_id;
+  const isAdmin = user.id === familyId;
 
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl pb-10">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Configurações de Negócio</h1>
-        <p className="text-gray-500">Personalize os módulos, descontos e a identidade da sua organização.</p>
+        <p className="text-gray-500">Gerencie a identidade, regras comerciais e assinatura da sua organização.</p>
       </div>
 
       <div className="space-y-6">
-        {/* Módulos */}
+        
+        {/* Gestão de Assinatura e Módulos (Substitui os Toggles) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-indigo-600">
             <div className="p-6 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <Plus className="w-5 h-5 text-indigo-600" />
-                    Especialidades Ativas
+                    <BillingIcon className="w-5 h-5 text-indigo-600" />
+                    Plano e Módulos Profissionais
                 </h2>
-                <div className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Regra de Fluxo Exclusivo
-                </div>
+                <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                    {user.plan}
+                </span>
             </div>
-            <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className={`p-5 rounded-2xl border-2 transition-all ${settings.activeModules?.optical ? 'border-indigo-200 bg-indigo-50/50' : 'border-gray-100'}`}>
-                        <div className="flex items-center justify-between mb-3">
-                            <Glasses className={`w-8 h-8 ${settings.activeModules?.optical ? 'text-indigo-600' : 'text-gray-400'}`} />
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" className="sr-only peer" checked={!!settings.activeModules?.optical} onChange={() => handleToggleModule('optical')} />
-                                <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                            </label>
+            <div className="p-8 flex flex-col md:flex-row items-center gap-8">
+                <div className="flex-1 space-y-4">
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                        A ativação de especialidades (Ótica, Odonto, Serviços) e a gestão de cobrança agora são realizadas no <strong>Portal de Assinante</strong>.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${settings.activeModules?.optical ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                            <Glasses className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase">Ótica {settings.activeModules?.optical ? 'Ativo' : 'Inativo'}</span>
                         </div>
-                        <h4 className="font-bold text-gray-800">Módulo Ótica</h4>
-                        <p className="text-xs text-gray-500 mt-1">Vendas de armações, lentes e laboratório.</p>
-                    </div>
-
-                    <div className={`p-5 rounded-2xl border-2 transition-all ${settings.activeModules?.odonto ? 'border-sky-200 bg-sky-50/50' : 'border-gray-100'}`}>
-                        <div className="flex items-center justify-between mb-3">
-                            <SmilePlus className={`w-8 h-8 ${settings.activeModules?.odonto ? 'text-sky-600' : 'text-gray-400'}`} />
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" className="sr-only peer" checked={!!settings.activeModules?.odonto} onChange={() => handleToggleModule('odonto')} />
-                                <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
-                            </label>
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${settings.activeModules?.odonto ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                            <SmilePlus className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase">Odonto {settings.activeModules?.odonto ? 'Ativo' : 'Inativo'}</span>
                         </div>
-                        <h4 className="font-bold text-gray-800">Módulo Odonto</h4>
-                        <p className="text-xs text-gray-500 mt-1">Prontuário clínico e odontograma.</p>
                     </div>
                 </div>
+                
+                {isAdmin ? (
+                    <div className="shrink-0">
+                        <a 
+                            href="https://billing.finmanager.com" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-200 flex items-center gap-2"
+                        >
+                            <ExternalLink className="w-4 h-4" /> Ir para Portal de Gestão
+                        </a>
+                    </div>
+                ) : (
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-start gap-3 max-w-xs">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                        <p className="text-[10px] font-bold text-amber-800 leading-tight uppercase">
+                            Apenas o administrador da conta pode alterar módulos ou planos de assinatura.
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
 

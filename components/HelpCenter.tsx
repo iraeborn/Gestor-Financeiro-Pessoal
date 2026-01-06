@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { HelpCircle, Search, ChevronDown, ChevronUp, Glasses, DollarSign, Stethoscope, Settings, PlayCircle, BookOpen, MessageSquare, ExternalLink, Zap } from 'lucide-react';
 import { useHelp } from './GuidedHelp';
+import { AppSettings } from '../types';
 
 interface FAQItem {
     id: string;
@@ -65,26 +66,38 @@ const FAQS: FAQItem[] = [
     }
 ];
 
-const HelpCenter: React.FC = () => {
+interface HelpCenterProps {
+    activeModules?: AppSettings['activeModules'];
+}
+
+const HelpCenter: React.FC<HelpCenterProps> = ({ activeModules = {} }) => {
     const { startGuide } = useHelp();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'FINANCE' | 'OPTICAL' | 'ODONTO' | 'GENERAL'>('ALL');
     const [openQuestion, setOpenQuestion] = useState<string | null>(null);
 
+    // Filtra as categorias disponíveis com base nos módulos ativos
+    const availableCategories = [
+        { id: 'ALL', label: 'Tudo', icon: BookOpen, color: 'bg-slate-100 text-slate-600', active: true },
+        { id: 'FINANCE', label: 'Financeiro', icon: DollarSign, color: 'bg-emerald-100 text-emerald-600', active: true },
+        { id: 'OPTICAL', label: 'Ótica', icon: Glasses, color: 'bg-indigo-100 text-indigo-600', active: !!activeModules.optical },
+        { id: 'ODONTO', label: 'Odonto', icon: Stethoscope, color: 'bg-sky-100 text-sky-600', active: !!activeModules.odonto },
+        { id: 'GENERAL', label: 'Geral & Admin', icon: Settings, color: 'bg-amber-100 text-amber-600', active: true },
+    ].filter(c => c.active);
+
     const filteredFaqs = FAQS.filter(f => {
+        // Verifica se a categoria da FAQ pertence a um módulo ativo
+        const isOptical = f.category === 'OPTICAL';
+        const isOdonto = f.category === 'ODONTO';
+        
+        if (isOptical && !activeModules.optical) return false;
+        if (isOdonto && !activeModules.odonto) return false;
+
         const matchesCategory = selectedCategory === 'ALL' || f.category === selectedCategory || (selectedCategory === 'GENERAL' && f.category === 'ADMIN');
         const matchesSearch = f.question.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               (typeof f.answer === 'string' && f.answer.toLowerCase().includes(searchTerm.toLowerCase()));
         return matchesCategory && matchesSearch;
     });
-
-    const categories = [
-        { id: 'ALL', label: 'Tudo', icon: BookOpen, color: 'bg-slate-100 text-slate-600' },
-        { id: 'FINANCE', label: 'Financeiro', icon: DollarSign, color: 'bg-emerald-100 text-emerald-600' },
-        { id: 'OPTICAL', label: 'Ótica', icon: Glasses, color: 'bg-indigo-100 text-indigo-600' },
-        { id: 'ODONTO', label: 'Odonto', icon: Stethoscope, color: 'bg-sky-100 text-sky-600' },
-        { id: 'GENERAL', label: 'Geral & Admin', icon: Settings, color: 'bg-amber-100 text-amber-600' },
-    ];
 
     return (
         <div className="space-y-8 animate-fade-in pb-20 max-w-5xl mx-auto">
@@ -109,7 +122,7 @@ const HelpCenter: React.FC = () => {
                 </div>
             </div>
 
-            {/* Tours Interativos */}
+            {/* Tours Interativos - Filtrados por Módulo */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-3">
                     <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -117,19 +130,8 @@ const HelpCenter: React.FC = () => {
                     </h3>
                 </div>
                 
-                <button onClick={() => startGuide('OPTICAL')} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all text-left group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Glasses className="w-16 h-16 text-indigo-600" />
-                    </div>
-                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                        <PlayCircle className="w-6 h-6" />
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-1">Fluxo de Ótica</h4>
-                    <p className="text-xs text-gray-500 mb-4">Aprenda a cadastrar receitas e gerar vendas.</p>
-                    <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Iniciar Tour →</span>
-                </button>
-
-                <button onClick={() => { /* Placeholder for generic tour */ }} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-emerald-200 transition-all text-left group relative overflow-hidden">
+                {/* Tour Financeiro - Sempre Ativo */}
+                <button onClick={() => { /* Placeholder tour financeiro */ }} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-emerald-200 transition-all text-left group relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <DollarSign className="w-16 h-16 text-emerald-600" />
                     </div>
@@ -138,27 +140,45 @@ const HelpCenter: React.FC = () => {
                     </div>
                     <h4 className="font-bold text-gray-900 mb-1">Gestão Financeira</h4>
                     <p className="text-xs text-gray-500 mb-4">Como categorizar e analisar seus gastos.</p>
-                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Em Breve</span>
+                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Iniciar Guia →</span>
                 </button>
 
-                <button onClick={() => { /* Placeholder for contact tour */ }} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-sky-200 transition-all text-left group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Stethoscope className="w-16 h-16 text-sky-600" />
-                    </div>
-                    <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600 mb-4 group-hover:scale-110 transition-transform">
-                        <PlayCircle className="w-6 h-6" />
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-1">Odontologia</h4>
-                    <p className="text-xs text-gray-500 mb-4">Prontuário e Odontograma interativo.</p>
-                    <span className="text-[10px] font-black uppercase text-sky-600 tracking-widest">Em Breve</span>
-                </button>
+                {/* Tour Ótica - Condicional */}
+                {activeModules.optical && (
+                    <button onClick={() => startGuide('OPTICAL')} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all text-left group relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Glasses className="w-16 h-16 text-indigo-600" />
+                        </div>
+                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
+                            <PlayCircle className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-bold text-gray-900 mb-1">Fluxo de Ótica</h4>
+                        <p className="text-xs text-gray-500 mb-4">Aprenda a cadastrar receitas e gerar vendas.</p>
+                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Iniciar Tour →</span>
+                    </button>
+                )}
+
+                {/* Tour Odonto - Condicional */}
+                {activeModules.odonto && (
+                    <button onClick={() => { /* Placeholder tour odonto */ }} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-sky-200 transition-all text-left group relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Stethoscope className="w-16 h-16 text-sky-600" />
+                        </div>
+                        <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center text-sky-600 mb-4 group-hover:scale-110 transition-transform">
+                            <PlayCircle className="w-6 h-6" />
+                        </div>
+                        <h4 className="font-bold text-gray-900 mb-1">Odontologia</h4>
+                        <p className="text-xs text-gray-500 mb-4">Prontuário e Odontograma interativo.</p>
+                        <span className="text-[10px] font-black uppercase text-sky-600 tracking-widest">Iniciar Tour →</span>
+                    </button>
+                )}
             </div>
 
             {/* Categorias e FAQ */}
             <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-gray-50 bg-gray-50/50 overflow-x-auto">
                     <div className="flex gap-2 min-w-max">
-                        {categories.map(cat => (
+                        {availableCategories.map(cat => (
                             <button
                                 key={cat.id}
                                 onClick={() => setSelectedCategory(cat.id as any)}
@@ -184,7 +204,7 @@ const HelpCenter: React.FC = () => {
                                 className="w-full flex items-center justify-between p-6 text-left hover:bg-slate-50 transition-colors"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${faq.category === 'FINANCE' ? 'bg-emerald-100 text-emerald-600' : faq.category === 'OPTICAL' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${faq.category === 'FINANCE' ? 'bg-emerald-100 text-emerald-600' : faq.category === 'OPTICAL' ? 'bg-indigo-100 text-indigo-600' : faq.category === 'ODONTO' ? 'bg-sky-100 text-sky-600' : 'bg-slate-100 text-slate-500'}`}>
                                         <BookOpen className="w-4 h-4" />
                                     </div>
                                     <span className="font-bold text-gray-800 text-sm">{faq.question}</span>
