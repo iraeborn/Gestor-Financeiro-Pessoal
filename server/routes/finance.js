@@ -119,36 +119,35 @@ export default function(logAudit) {
                 await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro: ${store}`);
 
             } else if (action === 'SAVE') {
-                // Lógica de saldo para transações
+                // Lógica Robusta de Saldo p/ Transações
                 if (tableName === 'transactions') {
-                    const existing = await client.query('SELECT status, amount, type, account_id FROM transactions WHERE id = $1', [payload.id]);
-                    const oldT = existing.rows[0];
+                    const existingRes = await client.query('SELECT status, amount, type, account_id, destination_account_id FROM transactions WHERE id = $1', [payload.id]);
+                    const oldT = existingRes.rows[0];
 
-                    // CASO 1: Transação era PENDING e virou PAID (Pagamento realizado)
-                    if ((!oldT || oldT.status !== 'PAID') && payload.status === 'PAID') {
-                        const amount = Number(payload.amount);
-                        if (payload.type === 'TRANSFER') {
-                            await updateAccountBalance(client, payload.accountId, amount, 'EXPENSE');
-                            if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
+                    // 1. REVERTER impacto antigo se o registro era PAID
+                    if (oldT && oldT.status === 'PAID') {
+                        const oldAmount = Number(oldT.amount);
+                        if (oldT.type === 'TRANSFER') {
+                            await updateAccountBalance(client, oldT.account_id, oldAmount, 'EXPENSE', true);
+                            if (oldT.destination_account_id) await updateAccountBalance(client, oldT.destination_account_id, oldAmount, 'INCOME', true);
                         } else {
-                            await updateAccountBalance(client, payload.accountId, amount, payload.type);
+                            await updateAccountBalance(client, oldT.account_id, oldAmount, oldT.type, true);
                         }
                     }
-                    // CASO 2: Transação era PAID e virou PENDING (ESTORNO)
-                    else if (oldT && oldT.status === 'PAID' && payload.status !== 'PAID') {
-                        const amount = Number(oldT.amount);
-                        if (oldT.type === 'TRANSFER') {
-                            await updateAccountBalance(client, oldT.account_id, amount, 'EXPENSE', true);
-                            const destAcc = await client.query('SELECT destination_account_id FROM transactions WHERE id = $1', [payload.id]);
-                            if (destAcc.rows[0]?.destination_account_id) {
-                                await updateAccountBalance(client, destAcc.rows[0].destination_account_id, amount, 'INCOME', true);
-                            }
+
+                    // 2. APLICAR novo impacto se o registro atual é PAID
+                    if (payload.status === 'PAID') {
+                        const newAmount = Number(payload.amount);
+                        if (payload.type === 'TRANSFER') {
+                            await updateAccountBalance(client, payload.accountId, newAmount, 'EXPENSE');
+                            if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, newAmount, 'INCOME');
                         } else {
-                            await updateAccountBalance(client, oldT.account_id, amount, oldT.type, true);
+                            await updateAccountBalance(client, payload.accountId, newAmount, payload.type);
                         }
                     }
                 }
 
+                // Inserção / Atualização Atômica
                 const fields = Object.keys(payload).filter(k => {
                     const lk = k.toLowerCase();
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;

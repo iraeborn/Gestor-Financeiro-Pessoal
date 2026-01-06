@@ -157,9 +157,37 @@ const AppContent: React.FC<{
     };
 
     const handleAddTransaction = async (t: any, nc?: Contact, ncat?: Category) => {
-        const newT = { ...t, id: t.id || crypto.randomUUID() };
-        setState(prev => prev ? ({ ...prev, transactions: [newT, ...prev.transactions] }) : prev);
-        await api.saveTransaction(t, nc, ncat);
+        const newId = t.id || crypto.randomUUID();
+        const newT = { ...t, id: newId };
+        
+        // Optimistic UI para Cadastro de Transação
+        setState(prev => {
+            if (!prev) return prev;
+            
+            let updatedAccounts = prev.accounts;
+            // Se o lançamento já for cadastrado como PAGO, atualizamos o saldo localmente agora
+            if (newT.status === TransactionStatus.PAID) {
+                updatedAccounts = prev.accounts.map(acc => {
+                    if (acc.id === newT.accountId) {
+                        let diff = newT.amount;
+                        if (newT.type === TransactionType.EXPENSE) diff *= -1;
+                        return { ...acc, balance: acc.balance + diff };
+                    }
+                    if (newT.type === TransactionType.TRANSFER && acc.id === newT.destinationAccountId) {
+                        return { ...acc, balance: acc.balance + newT.amount };
+                    }
+                    return acc;
+                });
+            }
+
+            return {
+                ...prev,
+                accounts: updatedAccounts,
+                transactions: [newT, ...prev.transactions]
+            };
+        });
+
+        await api.saveTransaction(newT, nc, ncat);
         refreshData();
     };
 
@@ -170,12 +198,34 @@ const AppContent: React.FC<{
             state, settings: currentUser.settings, currentUser,
             onAddTransaction: handleAddTransaction,
             onDeleteTransaction: async (id: string) => {
-                setState(prev => prev ? ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }) : prev);
+                setState(prev => {
+                    if (!prev) return prev;
+                    const t = prev.transactions.find(item => item.id === id);
+                    let updatedAccounts = prev.accounts;
+                    if (t && t.status === TransactionStatus.PAID) {
+                        updatedAccounts = prev.accounts.map(acc => {
+                            if (acc.id === t.accountId) {
+                                let diff = t.amount;
+                                if (t.type === TransactionType.EXPENSE) diff *= -1;
+                                return { ...acc, balance: acc.balance - diff };
+                            }
+                            if (t.type === TransactionType.TRANSFER && acc.id === t.destinationAccountId) {
+                                return { ...acc, balance: acc.balance - t.amount };
+                            }
+                            return acc;
+                        });
+                    }
+                    return {
+                        ...prev,
+                        accounts: updatedAccounts,
+                        transactions: prev.transactions.filter(item => item.id !== id)
+                    };
+                });
                 await api.deleteTransaction(id);
                 refreshData();
             },
             onEditTransaction: async (t: any, nc?: Contact, ncat?: Category) => {
-                setState(prev => prev ? ({ ...prev, transactions: prev.transactions.map(item => item.id === t.id ? t : item) }) : prev);
+                // A edição completa redireciona o saldo no backend para ser mais seguro devido a possíveis mudanças de conta
                 await api.saveTransaction(t, nc, ncat);
                 refreshData();
             },

@@ -44,23 +44,26 @@ export const calculateChanges = (oldObj, newObj, keyMap) => {
 };
 
 /**
- * Atualiza o saldo de uma conta.
+ * Atualiza o saldo de uma conta de forma segura.
  * @param {Object} client - Cliente do banco
  * @param {string} accountId - ID da conta
- * @param {number} amount - Valor
+ * @param {number} amount - Valor (string ou number)
  * @param {string} type - INCOME / EXPENSE
  * @param {boolean} isReversal - Se TRUE, faz a operação inversa (Estorno)
  */
 export const updateAccountBalance = async (client, accountId, amount, type, isReversal = false) => {
-    if (!accountId || isNaN(amount)) return;
+    if (!accountId || amount === undefined || amount === null) return;
     
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount)) return;
+
     let multiplier = 1;
     if (type === 'EXPENSE') multiplier = -1;
     
     // Se for estorno, invertemos o impacto original
     if (isReversal) multiplier *= -1;
     
-    const finalChange = Number(amount) * multiplier;
+    const finalChange = numericAmount * multiplier;
     
     await client.query(
         `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
