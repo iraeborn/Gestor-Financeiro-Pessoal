@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS, Contact } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily, loadInitialData } from '../services/storageService';
@@ -96,10 +97,10 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
     const [editContactId, setEditContactId] = useState<string>('');
 
     const isPJ = currentUser.entityType === EntityType.BUSINESS;
-    const workspace = currentUser.workspaces?.find(w => w.id === currentUser.familyId);
+    const familyId = currentUser.familyId || (currentUser as any).family_id;
+    const workspace = currentUser.workspaces?.find(w => w.id === familyId);
     const isAdmin = workspace?.role === 'ADMIN';
 
-    // Fix: Added missing getInviteUrl function to generate the invitation URL
     const getInviteUrl = () => {
         if (!inviteCode) return '';
         const url = new URL(window.location.origin);
@@ -166,6 +167,11 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
     };
 
     const handleRemoveMember = async (memberId: string) => {
+        if (memberId === familyId) {
+            showAlert("O proprietário não pode ser removido da própria organização.", "error");
+            return;
+        }
+
         const confirm = await showConfirm({
             title: "Remover Membro",
             message: "Tem certeza que deseja remover este membro? Ele perderá o acesso imediatamente.",
@@ -176,6 +182,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
             await removeMember(memberId);
             setMembers(members.filter(m => m.id !== memberId));
             showAlert("Membro removido com sucesso.", "success");
+            if (memberId === currentUser.id) window.location.reload();
         } catch (e: any) { showAlert(e.message || "Erro ao remover membro", "error"); }
     };
 
@@ -187,7 +194,6 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
         setSelectedProfileId(findMatchingProfile(perms));
         setEditContactId(member.contactId || '');
 
-        // Sugestão Automática de Vínculo por E-mail se não houver vínculo
         if (!member.contactId) {
             const matchedContact = allContacts.find(c => c.email?.toLowerCase() === member.email.toLowerCase());
             if (matchedContact) setEditContactId(matchedContact.id);
@@ -289,12 +295,19 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                         <tbody className="divide-y divide-gray-50">
                             {members.map(member => {
                                 const linkedContact = allContacts.find(c => c.id === member.contactId);
+                                const isMe = member.email === currentUser.email;
                                 return (
                                 <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm bg-indigo-100 text-indigo-600">{member.name?.charAt(0).toUpperCase()}</div>
-                                            <div><p className="font-semibold text-gray-900">{member.name}</p><p className="text-xs text-gray-500">{member.email}</p></div>
+                                            <div>
+                                                <p className="font-semibold text-gray-900">
+                                                    {member.name} 
+                                                    {isMe && <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 text-[9px] font-black uppercase tracking-tighter">Você</span>}
+                                                </p>
+                                                <p className="text-xs text-gray-500">{member.email}</p>
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-md text-xs font-bold bg-gray-100 text-gray-600">{member.role}</span></td>
@@ -307,9 +320,9 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {member.email !== currentUser.email && (
-                                                <><button onClick={() => openEditModal(member)} className="p-1.5 text-gray-400 hover:text-indigo-600"><Edit className="w-4 h-4" /></button>
-                                                <button onClick={() => handleRemoveMember(member.id)} className="p-1.5 text-gray-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button></>
+                                            <button onClick={() => openEditModal(member)} className="p-1.5 text-gray-400 hover:text-indigo-600" title="Editar Permissões"><Edit className="w-4 h-4" /></button>
+                                            {member.id !== familyId && (
+                                                <button onClick={() => handleRemoveMember(member.id)} className="p-1.5 text-gray-400 hover:text-rose-600" title="Remover Membro"><Trash2 className="w-4 h-4" /></button>
                                             )}
                                         </div>
                                     </td>
@@ -324,7 +337,10 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-scale-up flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
-                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><UserCog className="w-5 h-5 text-indigo-600" /> Editar Membro: {editingMember.name}</h2>
+                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <UserCog className="w-5 h-5 text-indigo-600" /> 
+                                Editar: {editingMember.name} {editingMember.email === currentUser.email && '(Você)'}
+                            </h2>
                             <button onClick={() => setEditingMember(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
                         </div>
                         <div className="p-6 overflow-y-auto space-y-6">

@@ -31,7 +31,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, previous_state JSONB, changes JSONB, family_id TEXT, timestamp TIMESTAMP DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS notification_logs (id SERIAL PRIMARY KEY, status TEXT, channel TEXT, recipient TEXT, subject TEXT, content TEXT, user_id TEXT REFERENCES users(id), family_id TEXT, created_at TIMESTAMP DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, name TEXT, type TEXT, balance DECIMAL(15,2), user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, credit_limit DECIMAL(15,2), closing_day INTEGER, due_day INTEGER)`,
-        `CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, fantasy_name TEXT, type TEXT, email TEXT, phone TEXT, document TEXT, ie TEXT, im TEXT, pix_key TEXT, zip_code TEXT, street TEXT, number TEXT, neighborhood TEXT, city TEXT, state TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, fantasy_name TEXT, type TEXT, email TEXT, phone TEXT, document TEXT, ie TEXT, im TEXT, pix_key TEXT, zip_code TEXT, street TEXT, number TEXT, complement TEXT, neighborhood TEXT, city TEXT, state TEXT, external_id TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT, type TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT, type TEXT, user_id TEXT REFERENCES users(id), family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, description TEXT, amount DECIMAL(15,2), type TEXT, category TEXT, date DATE, status TEXT, account_id TEXT, destination_account_id TEXT, contact_id TEXT, user_id TEXT, family_id TEXT, is_recurring BOOLEAN, recurrence_frequency TEXT, recurrence_end_date DATE, interest_rate DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP, goal_id TEXT, receipt_url TEXT, receipt_urls JSONB DEFAULT '[]', branch_id TEXT, cost_center_id TEXT, department_id TEXT, project_id TEXT, classification TEXT)`,
@@ -50,6 +50,8 @@ export const initDb = async () => {
     // 2. Migrações de Colunas
     const migrationQueries = [
         `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS contact_id TEXT`,
+        `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS external_id TEXT`,
+        `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS complement TEXT`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_defaulter BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2) DEFAULT 0`,
