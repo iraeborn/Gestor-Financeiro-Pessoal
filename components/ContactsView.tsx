@@ -1,7 +1,9 @@
-
-import React, { useState } from 'react';
-import { Contact, ServiceClient } from '../types';
-import { User, Plus, Search, Pencil, Trash2, Mail, Phone, FileText, Building, DollarSign, Shield, AlertTriangle, Briefcase } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Contact } from '../types';
+import { User, Plus, Search, Pencil, Trash2, Mail, Phone, FileText, Building, DollarSign, Shield, AlertTriangle, FileUp, Loader2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { api } from '../services/storageService';
+import { useAlert } from './AlertSystem';
 
 interface ContactsViewProps {
   contacts: Contact[];
@@ -13,7 +15,10 @@ interface ContactsViewProps {
 }
 
 const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onEditContact, onDeleteContact, title, subtitle }) => {
+  const { showAlert } = useAlert();
   const [searchTerm, setSearchTerm] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredContacts = contacts.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -23,6 +28,67 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
 
   const formatCurrency = (val?: number) => val ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : 'R$ 0,00';
 
+  const handleImportXls = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (evt) => {
+        try {
+            const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+            if (json.length === 0) {
+                showAlert("O arquivo parece estar vazio.", "warning");
+                return;
+            }
+
+            const newContacts: Contact[] = json.map(row => {
+                const doc = String(row['CPF ou CNPJ'] || row['Documento'] || '').replace(/\D/g, '');
+                const type = doc.length > 11 ? 'PJ' : 'PF';
+                
+                return {
+                    id: crypto.randomUUID(),
+                    externalId: String(row['Identificador externo'] || ''),
+                    name: String(row['Nome'] || 'Contato Sem Nome'),
+                    email: String(row['Email'] || '').toLowerCase(),
+                    phone: String(row['Celular'] || row['Fone'] || row['Telefone'] || ''),
+                    document: doc,
+                    fantasyName: row['Empresa'] || row['Nome Fantasia'] ? String(row['Empresa'] || row['Nome Fantasia']) : undefined,
+                    type: type as 'PF' | 'PJ',
+                    street: String(row['Rua'] || row['Logradouro'] || ''),
+                    number: String(row['Número'] || row['nº'] || ''),
+                    complement: String(row['Complemento'] || ''),
+                    neighborhood: String(row['Bairro'] || ''),
+                    city: String(row['Cidade'] || ''),
+                    zipCode: String(row['CEP'] || '').replace(/\D/g, ''),
+                    state: String(row['Estado'] || row['UF'] || '').toUpperCase().substring(0, 2),
+                };
+            });
+
+            await api.saveBulkContacts(newContacts);
+            showAlert(`${newContacts.length} contatos importados com sucesso!`, "success");
+            
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            
+            // Pequeno delay para o banco processar antes de recarregar a view se necessário
+            setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+            console.error(err);
+            showAlert("Erro ao processar arquivo XLS. Verifique o formato das colunas.", "error");
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -30,13 +96,30 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
           <h1 className="text-2xl font-bold text-gray-900">{title || "Contatos & Clientes"}</h1>
           <p className="text-gray-500">{subtitle || "Gestão centralizada de pessoas físicas e jurídicas."}</p>
         </div>
-        <button 
-          onClick={onAddContact}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Contato
-        </button>
+        <div className="flex gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept=".xlsx, .xls" 
+            onChange={handleImportXls} 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 bg-white text-gray-700 px-5 py-2.5 rounded-xl font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5 text-indigo-500" />}
+            {importing ? 'Importando...' : 'Importar XLS'}
+          </button>
+          <button 
+            onClick={onAddContact}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+          >
+            <Plus className="w-5 h-5" />
+            Novo Contato
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">

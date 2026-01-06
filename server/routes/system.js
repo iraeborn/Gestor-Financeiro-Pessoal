@@ -1,4 +1,3 @@
-
 import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -138,7 +137,7 @@ export default function(logAudit) {
             if (!tableName) return res.status(400).json({ error: 'Entidade inválida' });
 
             const prevState = log.previous_state;
-            const fields = Object.keys(prevState).filter(k => !['id', 'user_id', 'family_id', 'created_at', 'updated_at'].includes(lk));
+            const fields = Object.keys(prevState).filter(k => !['id', 'user_id', 'family_id', 'created_at', 'updated_at'].includes(k));
             const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
             
             await pool.query(`UPDATE ${tableName} SET ${setClause} WHERE id = $${fields.length + 1} AND family_id = $${fields.length + 2}`, [...fields.map(f => prevState[f]), log.entity_id, familyId]);

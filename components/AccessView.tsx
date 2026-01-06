@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS, Contact } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily, loadInitialData } from '../services/storageService';
