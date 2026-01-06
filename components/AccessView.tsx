@@ -336,39 +336,45 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                                 </select>
                             </div>
 
+                            <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 space-y-4">
+                                <div className="flex items-center gap-2 text-indigo-700 font-black text-[10px] uppercase tracking-widest"><Link2 className="w-4 h-4" /> Vínculo CRM (Identidade)</div>
+                                <select 
+                                    value={editContactId} 
+                                    onChange={e => setEditContactId(e.target.value)} 
+                                    className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-sm font-bold outline-none"
+                                >
+                                    <option value="">Nenhum vínculo (Anônimo)</option>
+                                    {allContacts.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+                                </select>
+                                <p className="text-[10px] text-indigo-400 leading-tight">Vincular a um contato permite associar comissões e ações operacionais ao registro físico da pessoa, independente de ser Admin ou Membro.</p>
+                            </div>
+
                             {editRole === 'MEMBER' && (
-                                <>
-                                    <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100 space-y-4">
-                                        <div className="flex items-center gap-2 text-indigo-700 font-black text-[10px] uppercase tracking-widest"><Link2 className="w-4 h-4" /> Vínculo CRM (Identidade)</div>
-                                        <select 
-                                            value={editContactId} 
-                                            onChange={e => setEditContactId(e.target.value)} 
-                                            className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-sm font-bold outline-none"
-                                        >
-                                            <option value="">Nenhum vínculo (Anônimo)</option>
-                                            {allContacts.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
-                                        </select>
-                                        <p className="text-[10px] text-indigo-400 leading-tight">Vincular a um contato permite associar comissões e ações operacionais ao registro físico da pessoa.</p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-black uppercase text-gray-400 mb-3 ml-1">Permissões de Tela</label>
-                                        <div className="space-y-4">
-                                            {PERMISSION_GROUPS.map((group) => (
-                                                <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
-                                                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-100"><span className="text-[10px] font-black text-gray-400 uppercase">{group.name}</span></div>
-                                                    <div className="p-3 grid grid-cols-2 gap-2">
-                                                        {group.items.map(perm => (
-                                                            <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-all">
-                                                                <input type="checkbox" checked={editPermissions.includes(perm.id)} onChange={() => togglePermission(perm.id)} className="w-4 h-4 text-indigo-600 rounded border-gray-300" />
-                                                                <span className="text-xs font-bold text-gray-600">{perm.label}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
+                                <div>
+                                    <label className="block text-xs font-black uppercase text-gray-400 mb-3 ml-1">Permissões de Tela</label>
+                                    <div className="space-y-4">
+                                        {PERMISSION_GROUPS.map((group) => (
+                                            <div key={group.name} className="border border-gray-100 rounded-xl overflow-hidden">
+                                                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100"><span className="text-[10px] font-black text-gray-400 uppercase">{group.name}</span></div>
+                                                <div className="p-3 grid grid-cols-2 gap-2">
+                                                    {group.items.map(perm => (
+                                                        <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-all">
+                                                            <input type="checkbox" checked={editPermissions.includes(perm.id)} onChange={() => togglePermission(perm.id)} className="w-4 h-4 text-indigo-600 rounded border-gray-300" />
+                                                            <span className="text-xs font-bold text-gray-600">{perm.label}</span>
+                                                        </label>
+                                                    ))}
                                                 </div>
-                                            ))}
-                                        </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                </>
+                                </div>
+                            )}
+                            
+                            {editRole === 'ADMIN' && (
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-start gap-3">
+                                    <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+                                    <p className="text-xs text-slate-500 leading-relaxed font-medium">Administradores possuem acesso total a todos os módulos e configurações do sistema, dispensando a seleção individual de permissões.</p>
+                                </div>
                             )}
                         </div>
                         <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
