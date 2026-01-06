@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { OpticalRx, Contact, Laboratory, OpticalDeliveryStatus } from '../types';
-import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart, MessageSquare, ExternalLink, Hash } from 'lucide-react';
+// Fix: Added missing ChevronDown icon import
+import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart, MessageSquare, ExternalLink, Hash, Filter, X, ChevronDown } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface OpticalModuleProps {
@@ -21,12 +22,19 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
     const { showAlert } = useAlert();
     const { showConfirm } = useConfirm();
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState<string>('ALL');
+    const [labFilter, setLabFilter] = useState<string>('ALL');
 
-    const filteredRxs = opticalRxs.filter(rx => 
-        (rx.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rx.rxNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredRxs = opticalRxs.filter(rx => {
+        const matchesSearch = (rx.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              (rx.rxNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const matchesStatus = statusFilter === 'ALL' || rx.status === statusFilter;
+        const matchesLab = labFilter === 'ALL' || rx.laboratoryId === labFilter;
+
+        return matchesSearch && matchesStatus && matchesLab;
+    });
 
     const getStatusColor = (status?: string) => {
         switch (status) {
@@ -79,9 +87,17 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
         }
     };
 
+    const clearFilters = () => {
+        setSearchTerm('');
+        setStatusFilter('ALL');
+        setLabFilter('ALL');
+    };
+
+    const hasActiveFilters = searchTerm !== '' || statusFilter !== 'ALL' || labFilter !== 'ALL';
+
     return (
         <div className="space-y-6 animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-2 gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 flex items-center gap-3">
                         <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-lg">
@@ -91,14 +107,66 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                     </h1>
                     <p className="text-gray-500 mt-1">Gestão técnica e conversão em vendas de óculos.</p>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <div className="relative flex-1 md:w-64">
-                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-                        <input type="text" placeholder="Buscar receita ou #ID..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
+                <button onClick={onAddRx} id="btn-new-rx" className="bg-indigo-600 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 whitespace-nowrap">
+                    <Plus className="w-4 h-4" /> Nova Receita
+                </button>
+            </div>
+
+            {/* Barra de Filtros */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <div className="flex flex-col lg:flex-row gap-4">
+                    <div className="flex-1 relative">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar por paciente, profissional ou #ID..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            className="w-full pl-11 pr-4 py-3.5 border-none bg-gray-50 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                        />
                     </div>
-                    <button onClick={onAddRx} className="bg-indigo-600 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 whitespace-nowrap">
-                        <Plus className="w-4 h-4" /> Nova Receita
-                    </button>
+                    
+                    <div className="flex flex-wrap md:flex-nowrap gap-3">
+                        <div className="relative min-w-[160px]">
+                            <Filter className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-4" />
+                            <select 
+                                value={statusFilter}
+                                onChange={e => setStatusFilter(e.target.value)}
+                                className="w-full pl-9 pr-8 py-3.5 border-none bg-gray-50 rounded-2xl text-xs font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
+                            >
+                                <option value="ALL">Todos Status</option>
+                                <option value="PENDING">🕒 Pendente</option>
+                                <option value="APPROVED">✅ Aprovada</option>
+                                <option value="SOLD">💰 Vendida</option>
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-4 pointer-events-none" />
+                        </div>
+
+                        <div className="relative min-w-[180px]">
+                            <Microscope className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-4" />
+                            <select 
+                                value={labFilter}
+                                onChange={e => setLabFilter(e.target.value)}
+                                className="w-full pl-9 pr-8 py-3.5 border-none bg-gray-50 rounded-2xl text-xs font-black uppercase tracking-widest focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
+                            >
+                                <option value="ALL">Todos Labs</option>
+                                {laboratories.map(lab => (
+                                    <option key={lab.id} value={lab.id}>{lab.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-4 pointer-events-none" />
+                        </div>
+
+                        {hasActiveFilters && (
+                            <button 
+                                onClick={clearFilters}
+                                className="p-3.5 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-100 transition-colors"
+                                title="Limpar Filtros"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -106,7 +174,10 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                 {filteredRxs.length === 0 ? (
                     <div className="py-20 text-center text-gray-400 bg-white rounded-3xl border-2 border-dashed border-gray-100">
                         <Eye className="w-12 h-12 mx-auto mb-4 opacity-10" />
-                        <p className="font-bold">Nenhuma receita encontrada.</p>
+                        <p className="font-bold">Nenhuma receita encontrada com estes filtros.</p>
+                        {hasActiveFilters && (
+                            <button onClick={clearFilters} className="mt-4 text-indigo-600 font-black uppercase text-[10px] tracking-widest hover:underline">Limpar filtros e buscar todas</button>
+                        )}
                     </div>
                 ) : filteredRxs.map(rx => {
                     const lab = laboratories.find(l => l.id === rx.laboratoryId);

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon } from 'lucide-react';
+import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch, Salesperson, User as UserType } from '../types';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -11,12 +11,14 @@ interface SaleEditorProps {
     serviceItems: ServiceItem[];
     opticalRxs: OpticalRx[];
     branches: Branch[];
+    salespeople: Salesperson[];
+    currentUser: UserType;
     settings?: AppSettings;
     onSave: (o: CommercialOrder) => void;
     onCancel: () => void;
 }
 
-const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, settings, onSave, onCancel }) => {
+const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceItems, opticalRxs, branches, salespeople, currentUser, settings, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [teamMembers, setTeamMembers] = useState<Member[]>([]);
     const [formData, setFormData] = useState<Partial<CommercialOrder>>({
@@ -33,7 +35,23 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-    const maxDiscountPct = settings?.maxDiscountPct || 100;
+    // Lógica de Alçada de Desconto
+    const isRestrictedUser = useMemo(() => {
+        // Se for o dono da conta (familyId === id) ou ADMIN, não é restrito
+        const familyId = currentUser.familyId || (currentUser as any).family_id;
+        const workspace = currentUser.workspaces?.find(w => w.id === familyId);
+        const isAdmin = currentUser.id === familyId || workspace?.role === 'ADMIN' || currentUser.role === 'ADMIN';
+
+        if (isAdmin) return false;
+
+        // Se o usuário não estiver na lista de vendedores configurados, ele não tem limite imposto (usuário operacional de apoio)
+        const isRegisteredSalesperson = salespeople.some(s => s.userId === currentUser.id);
+        if (!isRegisteredSalesperson) return false;
+
+        return true;
+    }, [currentUser, salespeople]);
+
+    const effectiveMaxDiscount = isRestrictedUser ? (settings?.maxDiscountPct || 100) : 100;
 
     useEffect(() => {
         loadTeam();
@@ -65,9 +83,12 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         const discount = Number(formData.discountAmount) || 0;
         const net = gross - discount;
         const discountPct = gross > 0 ? (discount / gross) * 100 : 0;
-        const isOverDiscount = discountPct > maxDiscountPct;
+        
+        // Validação contra o limite efetivo (bloqueio físico do botão de salvar)
+        const isOverDiscount = discountPct > effectiveMaxDiscount;
+        
         return { gross, discount, net, discountPct, isOverDiscount };
-    }, [formData.items, formData.discountAmount, maxDiscountPct]);
+    }, [formData.items, formData.discountAmount, effectiveMaxDiscount]);
 
     const handleAddItem = (catalogItemId?: string) => {
         const catalogItem = serviceItems.find(i => i.id === catalogItemId);
@@ -101,7 +122,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         e.preventDefault();
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
-        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Limite máximo: ${maxDiscountPct}%.`, "error");
+        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Sua alçada permite no máximo ${effectiveMaxDiscount}%.`, "error");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -282,6 +303,21 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
                         <div>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status da Venda</label>
+                            <select 
+                                value={formData.status || 'DRAFT'} 
+                                onChange={e => setFormData({...formData, status: e.target.value as any})}
+                                className="w-full bg-gray-50 text-gray-700 rounded-xl p-4 text-sm font-black uppercase tracking-widest outline-none border border-gray-100 cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all"
+                            >
+                                <option value="DRAFT">📝 Rascunho</option>
+                                <option value="APPROVED">✅ Aprovado</option>
+                                <option value="ON_HOLD">⏳ Em Espera</option>
+                                <option value="CONFIRMED">💰 Confirmado / Pago</option>
+                                <option value="REJECTED">❌ Recusado</option>
+                            </select>
+                        </div>
+
+                        <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Venda</label>
                             <div className="relative">
                                 <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
@@ -316,7 +352,14 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             </div>
                             
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Negociado</label>
+                                <div className="flex justify-between items-center mb-2 ml-1">
+                                    <label className="block text-[10px] font-black uppercase text-gray-400">Desconto Negociado</label>
+                                    {!isRestrictedUser && (
+                                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
+                                            <ShieldCheck className="w-3 h-3" /> Alçada Liberada
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="relative">
                                     <DollarSign className={`w-4 h-4 absolute left-4 top-4 ${pricing.isOverDiscount ? 'text-rose-500' : 'text-emerald-500'}`} />
                                     <input 
@@ -333,7 +376,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                 </div>
                                 {pricing.isOverDiscount && (
                                     <p className="text-[9px] font-black text-rose-500 uppercase mt-2 flex items-center gap-1">
-                                        <AlertTriangle className="w-3 h-3" /> Limite de {maxDiscountPct}% excedido
+                                        <AlertTriangle className="w-3 h-3" /> Limite de {effectiveMaxDiscount}% excedido
                                     </p>
                                 )}
                             </div>
@@ -367,7 +410,11 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             <Info className="w-4 h-4" /> Alerta de Alçada
                         </h4>
                         <p className="text-xs text-slate-300 leading-relaxed">
-                            O desconto máximo permitido para este negócio é de <strong>{maxDiscountPct}%</strong>. Vendas fora dessa regra serão bloqueadas.
+                            {isRestrictedUser ? (
+                                <>O desconto máximo permitido para sua função é de <strong>{effectiveMaxDiscount}%</strong>. Vendas fora dessa regra serão bloqueadas.</>
+                            ) : (
+                                <>Você possui <strong>Alçada Administrativa</strong>. Descontos de até 100% são permitidos para este perfil.</>
+                            )}
                         </p>
                     </div>
                 </div>

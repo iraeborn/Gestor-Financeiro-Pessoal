@@ -240,6 +240,8 @@ const AppContent: React.FC<{
                     serviceItems={state.serviceItems}
                     opticalRxs={state.opticalRxs}
                     branches={state.branches}
+                    salespeople={state.salespeople}
+                    currentUser={currentUser}
                     settings={currentUser.settings}
                     onSave={handleSaveOrderWithOSAutomation}
                     onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
