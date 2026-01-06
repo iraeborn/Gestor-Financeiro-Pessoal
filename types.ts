@@ -54,7 +54,11 @@ export enum TransactionClassification {
   INTER_BRANCH = 'INTER_BRANCH'
 }
 
-export type OSStatus = 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' | 'PAUSADA' | 'FINALIZADA' | 'PRONTA' | 'ENTREGUE';
+/**
+ * OSStatus defines the lifecycle of a Service Order.
+ * 'CANCELED' added to support unified automation checks in App.tsx.
+ */
+export type OSStatus = 'ABERTA' | 'APROVADA' | 'AGENDADA' | 'EM_EXECUCAO' | 'PAUSADA' | 'FINALIZADA' | 'PRONTA' | 'ENTREGUE' | 'CANCELED';
 export type OSType = 'MANUTENCAO' | 'INSTALACAO' | 'REPARO' | 'MONTAGEM_OTICA' | 'OUTRO';
 export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO' | 'VENDA_OTICA';
 export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';

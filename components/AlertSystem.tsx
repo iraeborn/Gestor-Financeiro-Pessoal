@@ -16,7 +16,8 @@ interface ConfirmOptions {
   message: ReactNode;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'danger' | 'info';
+  // Added 'warning' variant to fix type compatibility with calls using this variant
+  variant?: 'danger' | 'info' | 'warning';
 }
 
 interface AlertContextType {
@@ -65,15 +66,29 @@ const ConfirmModal: React.FC<{
   if (!isOpen) return null;
 
   const isDanger = options.variant === 'danger';
+  // Handle warning variant for conditional styling
+  const isWarning = options.variant === 'warning';
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden scale-100 transition-transform">
-        <div className={`px-6 py-4 border-b flex items-center gap-3 ${isDanger ? 'bg-rose-50 border-rose-100' : 'bg-gray-50 border-gray-100'}`}>
-          <div className={`p-2 rounded-full ${isDanger ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
-            {isDanger ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
+        <div className={`px-6 py-4 border-b flex items-center gap-3 ${
+          isDanger ? 'bg-rose-50 border-rose-100' : 
+          isWarning ? 'bg-amber-50 border-amber-100' : 
+          'bg-gray-50 border-gray-100'
+        }`}>
+          <div className={`p-2 rounded-full ${
+            isDanger ? 'bg-rose-100 text-rose-600' : 
+            isWarning ? 'bg-amber-100 text-amber-600' : 
+            'bg-blue-100 text-blue-600'
+          }`}>
+            {isDanger || isWarning ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
           </div>
-          <h3 className={`text-lg font-bold ${isDanger ? 'text-rose-900' : 'text-gray-900'}`}>{options.title}</h3>
+          <h3 className={`text-lg font-bold ${
+            isDanger ? 'text-rose-900' : 
+            isWarning ? 'text-amber-900' : 
+            'text-gray-900'
+          }`}>{options.title}</h3>
         </div>
         
         <div className="p-6">
@@ -92,6 +107,8 @@ const ConfirmModal: React.FC<{
             className={`px-4 py-2 text-white rounded-xl text-sm font-bold shadow-lg transition-colors ${
               isDanger 
                 ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' 
+                : isWarning 
+                ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' 
                 : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
             }`}
           >
@@ -125,7 +142,6 @@ export const AlertProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }, 4000);
   }, []);
 
-  // Fix: Added 'prev.' to filter call to correctly reference the state array
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);

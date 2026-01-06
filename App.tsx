@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
-  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder, OSItem
+  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder, OSItem,
+  TransactionType, TransactionStatus
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers, joinFamily } from './services/storageService';
 import { localDb } from './services/localDb';
@@ -75,13 +76,9 @@ const AppContent: React.FC<{
         if (!socket || !currentUser) return;
 
         const handleRemoteUpdate = (payload: any) => {
-            // Se a atualização veio de outro usuário (actorId diferente do meu ID)
             if (payload.actorId !== currentUser.id) {
                 console.log(`🔄 [SYNC] Mudança detectada em ${payload.entity}. Atualizando base local...`);
-                // Puxa novos dados do servidor para manter IndexedDB e UI sincronizados
                 refreshData();
-                
-                // Feedback sutil se não for apenas sincronização de logs
                 if (payload.entity !== 'membership' && payload.entity !== 'settings') {
                     showAlert(`Dados de ${payload.entity} atualizados pela equipe.`, "info");
                 }
@@ -122,42 +119,122 @@ const AppContent: React.FC<{
         setCurrentView('SRV_SALE_EDITOR');
     };
 
-    // Salvar Venda e Automatizar OS de Montagem
-    const handleSaveOrderWithOSAutomation = async (order: CommercialOrder) => {
-        await api.saveOrder(order);
-        
-        // Se houver uma RX vinculada, cria a OS de montagem automaticamente
-        if (order.rxId) {
-            const rx = state?.opticalRxs.find(r => r.id === order.rxId);
-            const os: ServiceOrder = {
-                id: crypto.randomUUID(),
-                title: `Montagem de Óculos: ${order.contactName}`,
-                description: `OS gerada automaticamente da Venda #${order.id.substring(0,6)}.\nRX Ref: ${new Date(rx?.rxDate || '').toLocaleDateString()}`,
-                contactId: order.contactId,
-                contactName: order.contactName,
-                rxId: order.rxId,
-                branchId: order.branchId,
-                status: 'ABERTA',
-                type: 'MONTAGEM_OTICA',
-                origin: 'VENDA_OTICA',
-                priority: 'MEDIA',
-                openedAt: new Date().toISOString(),
-                totalAmount: 0,
-                moduleTag: 'optical',
-                items: order.items.map(i => ({ ...i, id: crypto.randomUUID(), isBillable: false }))
-            };
-            await api.saveOS(os);
+    // Salvar Venda com Automação de Financeiro e OS
+    const handleSaveOrderWithAutomation = async (order: CommercialOrder) => {
+        try {
+            // 1. Automação Financeira: Se a venda está sendo CONFIRMADA e ainda não tem transação
+            if (order.status === 'CONFIRMED' && !order.transactionId) {
+                const defaultAccount = state?.accounts[0];
+                if (!defaultAccount) {
+                    showAlert("Configure uma conta bancária antes de confirmar vendas.", "warning");
+                    return;
+                }
+
+                const transId = crypto.randomUUID();
+                const transaction: Transaction = {
+                    id: transId,
+                    description: `Venda: ${order.description} (#${order.id.substring(0,6)})`,
+                    amount: order.amount,
+                    type: TransactionType.INCOME,
+                    category: order.moduleTag === 'optical' ? 'Vendas Ótica' : 'Vendas e Serviços',
+                    date: order.date,
+                    status: TransactionStatus.PENDING,
+                    accountId: defaultAccount.id,
+                    contactId: order.contactId,
+                    userId: currentUser?.id
+                };
+
+                await api.saveTransaction(transaction);
+                order.transactionId = transId;
+                showAlert("Lançamento financeiro gerado automaticamente!", "info");
+            }
+
+            // 2. Salvar o Pedido
+            await api.saveOrder(order);
             
-            // Marca RX como vendida
-            if (rx) await api.saveOpticalRx({ ...rx, status: 'SOLD' });
+            // 3. Automação de OS (Ótica): Se houver uma RX e ainda não existir OS para ela
+            if (order.rxId && order.status !== 'CANCELED' && order.status !== 'REJECTED') {
+                const existingOS = state?.serviceOrders.find(os => os.rxId === order.rxId && os.status !== 'CANCELED');
+                if (!existingOS) {
+                    const rx = state?.opticalRxs.find(r => r.id === order.rxId);
+                    const osId = crypto.randomUUID();
+                    const os: ServiceOrder = {
+                        id: osId,
+                        title: `Montagem: ${order.contactName}`,
+                        description: `OS gerada da Venda #${order.id.substring(0,6)}.`,
+                        contactId: order.contactId,
+                        contactName: order.contactName,
+                        rxId: order.rxId,
+                        branchId: order.branchId,
+                        status: 'ABERTA',
+                        type: 'MONTAGEM_OTICA',
+                        origin: 'VENDA_OTICA',
+                        priority: 'MEDIA',
+                        openedAt: new Date().toISOString(),
+                        totalAmount: 0,
+                        moduleTag: 'optical',
+                        items: order.items.map(i => ({ ...i, id: crypto.randomUUID(), isBillable: false }))
+                    };
+                    await api.saveOS(os);
+                    
+                    // Marca RX como vendida
+                    if (rx) await api.saveOpticalRx({ ...rx, status: 'SOLD' });
+                    showAlert("OS de Montagem criada com sucesso!", "success");
+                }
+            } else {
+                showAlert("Venda salva com sucesso!", "success");
+            }
             
-            showAlert("Venda e OS de Montagem criadas com sucesso!", "success");
-        } else {
-            showAlert("Venda salva com sucesso!", "success");
+            refreshData();
+            setCurrentView(order.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES');
+        } catch (e: any) {
+            showAlert("Erro no processamento automático: " + e.message, "error");
         }
-        
-        refreshData();
-        setCurrentView(order.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES');
+    };
+
+    // Exclusão de Venda com Alerta de Lançamento Financeiro
+    const handleDeleteOrderWithSafety = async (id: string) => {
+        const order = state?.commercialOrders.find(o => o.id === id);
+        if (!order) return;
+
+        // 1. Confirmação básica de exclusão do pedido
+        const confirmDelete = await showConfirm({
+            title: "Excluir Venda",
+            message: `Tem certeza que deseja excluir a venda "${order.description}"?`,
+            variant: "danger",
+            confirmText: "Sim, Excluir",
+            cancelText: "Manter Venda"
+        });
+
+        if (!confirmDelete) return;
+
+        // 2. Se a venda gerou financeiro, perguntamos sobre a exclusão do lançamento
+        if (order.transactionId) {
+            const deleteFinance = await showConfirm({
+                title: "Lançamento Vinculado",
+                message: "Esta venda gerou um lançamento financeiro no extrato. Deseja excluir o lançamento financeiro também?",
+                confirmText: "Excluir Ambos",
+                cancelText: "Manter Lançamento Financeiro",
+                variant: "warning"
+            });
+
+            if (deleteFinance) {
+                try {
+                    await api.deleteTransaction(order.transactionId);
+                    showAlert("Lançamento financeiro removido.", "info");
+                } catch (e) {
+                    console.error("Erro ao remover transação vinculada", e);
+                }
+            }
+        }
+
+        try {
+            await api.deleteOrder(id);
+            refreshData();
+            showAlert("Venda removida com sucesso.", "success");
+        } catch (e: any) {
+            showAlert("Erro ao remover venda: " + e.message, "error");
+        }
     };
 
     const renderContent = () => {
@@ -250,8 +327,8 @@ const AppContent: React.FC<{
                     onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
                     onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
                     onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
-                    onSaveOrder={handleSaveOrderWithOSAutomation}
-                    onDeleteOrder={(id) => api.deleteOrder(id).then(refreshData)}
+                    onSaveOrder={handleSaveOrderWithAutomation}
+                    onDeleteOrder={handleDeleteOrderWithSafety}
                     onSaveContract={() => {}} onDeleteContract={() => {}} 
                     onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
                     onAddTransaction={commonProps.onAddTransaction}
@@ -267,7 +344,7 @@ const AppContent: React.FC<{
                     salespeople={state.salespeople}
                     currentUser={currentUser}
                     settings={currentUser.settings}
-                    onSave={handleSaveOrderWithOSAutomation}
+                    onSave={handleSaveOrderWithAutomation}
                     onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
                 />;
 
