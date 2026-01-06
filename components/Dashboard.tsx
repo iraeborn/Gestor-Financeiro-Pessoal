@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AppState, Transaction, TransactionType, TransactionStatus, Contact, Category, ViewMode, AppSettings, User } from '../types';
 import StatCard from './StatCard';
 import TransactionList from './TransactionList';
-import TransactionModal from './TransactionModal';
 import { CashFlowChart, ExpensesByCategory } from './Charts';
 import { Plus, TrendingUp, ArrowRight, Monitor, Eye, Activity, Receipt, Landmark, AlertCircle, ShieldAlert, Microscope, CheckCircle2, Clock } from 'lucide-react';
 import { getManagerDiagnostic } from '../services/geminiService';
@@ -17,13 +16,12 @@ interface DashboardProps {
   onEditTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => void;
   onUpdateStatus: (t: Transaction) => void;
   onChangeView: (view: ViewMode) => void;
+  onNewTransaction: () => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  state, settings, currentUser, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView
+  state, settings, currentUser, onAddTransaction, onDeleteTransaction, onEditTransaction, onUpdateStatus, onChangeView, onNewTransaction
 }) => {
-  const [isTransModalOpen, setTransModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [diagnostic, setDiagnostic] = useState<string>('');
   const [loadingDiag, setLoadingDiag] = useState(false);
 
@@ -96,7 +94,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
         {canManageTrans && (
             <button 
-                onClick={() => { setEditingTransaction(null); setTransModalOpen(true); }}
+                onClick={onNewTransaction}
                 className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-xl shadow-slate-200"
             >
                 <Plus className="w-5 h-5" /> Novo Lançamento
@@ -104,7 +102,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* Alerta de Lentes Prontas no Laboratório */}
       {canSeeOptical && metrics.opticalStats.labProntos > 0 && (
           <div className="bg-emerald-600 rounded-[2.5rem] p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl shadow-emerald-100 animate-pulse-subtle">
               <div className="flex items-center gap-6">
@@ -197,21 +194,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                 accounts={state.accounts} 
                 contacts={state.contacts || []} 
                 onDelete={onDeleteTransaction}
-                onEdit={(t) => { setEditingTransaction(t); setTransModalOpen(true); }}
+                onEdit={onEditTransaction}
                 onToggleStatus={onUpdateStatus}
             />
           </div>
       )}
-
-      <TransactionModal 
-        isOpen={isTransModalOpen} 
-        onClose={() => setTransModalOpen(false)} 
-        onSave={(t, nc, ncat) => { if(editingTransaction) onEditTransaction({...t, id: editingTransaction.id}, nc, ncat); else onAddTransaction(t, nc, ncat); setTransModalOpen(false); }}
-        accounts={state.accounts}
-        contacts={state.contacts || []}
-        categories={state.categories || []}
-        initialData={editingTransaction}
-      />
     </div>
   );
 };

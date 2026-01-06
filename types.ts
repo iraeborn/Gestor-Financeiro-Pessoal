@@ -1,4 +1,5 @@
 
+
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_ENVIADO' | 'LAB_PRODUCAO' | 'LAB_PRONTO' | 'LAB_RECEBIDO' | 'ENTREGUE_CLIENTE';
 export type LabCommPreference = 'WHATSAPP' | 'EMAIL' | 'PORTAL' | 'MANUAL';
 export type LensType = 'MONOFOCAL' | 'BIFOCAL' | 'MULTIFOCAL' | 'OCUPACIONAL';
@@ -60,7 +61,7 @@ export type OSOrigin = 'MANUAL' | 'EXTERNO' | 'ORCAMENTO' | 'VENDA_OTICA';
 export type OSPriority = 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
 
 export type ViewMode = 
-  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_CONTACT_EDITOR'
+  | 'FIN_DASHBOARD' | 'FIN_TRANSACTIONS' | 'FIN_CALENDAR' | 'FIN_ACCOUNTS' | 'FIN_CARDS' | 'FIN_GOALS' | 'FIN_REPORTS' | 'FIN_ADVISOR' | 'FIN_CATEGORIES' | 'FIN_CONTACTS' | 'FIN_CONTACT_EDITOR' | 'FIN_TRANSACTION_EDITOR'
   | 'SRV_OS' | 'SRV_OS_EDITOR' | 'SRV_SALES' | 'SRV_SALE_EDITOR' | 'SRV_PURCHASES' | 'SRV_CATALOG' | 'SRV_CONTRACTS' | 'SRV_NF' | 'SRV_CLIENTS' | 'SRV_BRANCH_SCHEDULE'
   | 'OPTICAL_RX' | 'OPTICAL_RX_EDITOR' | 'OPTICAL_SALES' | 'OPTICAL_LAB' | 'OPTICAL_LABS_MGMT'
   | 'ODONTO_AGENDA' | 'ODONTO_PATIENTS' | 'ODONTO_PROCEDURES'
@@ -70,7 +71,11 @@ export type ViewMode =
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
   maxDiscountPct?: number; 
-  defaultAccountId?: string; // Conta principal para recebimentos
+  defaultAccountId?: string; 
+  installmentRules?: {
+    creditCard: { defaultInstallments: number; interestRate: number };
+    boleto: { maxInstallments: number };
+  };
   activeModules?: {
     odonto?: boolean;
     services?: boolean;
@@ -85,19 +90,6 @@ export interface AppSettings {
     notifyDueTomorrow: boolean;
     notifyOverdue: boolean;
   };
-}
-
-export interface ChatMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  receiverId?: string; 
-  familyId: string;
-  content: string;
-  type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE';
-  attachmentUrl?: string;
-  createdAt: string;
-  isRead?: boolean;
 }
 
 export interface User {
@@ -531,7 +523,7 @@ export interface CommercialOrder {
   discountAmount?: number;
   taxAmount?: number;
   transactionId?: string;
-  accountId?: string; // NOVO: Conta de crédito/débito escolhida para a venda
+  accountId?: string; 
   assigneeId?: string;
   assigneeName?: string;
   rxId?: string;
@@ -651,3 +643,17 @@ export interface AppNotification {
   timestamp: string;
   isRead: boolean;
 }
+
+// Added missing ChatMessage interface
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  receiverId?: string;
+  familyId: string;
+  content: string;
+  type: 'TEXT' | 'IMAGE' | 'FILE';
+  createdAt: string | Date;
+  attachmentUrl?: string;
+}
+
