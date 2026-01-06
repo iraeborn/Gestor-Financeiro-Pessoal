@@ -70,6 +70,30 @@ const AppContent: React.FC<{
     const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
+    // ESCUTA ATUALIZAÇÕES EM TEMPO REAL (DATA SYNC)
+    useEffect(() => {
+        if (!socket || !currentUser) return;
+
+        const handleRemoteUpdate = (payload: any) => {
+            // Se a atualização veio de outro usuário (actorId diferente do meu ID)
+            if (payload.actorId !== currentUser.id) {
+                console.log(`🔄 [SYNC] Mudança detectada em ${payload.entity}. Atualizando base local...`);
+                // Puxa novos dados do servidor para manter IndexedDB e UI sincronizados
+                refreshData();
+                
+                // Feedback sutil se não for apenas sincronização de logs
+                if (payload.entity !== 'membership' && payload.entity !== 'settings') {
+                    showAlert(`Dados de ${payload.entity} atualizados pela equipe.`, "info");
+                }
+            }
+        };
+
+        socket.on('DATA_UPDATED', handleRemoteUpdate);
+        return () => {
+            socket.off('DATA_UPDATED', handleRemoteUpdate);
+        };
+    }, [socket, currentUser?.id, refreshData]);
+
     // Fluxo Automático Ótico: Converter RX em Venda
     const handleStartSaleFromRx = (rx: OpticalRx) => {
         const lensItem: OSItem = {
@@ -289,7 +313,6 @@ const AppContent: React.FC<{
                 </div>
 
                 <div className="flex-1 overflow-y-auto relative scroll-smooth bg-gray-50">
-                    {/* pb-32 no mobile garante que o botão do chat não cubra o conteúdo final */}
                     <div className="p-3 md:p-8 max-w-[1600px] mx-auto pb-32 md:pb-8">
                         {renderContent()}
                     </div>

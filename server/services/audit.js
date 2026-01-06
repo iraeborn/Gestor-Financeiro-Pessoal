@@ -34,14 +34,13 @@ export const createAuditLog = async (pool, io, { userId, action, entity, entityI
     // 3. Notificação em Tempo Real (Broadcast)
     try {
         if (io) {
-            // Log crucial para depuração no console do servidor
             console.log(`📡 [BROADCAST] Sinal 'DATA_UPDATED' disparado para a sala: [${roomName}] | Entidade: ${entity} | Autor: ${userId}`);
             
             io.to(roomName).emit('DATA_UPDATED', { 
                 action, 
                 entity, 
                 entityId,
-                actorId: userId, 
+                actorId: userId, // ID de quem causou a mudança
                 timestamp: new Date(),
                 changes: changes
             });
