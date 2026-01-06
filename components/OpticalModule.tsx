@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
 import { OpticalRx, Contact, Laboratory, OpticalDeliveryStatus } from '../types';
-import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart, MessageSquare, ExternalLink, Hash } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
-import { useHelp } from './GuidedHelp';
 
 interface OpticalModuleProps {
     opticalRxs: OpticalRx[];
@@ -25,7 +24,8 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
 
     const filteredRxs = opticalRxs.filter(rx => 
         (rx.contactName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase())
+        (rx.professionalName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (rx.rxNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const getStatusColor = (status?: string) => {
@@ -44,6 +44,24 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
             case 'LAB_PRODUCAO': return 'bg-purple-50 text-purple-600';
             case 'ENTREGUE_CLIENTE': return 'bg-slate-100 text-slate-400';
             default: return 'bg-amber-50 text-amber-600';
+        }
+    };
+
+    const handleSendToLab = (rx: OpticalRx) => {
+        const lab = laboratories.find(l => l.id === rx.laboratoryId);
+        if (!lab) {
+            showAlert("Vincule um laboratório na edição da receita primeiro.", "warning");
+            return;
+        }
+
+        const pref = lab.preferredCommunication || 'MANUAL';
+        if (pref === 'WHATSAPP' && lab.phone) {
+            const msg = window.encodeURIComponent(`Olá ${lab.name}, segue pedido da Receita #${rx.rxNumber}.\nCliente: ${rx.contactName}\nESF OD: ${rx.sphereOdLonge}\nESF OE: ${rx.sphereOeLonge}\nLens: ${rx.lensType}`);
+            window.open(`https://wa.me/${lab.phone.replace(/\D/g, '')}?text=${msg}`, '_blank');
+        } else if (pref === 'EMAIL' && lab.email) {
+            window.location.href = `mailto:${lab.email}?subject=Pedido de Montagem: #${rx.rxNumber}&body=Dados da Receita...`;
+        } else {
+            showAlert(`Envio manual: O lab prefere receber via ${pref}.`, "info");
         }
     };
 
@@ -76,7 +94,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                 <div className="flex gap-2 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                         <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-                        <input type="text" placeholder="Buscar receita..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
+                        <input type="text" placeholder="Buscar receita ou #ID..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm" />
                     </div>
                     <button onClick={onAddRx} className="bg-indigo-600 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 whitespace-nowrap">
                         <Plus className="w-4 h-4" /> Nova Receita
@@ -90,8 +108,16 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                         <Eye className="w-12 h-12 mx-auto mb-4 opacity-10" />
                         <p className="font-bold">Nenhuma receita encontrada.</p>
                     </div>
-                ) : filteredRxs.map(rx => (
-                    <div key={rx.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-all group flex flex-col lg:flex-row gap-8">
+                ) : filteredRxs.map(rx => {
+                    const lab = laboratories.find(l => l.id === rx.laboratoryId);
+                    
+                    return (
+                    <div key={rx.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-all group flex flex-col lg:flex-row gap-8 relative overflow-hidden">
+                        {/* ID da Receita em Marca D'água */}
+                        <div className="absolute top-0 right-0 p-4 opacity-[0.03] select-none pointer-events-none">
+                            <span className="text-8xl font-black">{rx.rxNumber}</span>
+                        </div>
+
                         <div className="flex-1">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-4">
@@ -99,8 +125,14 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                                         {rx.contactName?.charAt(0)}
                                     </div>
                                     <div>
-                                        <h3 className="font-black text-gray-900 text-xl leading-none">{rx.contactName}</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-black text-gray-900 text-xl leading-none">{rx.contactName}</h3>
+                                            <span className="bg-slate-100 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                <User className="w-3 h-3" /> CID: {rx.contactId.substring(0,6)}
+                                            </span>
+                                        </div>
                                         <div className="flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">
+                                            <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black mr-2">RX: {rx.rxNumber}</span>
                                             <Calendar className="w-3.5 h-3.5"/> {new Date(rx.rxDate).toLocaleDateString()}
                                             <span className="w-1.5 h-1.5 rounded-full bg-gray-200"></span>
                                             <span className={`px-2 py-0.5 rounded border text-[10px] font-black ${getStatusColor(rx.status)}`}>{rx.status || 'PENDENTE'}</span>
@@ -140,23 +172,32 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                             </div>
                         </div>
 
-                        <div className="lg:w-72 border-t lg:border-t-0 lg:border-l border-gray-100 lg:pl-8 pt-6 lg:pt-0 flex flex-col justify-between">
+                        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-100 lg:pl-8 pt-6 lg:pt-0 flex flex-col justify-between">
                             <div>
                                 <div className="flex justify-between items-center mb-4">
                                     <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
-                                        <Microscope className="w-4 h-4"/> Status Lab
+                                        <Microscope className="w-4 h-4"/> Fluxo de Lab
                                     </span>
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${getLabStatusColor(rx.labStatus)}`}>
                                         {rx.labStatus?.replace('LAB_', '') || 'AGUARDANDO'}
                                     </span>
                                 </div>
                                 
-                                {rx.labStatus === 'LAB_PRONTO' && (
-                                    <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl mb-4 flex items-center gap-3">
-                                        <AlertCircle className="w-5 h-5 text-emerald-600" />
-                                        <p className="text-[10px] font-bold text-emerald-700 uppercase">Lentes prontas para retirada no lab!</p>
+                                <div className="space-y-2 mb-4">
+                                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Parceiro</span>
+                                        <span className="text-xs font-black text-slate-600">{lab?.name || 'Não vinculado'}</span>
                                     </div>
-                                )}
+                                    {lab && (
+                                        <button 
+                                            onClick={() => handleSendToLab(rx)}
+                                            className="w-full bg-white border border-indigo-100 text-indigo-600 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-indigo-50 transition-all shadow-sm"
+                                        >
+                                            {lab.preferredCommunication === 'WHATSAPP' ? <MessageSquare className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                                            Enviar p/ {lab.name}
+                                        </button>
+                                    )}
+                                </div>
 
                                 <div className="flex gap-2">
                                     <button onClick={() => onEditRx(rx)} className="flex-1 py-3 bg-slate-50 text-indigo-600 rounded-xl hover:bg-indigo-50 transition-colors flex items-center justify-center border border-slate-200"><Pencil className="w-4 h-4"/></button>
@@ -165,7 +206,7 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                             </div>
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { OpticalRx, Contact, Branch, Laboratory } from '../types';
-import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope } from 'lucide-react';
+import { OpticalRx, Contact, Branch, Laboratory, LensType } from '../types';
+import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 
 interface OpticalRxEditorProps {
@@ -12,22 +13,36 @@ interface OpticalRxEditorProps {
     onCancel: () => void;
 }
 
+const LENS_TYPES: {id: LensType, label: string}[] = [
+    { id: 'MONOFOCAL', label: 'Monofocal' },
+    { id: 'BIFOCAL', label: 'Bifocal' },
+    { id: 'MULTIFOCAL', label: 'Multifocal / Progressiva' },
+    { id: 'OCUPACIONAL', label: 'Ocupacional / Regressiva' }
+];
+
 const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, laboratories = [], initialData, onSave, onCancel }) => {
     const { showAlert } = useAlert();
     const [formData, setFormData] = useState<Partial<OpticalRx>>({
         rxDate: new Date().toISOString().split('T')[0],
-        expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]
+        expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+        lensType: 'MONOFOCAL',
+        status: 'PENDING'
     });
 
     useEffect(() => {
-        if (initialData) setFormData(initialData);
-        else setFormData({ rxDate: new Date().toISOString().split('T')[0], expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0] });
+        if (initialData) {
+            setFormData(initialData);
+        } else {
+            // Gera um número de receita aleatório para o rascunho
+            const num = `RX-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+            setFormData(prev => ({ ...prev, rxNumber: num }));
+        }
     }, [initialData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.contactId) { showAlert("Selecione um cliente.", "warning"); return; }
-        if (!formData.branchId) { showAlert("Selecione a unidade de atendimento.", "warning"); return; }
+        if (!formData.contactId) return showAlert("Selecione um cliente.", "warning");
+        if (!formData.branchId) return showAlert("Selecione a unidade de atendimento.", "warning");
         
         const contact = contacts.find(c => c.id === formData.contactId);
         onSave({
@@ -39,121 +54,211 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
     };
 
     return (
-        <div className="max-w-5xl mx-auto animate-fade-in pb-20">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div className="max-w-6xl mx-auto animate-fade-in pb-20">
+            {/* Header Estratégico */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-4">
-                    <button onClick={onCancel} className="p-2 hover:bg-white rounded-full border border-gray-200 shadow-sm transition-all text-gray-400">
-                        <ArrowLeft className="w-6 h-6" />
+                    <button onClick={onCancel} className="p-2.5 hover:bg-white rounded-xl border border-gray-200 shadow-sm transition-all text-gray-400 hover:text-indigo-600">
+                        <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div>
-                        <h1 className="text-3xl font-black text-gray-900 flex items-center gap-3">
-                            <Eye className="w-8 h-8 text-indigo-600" />
-                            {formData.id ? 'Editar Receita' : 'Nova Receita Ótica'}
-                        </h1>
-                        <p className="text-gray-500 font-medium">Dados técnicos da prescrição oftalmológica do paciente.</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Receita Oftalmológica</h1>
+                            <span className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest">{formData.rxNumber}</span>
+                        </div>
+                        <p className="text-gray-500 font-medium">Controle técnico e medidas de alta precisão.</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button type="button" onClick={onCancel} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase text-[10px] tracking-widest">Descartar</button>
+                    <button onClick={onCancel} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase text-[10px] tracking-widest">Descartar</button>
                     <button onClick={handleSubmit} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2">
-                        <Save className="w-4 h-4" /> Salvar Receita
+                        <Save className="w-4 h-4" /> Finalizar RX
                     </button>
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-10 space-y-10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="lg:col-span-2">
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Cliente / Paciente</label>
-                            <select 
-                                className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                                value={formData.contactId || ''}
-                                onChange={e => setFormData({...formData, contactId: e.target.value})}
-                                required
-                            >
-                                <option value="">Selecione o cliente...</option>
-                                {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Seção 1: Paciente */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><User className="w-5 h-5"/></div>
+                            <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">1. Dados do Paciente</h3>
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Exame</label>
-                            <div className="relative">
-                                <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
-                                <select 
-                                    className="w-full pl-11 py-4 bg-indigo-50 text-indigo-700 border-none rounded-2xl text-sm font-bold outline-none appearance-none"
-                                    value={formData.branchId || ''}
-                                    onChange={e => setFormData({...formData, branchId: e.target.value})}
-                                    required
-                                >
-                                    <option value="">Onde foi feito?</option>
-                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </select>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Paciente / Cliente</label>
+                                <div className="flex gap-2">
+                                    <select 
+                                        className="flex-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        value={formData.contactId || ''}
+                                        onChange={e => setFormData({...formData, contactId: e.target.value})}
+                                        required
+                                    >
+                                        <option value="">Selecione o paciente...</option>
+                                        {contacts.map(c => <option key={c.id} value={c.id}>{c.name} (CID: {c.id.substring(0,6)})</option>)}
+                                    </select>
+                                    <div className="bg-slate-100 p-4 rounded-2xl flex items-center justify-center">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CID: {formData.contactId?.substring(0,6) || '----'}</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 lg:col-span-1">
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data</label>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data da Prescrição</label>
                                 <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.rxDate} onChange={e => setFormData({...formData, rxDate: e.target.value})} required />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade</label>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade Sugerida</label>
                                 <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
                             </div>
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <h3 className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
-                            <Stethoscope className="w-4 h-4"/> Exame: Visão de Longe
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-indigo-50/30 p-8 rounded-[2rem] border border-indigo-100/50">
-                            <div className="md:col-span-3 grid grid-cols-4 gap-4 mb-2 opacity-50 text-[9px] font-black uppercase text-center">
-                                <div>OLHO</div><div>ESFÉRICO</div><div>CILÍNDRICO</div><div>EIXO</div>
+                    {/* Seção 2: Prescrição Técnica (OD/OE) */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl"><Activity className="w-5 h-5"/></div>
+                            <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">2. Prescrição Técnica (Longe)</h3>
+                        </div>
+                        
+                        <div className="space-y-8">
+                            {/* Olho Direito */}
+                            <div className="bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100/50">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="bg-indigo-600 text-white px-3 py-0.5 rounded-full text-[10px] font-black">O.D.</span>
+                                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Olho Direito</span>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-indigo-400 mb-1">ESFÉRICO</label><input type="number" step="0.25" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.sphereOdLonge || ''} onChange={e => setFormData({...formData, sphereOdLonge: Number(e.target.value)})} placeholder="0.00" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-indigo-400 mb-1">CILÍNDRICO</label><input type="number" step="0.25" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.cylOdLonge || ''} onChange={e => setFormData({...formData, cylOdLonge: Number(e.target.value)})} placeholder="0.00" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-indigo-400 mb-1">EIXO</label><input type="number" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.axisOdLonge || ''} onChange={e => setFormData({...formData, axisOdLonge: Number(e.target.value)})} placeholder="0°" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-indigo-400 mb-1">PRISMA</label><input type="number" step="0.5" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.prismaOdLonge || ''} onChange={e => setFormData({...formData, prismaOdLonge: Number(e.target.value)})} placeholder="Δ" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-indigo-400 mb-1">BASE</label><input type="text" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.baseOdLonge || ''} onChange={e => setFormData({...formData, baseOdLonge: e.target.value.toUpperCase()})} placeholder="BASE" /></div>
+                                </div>
                             </div>
-                            <div className="text-center font-black text-indigo-700 text-sm flex items-center justify-center">O.D.</div>
-                            <input type="number" step="0.25" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.sphereOdLonge} onChange={e => setFormData({...formData, sphereOdLonge: Number(e.target.value)})} placeholder="0.00" />
-                            <input type="number" step="0.25" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.cylOdLonge} onChange={e => setFormData({...formData, cylOdLonge: Number(e.target.value)})} placeholder="0.00" />
-                            <input type="number" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.axisOdLonge} onChange={e => setFormData({...formData, axisOdLonge: Number(e.target.value)})} placeholder="0" />
-                            
-                            <div className="text-center font-black text-indigo-700 text-sm flex items-center justify-center">O.E.</div>
-                            <input type="number" step="0.25" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.sphereOeLonge} onChange={e => setFormData({...formData, sphereOeLonge: Number(e.target.value)})} placeholder="0.00" />
-                            <input type="number" step="0.25" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.cylOeLonge} onChange={e => setFormData({...formData, cylOeLonge: Number(e.target.value)})} placeholder="0.00" />
-                            <input type="number" className="bg-white border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.axisOeLonge} onChange={e => setFormData({...formData, axisOeLonge: Number(e.target.value)})} placeholder="0" />
+
+                            {/* Olho Esquerdo */}
+                            <div className="bg-sky-50/30 p-6 rounded-3xl border border-sky-100/50">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="bg-sky-600 text-white px-3 py-0.5 rounded-full text-[10px] font-black">O.E.</span>
+                                    <span className="text-xs font-bold text-sky-700 uppercase tracking-widest">Olho Esquerdo</span>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-sky-400 mb-1">ESFÉRICO</label><input type="number" step="0.25" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.sphereOeLonge || ''} onChange={e => setFormData({...formData, sphereOeLonge: Number(e.target.value)})} placeholder="0.00" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-sky-400 mb-1">CILÍNDRICO</label><input type="number" step="0.25" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.cylOeLonge || ''} onChange={e => setFormData({...formData, cylOeLonge: Number(e.target.value)})} placeholder="0.00" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-sky-400 mb-1">EIXO</label><input type="number" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.axisOeLonge || ''} onChange={e => setFormData({...formData, axisOeLonge: Number(e.target.value)})} placeholder="0°" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-sky-400 mb-1">PRISMA</label><input type="number" step="0.5" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.prismaOeLonge || ''} onChange={e => setFormData({...formData, prismaOeLonge: Number(e.target.value)})} placeholder="Δ" /></div>
+                                    <div className="md:col-span-1"><label className="block text-[9px] font-black text-sky-400 mb-1">BASE</label><input type="text" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center" value={formData.baseOeLonge || ''} onChange={e => setFormData({...formData, baseOeLonge: e.target.value.toUpperCase()})} placeholder="BASE" /></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                            <Info className="w-4 h-4"/> Adição & Medidas Técnicas
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            <div><label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Adição (ADD)</label><input type="number" step="0.25" className="w-full bg-gray-50 border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.addition} onChange={e => setFormData({...formData, addition: Number(e.target.value)})} /></div>
-                            <div><label className="block text-[9px] font-black text-gray-400 uppercase mb-1">DNP O.D.</label><input type="number" step="0.5" className="w-full bg-gray-50 border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.dnpOd} onChange={e => setFormData({...formData, dnpOd: Number(e.target.value)})} /></div>
-                            <div><label className="block text-[9px] font-black text-gray-400 uppercase mb-1">DNP O.E.</label><input type="number" step="0.5" className="w-full bg-gray-50 border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.dnpOe} onChange={e => setFormData({...formData, dnpOe: Number(e.target.value)})} /></div>
-                            <div><label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Altura O.D.</label><input type="number" step="0.5" className="w-full bg-gray-50 border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.heightOd} onChange={e => setFormData({...formData, heightOd: Number(e.target.value)})} /></div>
-                            <div><label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Altura O.E.</label><input type="number" step="0.5" className="w-full bg-gray-50 border-none rounded-xl p-3 text-sm font-bold text-center" value={formData.heightOe} onChange={e => setFormData({...formData, heightOe: Number(e.target.value)})} /></div>
+                    {/* Seção 3: Medidas Ópticas */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Eye className="w-5 h-5"/></div>
+                            <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">3. Medidas de Montagem</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                            <div className="md:col-span-1 bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                                <label className="block text-[9px] font-black text-amber-600 mb-1 uppercase tracking-tighter">Adição (ADD)</label>
+                                <input type="number" step="0.25" className="w-full bg-white rounded-xl p-3 text-sm font-black text-center border-none" value={formData.addition || ''} onChange={e => setFormData({...formData, addition: Number(e.target.value)})} placeholder="0.00" />
+                            </div>
+                            <div><label className="block text-[9px] font-black text-gray-400 mb-1 uppercase">DNP O.D.</label><input type="number" step="0.5" className="w-full bg-gray-50 rounded-xl p-3 text-sm font-black text-center" value={formData.dnpOd || ''} onChange={e => setFormData({...formData, dnpOd: Number(e.target.value)})} /></div>
+                            <div><label className="block text-[9px] font-black text-gray-400 mb-1 uppercase">DNP O.E.</label><input type="number" step="0.5" className="w-full bg-gray-50 rounded-xl p-3 text-sm font-black text-center" value={formData.dnpOe || ''} onChange={e => setFormData({...formData, dnpOe: Number(e.target.value)})} /></div>
+                            <div><label className="block text-[9px] font-black text-gray-400 mb-1 uppercase">Altura O.D.</label><input type="number" step="0.5" className="w-full bg-gray-50 rounded-xl p-3 text-sm font-black text-center" value={formData.heightOd || ''} onChange={e => setFormData({...formData, heightOd: Number(e.target.value)})} /></div>
+                            <div><label className="block text-[9px] font-black text-gray-400 mb-1 uppercase">Altura O.E.</label><input type="number" step="0.5" className="w-full bg-gray-50 rounded-xl p-3 text-sm font-black text-center" value={formData.heightOe || ''} onChange={e => setFormData({...formData, heightOe: Number(e.target.value)})} /></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-8">
+                    {/* Seção 4: Tipo de Lente & Recomendações */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><Package className="w-5 h-5"/></div>
+                            <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">4. Especificação de Lentes</h3>
+                        </div>
+                        <div className="space-y-5">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Tipo de Desenho</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {LENS_TYPES.map(type => (
+                                        <button 
+                                            key={type.id}
+                                            type="button"
+                                            onClick={() => setFormData({...formData, lensType: type.id})}
+                                            className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all border ${formData.lensType === type.id ? 'bg-purple-600 text-white border-purple-700 shadow-md' : 'bg-slate-50 text-slate-600 border-transparent hover:border-purple-200'}`}
+                                        >
+                                            {type.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Material Sugerido</label>
+                                <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.lensMaterial || ''} onChange={e => setFormData({...formData, lensMaterial: e.target.value})} placeholder="Resina 1.67, Policarbonato..." />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Tratamentos (Antirreflexo, BlueControl...)</label>
+                                <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.lensTreatments || ''} onChange={e => setFormData({...formData, lensTreatments: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Uso Indicado</label>
+                                <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.usageInstructions || ''} onChange={e => setFormData({...formData, usageInstructions: e.target.value})}>
+                                    <option value="">Selecione...</option>
+                                    <option value="PERMANENTE">Uso Permanente</option>
+                                    <option value="LEITURA">Apenas Leitura / Perto</option>
+                                    <option value="DISTANCIA">Apenas Distância / Longe</option>
+                                    <option value="FOTOSSENSIVEL">Uso com Proteção Solar</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Seção 6: Profissional */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 space-y-6">
+                        <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Award className="w-5 h-5"/></div>
+                            <h3 className="font-black text-gray-800 uppercase text-xs tracking-widest">5. Dados do Profissional</h3>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Médico Oftalmologista / Optometrista</label>
+                                <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.professionalName || ''} onChange={e => setFormData({...formData, professionalName: e.target.value})} placeholder="Nome completo" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Registro (CRM / CBO)</label>
+                                <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.professionalReg || ''} onChange={e => setFormData({...formData, professionalReg: e.target.value})} placeholder="Ex: CRM-SP 123456" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Laboratório & Observações */}
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-6 shadow-2xl">
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Laboratório Preferencial</label>
+                            <label className="block text-[10px] font-black uppercase text-indigo-400 mb-3 ml-1 tracking-widest">Laboratório de Montagem</label>
                             <div className="relative">
-                                <Microscope className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <Microscope className="w-5 h-5 text-indigo-400 absolute left-4 top-4" />
                                 <select 
-                                    className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer"
+                                    className="w-full pl-12 py-4 bg-white/10 border-none rounded-2xl text-sm font-bold outline-none appearance-none cursor-pointer"
                                     value={formData.laboratoryId || ''}
                                     onChange={e => setFormData({...formData, laboratoryId: e.target.value})}
                                 >
-                                    <option value="">Selecione o laboratório...</option>
-                                    {laboratories.map(lab => <option key={lab.id} value={lab.id}>{lab.name}</option>)}
+                                    <option value="" className="text-gray-900">Vincular laboratório...</option>
+                                    {laboratories.map(lab => <option key={lab.id} value={lab.id} className="text-gray-900">{lab.name}</option>)}
                                 </select>
                             </div>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Observações Clínicas / Laboratório</label>
-                            <textarea className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-bold min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" value={formData.observations || ''} onChange={e => setFormData({...formData, observations: e.target.value})} placeholder="Instruções de montagem, prisma ou notas médicas..."></textarea>
+                            <label className="block text-[10px] font-black uppercase text-indigo-400 mb-2 ml-1">Observações Internas</label>
+                            <textarea 
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-medium min-h-[100px] outline-none focus:bg-white/10" 
+                                value={formData.observations || ''} 
+                                onChange={e => setFormData({...formData, observations: e.target.value})} 
+                                placeholder="Anotações para o laboratório ou técnico de montagem..."
+                            />
                         </div>
                     </div>
                 </div>

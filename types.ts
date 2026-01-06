@@ -1,5 +1,7 @@
 
 export type OpticalDeliveryStatus = 'LAB_PENDENTE' | 'LAB_ENVIADO' | 'LAB_PRODUCAO' | 'LAB_PRONTO' | 'LAB_RECEBIDO' | 'ENTREGUE_CLIENTE';
+export type LabCommPreference = 'WHATSAPP' | 'EMAIL' | 'PORTAL' | 'MANUAL';
+export type LensType = 'MONOFOCAL' | 'BIFOCAL' | 'MULTIFOCAL' | 'OCUPACIONAL';
 
 export enum EntityType {
   PERSONAL = 'PF',
@@ -152,6 +154,7 @@ export interface Laboratory {
     address?: string;
     notes?: string;
     familyId: string;
+    preferredCommunication?: LabCommPreference;
 }
 
 export interface Contact {
@@ -339,29 +342,51 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
 
 export interface OpticalRx {
   id: string;
+  rxNumber?: string; // Identificador Único da Receita
   contactId: string;
   contactName?: string;
   professionalName?: string;
+  professionalReg?: string; // CRM/CBO
   rxDate: string;
   expirationDate?: string;
   status: 'PENDING' | 'APPROVED' | 'SOLD';
+  
+  // Visão de Longe
   sphereOdLonge?: number;
   cylOdLonge?: number;
   axisOdLonge?: number;
-  sphereOdPerto?: number;
-  cylOdPerto?: number;
-  axisOdPerto?: number;
+  prismaOdLonge?: number;
+  baseOdLonge?: string;
+  
   sphereOeLonge?: number;
   cylOeLonge?: number;
   axisOeLonge?: number;
+  prismaOeLonge?: number;
+  baseOeLonge?: string;
+
+  // Visão de Perto (Caso não use adição)
+  sphereOdPerto?: number;
+  cylOdPerto?: number;
+  axisOdPerto?: number;
+  
   sphereOePerto?: number;
   cylOePerto?: number;
   axisOePerto?: number;
+
   addition?: number;
+  
+  // Medidas
   dnpOd?: number;
   dnpOe?: number;
   heightOd?: number;
   heightOe?: number;
+  
+  // Especificações Sugeridas
+  lensType?: LensType;
+  lensMaterial?: string;
+  lensTreatments?: string;
+  usageInstructions?: string;
+
   imageUrl?: string;
   observations?: string;
   branchId?: string;

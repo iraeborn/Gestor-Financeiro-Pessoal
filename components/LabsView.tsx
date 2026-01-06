@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Laboratory } from '../types';
-import { Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, FlaskConical, TestTube2, Microscope } from 'lucide-react';
+import { Laboratory, LabCommPreference } from '../types';
+import { Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, FlaskConical, TestTube2, Microscope, MessageSquare, Globe, AtSign, Info } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface LabsViewProps {
@@ -15,7 +15,9 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
     const { showAlert } = useAlert();
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState<Partial<Laboratory>>({});
+    const [formData, setFormData] = useState<Partial<Laboratory>>({
+        preferredCommunication: 'MANUAL'
+    });
 
     const filtered = laboratories.filter(l => 
         l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -24,7 +26,7 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
 
     const handleOpenModal = (lab?: Laboratory) => {
         if (lab) setFormData(lab);
-        else setFormData({});
+        else setFormData({ preferredCommunication: 'MANUAL' });
         setIsModalOpen(true);
     };
 
@@ -97,7 +99,11 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-gray-900 line-clamp-1">{lab.name}</h3>
-                                    {lab.contactPerson && <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Contato: {lab.contactPerson}</p>}
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${lab.preferredCommunication === 'WHATSAPP' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                            Envio: {lab.preferredCommunication}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -119,12 +125,6 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
                                     <span className="text-sm font-medium text-gray-700 truncate">{lab.email}</span>
                                 </div>
                             )}
-                            {lab.address && (
-                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                    <MapPin className="w-4 h-4 text-amber-500" />
-                                    <span className="text-sm font-medium text-gray-700 truncate">{lab.address}</span>
-                                </div>
-                            )}
                         </div>
                     </div>
                 ))}
@@ -133,16 +133,38 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-10 animate-scale-up border border-slate-100">
-                        <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-8">Cadastro de Laboratório</h2>
+                        <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-8">Configurar Laboratório</h2>
                         <form onSubmit={handleSave} className="space-y-6">
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Laboratório</label>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Parceiro</label>
                                 <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Ex: Lab Vision" />
                             </div>
                             
+                            <div className="space-y-4">
+                                <label className="block text-[10px] font-black uppercase text-indigo-600 mb-2 ml-1">Preferencia de Recebimento de Ordens</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { id: 'WHATSAPP', label: 'WhatsApp', icon: MessageSquare },
+                                        { id: 'EMAIL', label: 'E-mail', icon: AtSign },
+                                        { id: 'PORTAL', label: 'Portal Próprio', icon: Globe },
+                                        { id: 'MANUAL', label: 'Manual/Outro', icon: Info }
+                                    ].map(pref => (
+                                        <button 
+                                            key={pref.id}
+                                            type="button"
+                                            onClick={() => setFormData({...formData, preferredCommunication: pref.id as LabCommPreference})}
+                                            className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition-all ${formData.preferredCommunication === pref.id ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-50 bg-slate-50 text-slate-400 hover:border-indigo-200'}`}
+                                        >
+                                            <pref.icon className="w-4 h-4" />
+                                            <span className="text-[10px] font-black uppercase">{pref.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Responsável</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.contactPerson || ''} onChange={e => setFormData({...formData, contactPerson: e.target.value})} /></div>
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Telefone / WhatsApp</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="(99) 99999-9999" /></div>
+                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">WhatsApp</label><input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="(99) 99999-9999" /></div>
                             </div>
 
                             <div>
@@ -150,19 +172,9 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
                                 <input type="email" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                             </div>
 
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Endereço Completo</label>
-                                <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Observações Internas</label>
-                                <textarea className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none h-24" value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Prazos, tabelas de preço, etc." />
-                            </div>
-
                             <div className="flex gap-4 pt-6 border-t border-gray-100">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-gray-400 font-bold uppercase text-[10px]">Cancelar</button>
-                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Salvar</button>
+                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Salvar Parceiro</button>
                             </div>
                         </form>
                     </div>
