@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
-import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon } from 'lucide-react';
-import { updateSettings, consultCnpj } from '../services/storageService';
+import React, { useState, useRef } from 'react';
+import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime, Contact } from '../types';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon, FileUp, Loader2, Download } from 'lucide-react';
+import { updateSettings, consultCnpj, api } from '../services/storageService';
 import { useAlert } from './AlertSystem';
+import * as XLSX from 'xlsx';
 
 interface SettingsViewProps {
   user: User;
@@ -25,6 +26,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     onSavePJEntity, onDeletePJEntity
 }) => {
   const { showAlert } = useAlert();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  
   const settings = user.settings || { includeCreditCardsInTotal: true, activeModules: {} };
 
   const [companyForm, setCompanyForm] = useState(pjData.companyProfile || { 
@@ -80,6 +84,64 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       showAlert("Identidade visual e fiscal atualizada!", "success");
   };
 
+  const handleImportXls = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setImporting(true);
+      const reader = new FileReader();
+      
+      reader.onload = async (evt) => {
+          try {
+              const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, { type: 'array' });
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+              if (json.length === 0) {
+                  showAlert("O arquivo parece estar vazio.", "warning");
+                  return;
+              }
+
+              const newContacts: Contact[] = json.map(row => {
+                  // Mapeamento das colunas conforme solicitado
+                  const doc = String(row['CPF ou CNPJ'] || '').replace(/\D/g, '');
+                  const type = doc.length > 11 ? 'PJ' : 'PF';
+                  
+                  return {
+                      id: crypto.randomUUID(),
+                      externalId: String(row['Identificador externo'] || ''),
+                      name: String(row['Nome'] || 'Contato Sem Nome'),
+                      email: String(row['Email'] || '').toLowerCase(),
+                      phone: String(row['Celular'] || row['Fone'] || ''),
+                      document: doc,
+                      fantasyName: row['Empresa'] ? String(row['Empresa']) : undefined,
+                      type: type as 'PF' | 'PJ',
+                      street: String(row['Rua'] || ''),
+                      number: String(row['Número'] || ''),
+                      complement: String(row['Complemento'] || ''),
+                      neighborhood: String(row['Bairro'] || ''),
+                      city: String(row['Cidade'] || ''),
+                      zipCode: String(row['CEP'] || '').replace(/\D/g, ''),
+                      state: String(row['Estado'] || '').toUpperCase().substring(0, 2),
+                  };
+              });
+
+              await api.saveBulkContacts(newContacts);
+              showAlert(`${newContacts.length} contatos importados com sucesso!`, "success");
+              if (fileInputRef.current) fileInputRef.current.value = '';
+          } catch (err) {
+              console.error(err);
+              showAlert("Erro ao processar arquivo XLS. Verifique o formato.", "error");
+          } finally {
+              setImporting(false);
+          }
+      };
+
+      reader.readAsArrayBuffer(file);
+  };
+
   const isPJ = user.entityType === EntityType.BUSINESS;
   const familyId = user.familyId || (user as any).family_id;
   const isAdmin = user.id === familyId;
@@ -93,7 +155,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
       <div className="space-y-6">
         
-        {/* Gestão de Assinatura e Módulos (Substitui os Toggles) */}
+        {/* Gestão de Assinatura e Módulos */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-l-4 border-l-indigo-600">
             <div className="p-6 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -140,6 +202,53 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         </p>
                     </div>
                 )}
+            </div>
+        </div>
+
+        {/* Importação de Dados */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <FileUp className="w-5 h-5 text-blue-600" />
+                    Importação de Contatos
+                </h2>
+            </div>
+            <div className="p-6">
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                    <div className="flex-1 space-y-4">
+                        <p className="text-sm text-gray-600">
+                            Importe sua base de clientes e contatos via arquivo Excel (.xlsx). 
+                            Certifique-se de que o arquivo segue o modelo de colunas padrão.
+                        </p>
+                        <div className="flex items-center gap-4 text-[10px] font-black uppercase text-gray-400">
+                            <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-emerald-500" /> Auto-mapeamento</span>
+                            <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-emerald-500" /> Validação de CPF/CNPJ</span>
+                        </div>
+                    </div>
+                    <div className="shrink-0 w-full md:w-auto">
+                        <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            className="hidden" 
+                            accept=".xlsx, .xls"
+                            onChange={handleImportXls}
+                        />
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={importing}
+                            className="w-full bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+                            {importing ? 'Processando XLS...' : 'Selecionar Arquivo XLS'}
+                        </button>
+                    </div>
+                </div>
+                <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">Colunas Esperadas (Cabeçalho):</h4>
+                    <p className="text-[10px] font-mono text-slate-600 break-all">
+                        Identificador externo | Nome | Email | Emails adicionais | Celular | Empresa | CPF ou CNPJ | Fone | Rua | Número | Complemento | Bairro | Cidade | CEP | Estado
+                    </p>
+                </div>
             </div>
         </div>
 

@@ -160,6 +160,7 @@ export interface Laboratory {
 
 export interface Contact {
   id: string;
+  externalId?: string; // Identificador de sistemas externos
   name: string;
   type: 'PF' | 'PJ';
   email?: string;
@@ -172,6 +173,7 @@ export interface Contact {
   zipCode?: string;
   street?: string;
   number?: string;
+  complement?: string; // Novo: Complemento de endereço
   neighborhood?: string;
   city?: string;
   state?: string;

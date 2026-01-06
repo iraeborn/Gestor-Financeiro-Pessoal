@@ -280,6 +280,7 @@ export interface ApiClient {
     saveGoal: (g: FinancialGoal) => Promise<{ success: boolean; id: string }>;
     deleteGoal: (id: string) => Promise<{ success: boolean }>;
     saveContact: (c: Contact) => Promise<{ success: boolean; id: string }>;
+    saveBulkContacts: (contacts: Contact[]) => Promise<{ success: boolean }>;
     deleteContact: (id: string) => Promise<{ success: boolean }>;
     saveCategory: (c: Category) => Promise<{ success: boolean; id: string }>;
     deleteCategory: (id: string) => Promise<{ success: boolean }>;
@@ -344,6 +345,12 @@ export const api: ApiClient = {
     saveGoal: async (g: FinancialGoal) => api.saveLocallyAndQueue('goals', g),
     deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
     saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
+    saveBulkContacts: async (contacts: Contact[]) => {
+        for (const c of contacts) {
+            await api.saveLocallyAndQueue('contacts', c);
+        }
+        return { success: true };
+    },
     deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),
     saveCategory: async (c: Category) => api.saveLocallyAndQueue('categories', c),
     deleteCategory: async (id: string) => api.deleteLocallyAndQueue('categories', id),
