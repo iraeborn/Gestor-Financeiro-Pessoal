@@ -117,8 +117,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
   }
 
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="overflow-x-auto overflow-y-visible">
+    /* Corrigido: Removido overflow-hidden para permitir que o dropdown "escape" do container */
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm">
+      <div className="overflow-x-auto pb-32 -mb-32">
         <table className="w-full text-left text-sm border-collapse">
           <thead className="bg-gray-50/50 text-gray-400 border-b border-gray-100">
             <tr>

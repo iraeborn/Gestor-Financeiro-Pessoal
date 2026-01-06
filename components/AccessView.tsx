@@ -16,9 +16,13 @@ const PERMISSION_GROUPS = [
         items: [
             { id: 'FIN_DASHBOARD', label: 'Dashboard' },
             { id: 'FIN_TRANSACTIONS', label: 'Extrato' },
+            { id: 'FIN_CALENDAR', label: 'Calendário Financeiro' },
             { id: 'FIN_ACCOUNTS', label: 'Contas' },
             { id: 'FIN_CARDS', label: 'Cartões' },
             { id: 'FIN_GOALS', label: 'Metas' },
+            { id: 'FIN_REPORTS', label: 'Projeções e Relatórios' },
+            { id: 'FIN_ADVISOR', label: 'Consultor IA' },
+            { id: 'FIN_CATEGORIES', label: 'Categorias' },
         ]
     },
     {
@@ -26,9 +30,15 @@ const PERMISSION_GROUPS = [
         items: [
             { id: 'SRV_CATALOG', label: 'Produtos e Serviços' },
             { id: 'SRV_SALES', label: 'Vendas / PDV' },
+            { id: 'SRV_PURCHASES', label: 'Compras / Entradas' },
+            { id: 'SRV_CONTRACTS', label: 'Contratos' },
+            { id: 'SRV_NF', label: 'Notas Fiscais' },
             { id: 'FIN_CONTACTS', label: 'Contatos / Clientes' },
+            { id: 'SRV_CLIENTS', label: 'Prontuários / Fichas' },
+            { id: 'SRV_BRANCH_SCHEDULE', label: 'Agenda de Unidade' },
             { id: 'SYS_SALESPEOPLE', label: 'Vendedores' },
             { id: 'SYS_BRANCHES', label: 'Filiais' },
+            { id: 'SYS_SALES_SCHEDULE', label: 'Escala de Trabalho' },
         ]
     },
     {
@@ -38,18 +48,29 @@ const PERMISSION_GROUPS = [
         ]
     },
     {
-        name: 'Especialidades (Ótica)',
-        requiredModule: 'optical',
+        name: 'Especialidades',
         items: [
             { id: 'OPTICAL_RX', label: 'Receitas RX' },
+            { id: 'OPTICAL_SALES', label: 'Vendas Óticas' },
             { id: 'OPTICAL_LABS_MGMT', label: 'Laboratórios' },
             { id: 'OPTICAL_LAB', label: 'Montagem (OS)' },
+        ]
+    },
+    {
+        name: 'Inteligência e Diagnósticos',
+        requiredModule: 'intelligence',
+        items: [
+            { id: 'DIAG_HUB', label: 'Hub de Diagnósticos' },
+            { id: 'DIAG_HEALTH', label: 'Saúde do Caixa' },
+            { id: 'DIAG_RISK', label: 'Radar de Riscos' },
+            { id: 'DIAG_INVEST', label: 'Oportunidades' },
         ]
     },
     {
         name: 'Configuração',
         items: [
             { id: 'SYS_ACCESS', label: 'Equipe / Acessos' },
+            { id: 'SYS_LOGS', label: 'Logs de Auditoria' },
             { id: 'SYS_SETTINGS', label: 'Ajustes' },
             { id: 'SYS_HELP', label: 'Central de Ajuda' },
         ]
@@ -388,7 +409,7 @@ const AccessView: React.FC<AccessViewProps> = ({ currentUser, refreshTrigger = 0
                                                 <div className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden">
                                                     <div 
                                                         className="h-full bg-indigo-500 rounded-full" 
-                                                        style={{ width: `${Math.min(100, (countPermissions(member.permissions) / 15) * 100)}%` }}
+                                                        style={{ width: `${Math.min(100, (countPermissions(member.permissions) / 20) * 100)}%` }}
                                                     ></div>
                                                 </div>
                                                 <span className="text-xs font-medium text-gray-700">

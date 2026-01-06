@@ -252,7 +252,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <button onClick={() => { setIsProfileModalOpen(true); setShowUserMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl">
                                 <UserCircle className="w-4 h-4" /> Meu Perfil
                             </button>
-                            {/* Fix: Changed handleLogout to onClick as standard button attribute */}
                             <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl">
                                 <LogOut className="w-4 h-4" /> Sair
                             </button>
