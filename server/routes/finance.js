@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pool from '../db.js';
 import crypto from 'crypto';
@@ -124,7 +125,11 @@ export default function(logAudit) {
                     const lk = k.toLowerCase();
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at'].includes(lk)) return false;
-                    if (k.endsWith('Name') || k.endsWith('Label')) return false;
+                    
+                    // Ajuste: Apenas ignorar campos de junção conhecidos, permitindo fantasyName
+                    const virtualFields = ['contactName', 'accountName', 'assigneeName', 'branchName', 'createdByName', 'salespersonName'];
+                    if (virtualFields.includes(k) || k.endsWith('Label')) return false;
+                    
                     return true;
                 });
 

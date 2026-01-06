@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Contact } from '../types';
 import { User, Plus, Search, Pencil, Trash2, Mail, Phone, FileText, Building, DollarSign, Shield, AlertTriangle, FileUp, Loader2 } from 'lucide-react';
@@ -45,29 +46,35 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
 
             if (json.length === 0) {
                 showAlert("O arquivo parece estar vazio.", "warning");
+                setImporting(false);
                 return;
             }
 
             const newContacts: Contact[] = json.map(row => {
-                const doc = String(row['CPF ou CNPJ'] || row['Documento'] || '').replace(/\D/g, '');
+                const getVal = (possibleKeys: string[]) => {
+                    const foundKey = Object.keys(row).find(k => possibleKeys.some(pk => k.trim().toLowerCase() === pk.trim().toLowerCase()));
+                    return foundKey ? String(row[foundKey]).trim() : '';
+                };
+
+                const doc = getVal(['CPF ou CNPJ', 'Documento', 'CPF', 'CNPJ']).replace(/\D/g, '');
                 const type = doc.length > 11 ? 'PJ' : 'PF';
                 
                 return {
                     id: crypto.randomUUID(),
-                    externalId: String(row['Identificador externo'] || ''),
-                    name: String(row['Nome'] || 'Contato Sem Nome'),
-                    email: String(row['Email'] || '').toLowerCase(),
-                    phone: String(row['Celular'] || row['Fone'] || row['Telefone'] || ''),
+                    externalId: getVal(['Identificador externo', 'ID Externo', 'external_id', 'id_cliente']),
+                    name: getVal(['Nome', 'Razão Social', 'Cliente']) || 'Contato Sem Nome',
+                    email: getVal(['Email', 'E-mail']).toLowerCase(),
+                    phone: getVal(['Celular', 'Fone', 'Telefone', 'WhatsApp', 'Zap']),
                     document: doc,
-                    fantasyName: row['Empresa'] || row['Nome Fantasia'] ? String(row['Empresa'] || row['Nome Fantasia']) : undefined,
+                    fantasyName: getVal(['Empresa', 'Nome Fantasia', 'Fantasia']) || undefined,
                     type: type as 'PF' | 'PJ',
-                    street: String(row['Rua'] || row['Logradouro'] || ''),
-                    number: String(row['Número'] || row['nº'] || ''),
-                    complement: String(row['Complemento'] || ''),
-                    neighborhood: String(row['Bairro'] || ''),
-                    city: String(row['Cidade'] || ''),
-                    zipCode: String(row['CEP'] || '').replace(/\D/g, ''),
-                    state: String(row['Estado'] || row['UF'] || '').toUpperCase().substring(0, 2),
+                    street: getVal(['Rua', 'Logradouro', 'Endereco', 'Endereço']),
+                    number: getVal(['Número', 'nº', 'Numero']),
+                    complement: getVal(['Complemento']),
+                    neighborhood: getVal(['Bairro', 'Distrito']),
+                    city: getVal(['Cidade', 'Municipio', 'Município']),
+                    zipCode: getVal(['CEP', 'ZipCode']).replace(/\D/g, ''),
+                    state: getVal(['Estado', 'UF']).toUpperCase().substring(0, 2),
                 };
             });
 
@@ -76,7 +83,6 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onAddContact, onE
             
             if (fileInputRef.current) fileInputRef.current.value = '';
             
-            // Pequeno delay para o banco processar antes de recarregar a view se necessário
             setTimeout(() => window.location.reload(), 1000);
         } catch (err) {
             console.error(err);

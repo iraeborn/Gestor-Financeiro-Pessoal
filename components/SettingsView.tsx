@@ -17,6 +17,7 @@ interface SettingsViewProps {
   };
   onUpdateSettings: (s: AppSettings) => void;
   onOpenCollab: () => void; 
+  // Fix: Removed duplicate identifier 'onSavePJEntity' on lines 20-21
   onSavePJEntity: (type: 'company' | 'branch' | 'costCenter' | 'department' | 'project', data: any) => void;
   onDeletePJEntity: (type: 'branch' | 'costCenter' | 'department' | 'project', id: string) => void;
 }
@@ -101,30 +102,35 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
               if (json.length === 0) {
                   showAlert("O arquivo parece estar vazio.", "warning");
+                  setImporting(false);
                   return;
               }
 
               const newContacts: Contact[] = json.map(row => {
-                  // Mapeamento das colunas conforme solicitado
-                  const doc = String(row['CPF ou CNPJ'] || '').replace(/\D/g, '');
+                  const getVal = (possibleKeys: string[]) => {
+                      const foundKey = Object.keys(row).find(k => possibleKeys.some(pk => k.trim().toLowerCase() === pk.trim().toLowerCase()));
+                      return foundKey ? String(row[foundKey]).trim() : '';
+                  };
+
+                  const doc = getVal(['CPF ou CNPJ', 'Documento', 'CPF', 'CNPJ']).replace(/\D/g, '');
                   const type = doc.length > 11 ? 'PJ' : 'PF';
                   
                   return {
                       id: crypto.randomUUID(),
-                      externalId: String(row['Identificador externo'] || ''),
-                      name: String(row['Nome'] || 'Contato Sem Nome'),
-                      email: String(row['Email'] || '').toLowerCase(),
-                      phone: String(row['Celular'] || row['Fone'] || ''),
+                      externalId: getVal(['Identificador externo', 'ID Externo', 'external_id']),
+                      name: getVal(['Nome', 'Razão Social', 'Cliente']) || 'Contato Sem Nome',
+                      email: getVal(['Email', 'E-mail']).toLowerCase(),
+                      phone: getVal(['Celular', 'Fone', 'Telefone', 'WhatsApp', 'Zap']),
                       document: doc,
-                      fantasyName: row['Empresa'] ? String(row['Empresa']) : undefined,
+                      fantasyName: getVal(['Empresa', 'Nome Fantasia', 'Fantasia']) || undefined,
                       type: type as 'PF' | 'PJ',
-                      street: String(row['Rua'] || ''),
-                      number: String(row['Número'] || ''),
-                      complement: String(row['Complemento'] || ''),
-                      neighborhood: String(row['Bairro'] || ''),
-                      city: String(row['Cidade'] || ''),
-                      zipCode: String(row['CEP'] || '').replace(/\D/g, ''),
-                      state: String(row['Estado'] || '').toUpperCase().substring(0, 2),
+                      street: getVal(['Rua', 'Logradouro', 'Endereco', 'Endereço']),
+                      number: getVal(['Número', 'nº', 'Numero']),
+                      complement: getVal(['Complemento']),
+                      neighborhood: getVal(['Bairro', 'Distrito']),
+                      city: getVal(['Cidade', 'Municipio', 'Município']),
+                      zipCode: getVal(['CEP', 'ZipCode']).replace(/\D/g, ''),
+                      state: getVal(['Estado', 'UF']).toUpperCase().substring(0, 2),
                   };
               });
 
@@ -244,9 +250,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                 </div>
                 <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">Colunas Esperadas (Cabeçalho):</h4>
-                    <p className="text-[10px] font-mono text-slate-600 break-all">
-                        Identificador externo | Nome | Email | Emails adicionais | Celular | Empresa | CPF ou CNPJ | Fone | Rua | Número | Complemento | Bairro | Cidade | CEP | Estado
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2">Dica de Formato:</h4>
+                    <p className="text-[10px] text-slate-600 leading-relaxed">
+                        O sistema reconhece automaticamente colunas como "Nome", "Razão Social", "CPF ou CNPJ", "Celular", "E-mail", "Cidade", etc.
                     </p>
                 </div>
             </div>
