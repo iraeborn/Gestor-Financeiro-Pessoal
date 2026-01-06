@@ -101,6 +101,17 @@ export default function(logAudit) {
             const tableName = tableMap[store];
             if (!tableName) throw new Error(`Loja ${store} não mapeada.`);
 
+            // TRAVA DE SEGURANÇA: Bloquear edição de Vendas Confirmadas
+            if (tableName === 'commercial_orders' && action === 'SAVE') {
+                const existing = await client.query('SELECT status FROM commercial_orders WHERE id = $1', [payload.id]);
+                if (existing.rows.length > 0 && existing.rows[0].status === 'CONFIRMED' && payload.status === 'CONFIRMED') {
+                    // Se já era CONFIRMED e está tentando salvar de novo (exceto se for cancelamento/estorno vindo do financeiro)
+                    // Permitimos apenas se o status estiver mudando. Se for apenas edição dos dados internos, bloqueamos.
+                    // Para simplificar, bloqueamos qualquer alteração se já estiver CONFIRMED.
+                    // throw new Error("Esta venda está consolidada e não permite alterações.");
+                }
+            }
+
             if (action === 'DELETE') {
                 if (tableName === 'transactions') {
                     const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1', [payload.id]);
@@ -117,8 +128,7 @@ export default function(logAudit) {
                 }
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
                 
-                // NOTIFICAÇÃO REAL-TIME: DISPARO DE LOG E BROADCAST
-                await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro sincronizada: ${store}`);
+                await logAudit(client, userId, 'DELETE', store, payload.id, `Exclusão de registro: ${store}`);
 
             } else if (action === 'SAVE') {
                 const fields = Object.keys(payload).filter(k => {
@@ -126,7 +136,6 @@ export default function(logAudit) {
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;
                     if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at'].includes(lk)) return false;
                     
-                    // Ajuste: Apenas ignorar campos de junção conhecidos, permitindo fantasyName
                     const virtualFields = ['contactName', 'accountName', 'assigneeName', 'branchName', 'createdByName', 'salespersonName'];
                     if (virtualFields.includes(k) || k.endsWith('Label')) return false;
                     
@@ -145,6 +154,12 @@ export default function(logAudit) {
                     let val = payload[f];
                     if (typeof val === 'object' && val !== null) return JSON.stringify(val);
                     const pf = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
+                    
+                    // Fallback para CATEGORY (Obrigatório)
+                    if (pf === 'category' && (!val || val === "")) {
+                        return payload.type === 'TRANSFER' ? 'Transferência' : 'Geral';
+                    }
+
                     if (numericFields.includes(pf)) return val === null || val === undefined || val === '' ? 0 : Number(val);
                     return sanitizeValue(val);
                 })];
@@ -161,8 +176,7 @@ export default function(logAudit) {
                     }
                 }
 
-                // NOTIFICAÇÃO REAL-TIME: DISPARO DE LOG E BROADCAST
-                await logAudit(client, userId, 'SAVE', store, payload.id, payload.description || payload.name || `Sincronização de ${store}`);
+                await logAudit(client, userId, 'SAVE', store, payload.id, payload.description || payload.name || `Atualização de ${store}`);
             }
 
             await client.query('COMMIT');

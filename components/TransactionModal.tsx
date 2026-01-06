@@ -1,8 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-// Fix: Added Briefcase icon import
 import { X, Calendar, Tag, CreditCard, ArrowRightLeft, User, QrCode, Loader2, Check, Clock, AlertCircle, Banknote, TrendingUp, Plus, FilePlus, FileCheck, Repeat, CalendarDays, Briefcase } from 'lucide-react';
-// Fix: Added missing type imports
 import { Transaction, TransactionType, TransactionStatus, Account, RecurrenceFrequency, Contact, Category, EntityType, TransactionClassification, Branch, CostCenter, Department, Project } from '../types';
 import { useAlert } from './AlertSystem';
 import QRCodeScanner from './QRCodeScanner';
@@ -17,7 +15,6 @@ interface TransactionModalProps {
   categories?: Category[];
   initialData?: Partial<Transaction> | null;
   userEntity?: EntityType;
-  // Fix: Added missing props used in TransactionsView.tsx
   branches?: Branch[];
   costCenters?: CostCenter[];
   departments?: Department[];
@@ -27,7 +24,6 @@ interface TransactionModalProps {
 const TransactionModal: React.FC<TransactionModalProps> = ({ 
     isOpen, onClose, onSave, accounts, contacts, categories = [], initialData, 
     userEntity = EntityType.PERSONAL,
-    // Fix: Destructuring added props with default empty arrays
     branches = [],
     costCenters = [],
     departments = [],
@@ -49,7 +45,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     recurrenceEndDate: '',
     contactId: '',
     receiptUrls: [] as string[],
-    // Fix: Adding PJ fields to form state
     branchId: '',
     costCenterId: '',
     departmentId: '',
@@ -70,7 +65,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Inicialização Robusta
   useEffect(() => {
     if (!isOpen) return;
 
@@ -96,7 +90,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrenceEndDate: initialData.recurrenceEndDate || '',
         contactId: initialData.contactId || '',
         receiptUrls: Array.isArray(initialData.receiptUrls) ? initialData.receiptUrls : [],
-        // Fix: Mapping initial PJ fields
         branchId: initialData.branchId || '',
         costCenterId: initialData.costCenterId || '',
         departmentId: initialData.departmentId || '',
@@ -122,7 +115,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         recurrenceFrequency: RecurrenceFrequency.MONTHLY,
         recurrenceEndDate: '',
         receiptUrls: [],
-        // Fix: Resetting PJ fields
         branchId: '',
         costCenterId: '',
         departmentId: '',
@@ -134,7 +126,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   }, [initialData, isOpen, accounts.length]);
 
-  // Click outside listener
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
@@ -220,31 +211,44 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validação de Negócio
+    if (!formData.description.trim()) return showAlert("A descrição é obrigatória.", "warning");
+    if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
+        return showAlert("Insira um valor válido maior que zero.", "warning");
+    }
     if (!formData.accountId) return showAlert("Selecione uma conta válida.", "warning");
     
     if (formData.type === TransactionType.TRANSFER && formData.accountId === formData.destinationAccountId) {
         return showAlert("A conta de destino deve ser diferente da conta de origem.", "warning");
     }
 
+    // TRAVA: Validação de Categoria (Obrigatória para Receita e Despesa)
+    if (formData.type !== TransactionType.TRANSFER && (!categorySearch || !categorySearch.trim())) {
+        return showAlert("Por favor, informe uma categoria para o lançamento.", "warning");
+    }
+
     // Process Category
-    let finalCategory = categorySearch;
+    let finalCategory = categorySearch?.trim() || '';
     let newCategoryObj: Category | undefined;
-    if (categorySearch && formData.type !== TransactionType.TRANSFER) {
-        const existingCat = categories.find(c => c.name.toLowerCase() === categorySearch.toLowerCase() && c.type === formData.type);
+    if (formData.type !== TransactionType.TRANSFER) {
+        const existingCat = categories.find(c => c.name.toLowerCase() === finalCategory.toLowerCase() && c.type === formData.type);
         if (!existingCat) {
-            newCategoryObj = { id: crypto.randomUUID(), name: categorySearch, type: formData.type };
+            newCategoryObj = { id: crypto.randomUUID(), name: finalCategory, type: formData.type };
         }
+    } else {
+        finalCategory = 'Transferência';
     }
 
     // Process Contact
     let finalContactId = formData.contactId;
     let newContactObj: Contact | undefined;
-    if (contactSearch) {
-        const existingContact = contacts.find(c => c.name.toLowerCase() === contactSearch.toLowerCase());
+    if (contactSearch.trim()) {
+        const existingContact = contacts.find(c => c.name.toLowerCase() === contactSearch.trim().toLowerCase());
         if (existingContact) {
             finalContactId = existingContact.id;
         } else {
-            newContactObj = { id: crypto.randomUUID(), name: contactSearch, type: 'PF' };
+            newContactObj = { id: crypto.randomUUID(), name: contactSearch.trim(), type: 'PF' };
             finalContactId = newContactObj.id;
         }
     }
@@ -252,7 +256,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     onSave({
       ...formData,
       amount: parseFloat(formData.amount),
-      category: formData.type === TransactionType.TRANSFER ? 'Transferência' : finalCategory,
+      category: finalCategory,
       contactId: finalContactId || undefined,
       destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
     }, newContactObj, newCategoryObj);
@@ -424,7 +428,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
               ) : (
                   <div className="space-y-1 relative" ref={categoryDropdownRef}>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Categoria</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Categoria <span className="text-rose-500">*</span></label>
                       <div className="relative">
                         <Tag className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                         <input 
@@ -449,7 +453,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
           </div>
 
-          {/* Fix: Added PJ Fields for Business entities */}
           {userEntity === EntityType.BUSINESS && (
               <div className="pt-6 border-t border-slate-100 space-y-4 animate-fade-in">
                   <div className="flex items-center gap-2 mb-2">
@@ -506,7 +509,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
           )}
 
-          {/* Seção Recorrência */}
           <div className="pt-6 border-t border-slate-100 space-y-4">
               <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

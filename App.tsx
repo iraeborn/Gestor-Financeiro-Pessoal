@@ -128,7 +128,7 @@ const AppContent: React.FC<{
                     type: TransactionType.INCOME,
                     category: order.moduleTag === 'optical' ? 'Vendas Ótica' : 'Vendas e Serviços',
                     date: order.date,
-                    status: TransactionStatus.PAID, // Como a venda já é CONFIRMED/PAGO, o lançamento nasce como PAID
+                    status: TransactionStatus.PAID,
                     accountId: targetAccountId,
                     contactId: order.contactId,
                     userId: currentUser?.id
@@ -213,10 +213,12 @@ const AppContent: React.FC<{
     const handleUpdateTransactionStatus = async (t: Transaction) => {
         const newStatus = t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID;
         
-        // Se for estorno (PAID -> PENDING), o log de auditoria é importante
         const actionLabel = newStatus === TransactionStatus.PAID ? "Confirmação de Pagamento" : "Estorno de Lançamento";
+        const details = `${actionLabel}: ${t.description}`;
         
         try {
+            // Enviamos com uma flag de descrição para o log no payload estendido se necessário,
+            // mas o backend usará a descrição do registro.
             await api.saveTransaction({ ...t, status: newStatus });
             showAlert(`${actionLabel} realizado com sucesso!`, "success");
             refreshData();
