@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor, Target
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -93,24 +93,25 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'FIN_TRANSACTIONS', label: 'Extrato', icon: List },
         { id: 'FIN_ACCOUNTS', label: 'Contas', icon: Briefcase }, 
         { id: 'FIN_CARDS', label: 'Cartões', icon: CreditCard },
+        { id: 'FIN_GOALS', label: 'Metas', icon: Target },
     ]},
     { section: 'Operacional', items: [
         { id: 'SRV_CATALOG', label: 'Produtos e Serviços', icon: Package },
-        { id: 'OPTICAL_SALES', label: 'Vendas / PDV', icon: ShoppingBag, enabled: !!activeModules.optical },
+        { id: 'SRV_SALES', label: 'Vendas / PDV', icon: ShoppingBag },
+        { id: 'FIN_CONTACTS', label: 'Contatos / Clientes', icon: Users },
+        { id: 'SYS_SALESPEOPLE', label: 'Vendedores', icon: BadgeDollarSign, enabled: isAdmin },
+        { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
     ]},
     { section: 'Comunicação', items: [
         { id: 'SYS_CHAT', label: 'Chat Equipe', icon: MessageSquare },
     ]},
-    { section: 'Especialidade', enabled: !!activeModules.optical, items: [
+    { section: 'Especialidades', enabled: !!activeModules.optical, items: [
         { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye },
         { id: 'OPTICAL_LABS_MGMT', label: 'Laboratórios', icon: Microscope },
         { id: 'OPTICAL_LAB', label: 'Montagem (OS)', icon: Monitor },
     ]},
     { section: 'Configuração', items: [
-        { id: 'FIN_CONTACTS', label: 'Contatos', icon: Users },
         { id: 'SYS_ACCESS', label: 'Equipe / Acessos', icon: ShieldCheck },
-        { id: 'SYS_SALESPEOPLE', label: 'Vendedores', icon: BadgeDollarSign, enabled: isAdmin },
-        { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
         { id: 'SYS_HELP', label: 'Central de Ajuda', icon: BookOpen },
     ]}
@@ -251,6 +252,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <button onClick={() => { setIsProfileModalOpen(true); setShowUserMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl">
                                 <UserCircle className="w-4 h-4" /> Meu Perfil
                             </button>
+                            {/* Fix: Changed handleLogout to onClick as standard button attribute */}
                             <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-xl">
                                 <LogOut className="w-4 h-4" /> Sair
                             </button>

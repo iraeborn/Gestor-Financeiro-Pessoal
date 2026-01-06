@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Member, EntityType, ROLE_DEFINITIONS } from '../types';
 import { getFamilyMembers, createInvite, updateMemberRole, removeMember, joinFamily } from '../services/storageService';
-import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle, Loader2, Link as LinkIcon, Share2 } from 'lucide-react';
+import { Users, Copy, CheckCircle, ShieldCheck, Trash2, Edit, RefreshCw, X, Shield, LayoutDashboard, Wallet, Calendar, CreditCard, PieChart, BrainCircuit, SmilePlus, Settings, ScrollText, UserPlus, ArrowRight, UserCog, AlertTriangle, Loader2, Link as LinkIcon, Share2, Target, ShoppingBag, Package, BadgeDollarSign, Store, MessageSquare, Eye, Microscope, Monitor, BookOpen } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
 interface AccessViewProps {
@@ -22,44 +22,36 @@ const PERMISSION_GROUPS = [
         ]
     },
     {
-        name: 'Inteligência',
-        requiredModule: 'intelligence',
-        items: [
-            { id: 'DIAG_HUB', label: 'Estrategista IA' },
-            { id: 'FIN_ADVISOR', label: 'Consultor IA' },
-        ]
-    },
-    {
         name: 'Operacional',
-        requiredModule: 'services',
         items: [
-            { id: 'SRV_OS', label: 'Laboratório / Ordens de Serviço' },
-            { id: 'SRV_SALES', label: 'Vendas / Orçamentos' },
-            { id: 'SRV_CATALOG', label: 'Estoque' },
+            { id: 'SRV_CATALOG', label: 'Produtos e Serviços' },
+            { id: 'SRV_SALES', label: 'Vendas / PDV' },
+            { id: 'FIN_CONTACTS', label: 'Contatos / Clientes' },
+            { id: 'SYS_SALESPEOPLE', label: 'Vendedores' },
+            { id: 'SYS_BRANCHES', label: 'Filiais' },
         ]
     },
     {
-        name: 'Ótica',
+        name: 'Comunicação',
+        items: [
+            { id: 'SYS_CHAT', label: 'Chat Equipe' },
+        ]
+    },
+    {
+        name: 'Especialidades (Ótica)',
         requiredModule: 'optical',
         items: [
             { id: 'OPTICAL_RX', label: 'Receitas RX' },
-        ]
-    },
-    {
-        name: 'Odontologia',
-        requiredModule: 'odonto',
-        items: [
-            { id: 'ODONTO_AGENDA', label: 'Agenda Clínica' },
-            { id: 'ODONTO_PATIENTS', label: 'Prontuários' },
+            { id: 'OPTICAL_LABS_MGMT', label: 'Laboratórios' },
+            { id: 'OPTICAL_LAB', label: 'Montagem (OS)' },
         ]
     },
     {
         name: 'Configuração',
         items: [
-            { id: 'FIN_CONTACTS', label: 'Contatos' },
-            { id: 'SYS_ACCESS', label: 'Equipe / Usuários' },
-            { id: 'SYS_LOGS', label: 'Auditoria' },
+            { id: 'SYS_ACCESS', label: 'Equipe / Acessos' },
             { id: 'SYS_SETTINGS', label: 'Ajustes' },
+            { id: 'SYS_HELP', label: 'Central de Ajuda' },
         ]
     }
 ];
