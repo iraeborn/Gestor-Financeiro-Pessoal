@@ -44,13 +44,26 @@ export const calculateChanges = (oldObj, newObj, keyMap) => {
     return hasChanges ? changes : null;
 };
 
-// Helper para Atualizar Saldo da Conta
+/**
+ * Atualiza o saldo de uma conta de forma atômica.
+ * @param {Object} client - Cliente do Pool de conexão (para manter a transação)
+ * @param {string} accountId - ID da conta
+ * @param {number} amount - Valor absoluto
+ * @param {string} type - INCOME, EXPENSE ou TRANSFER
+ * @param {boolean} isReversal - Se true, inverte a operação (estorno)
+ */
 export const updateAccountBalance = async (client, accountId, amount, type, isReversal = false) => {
-    if (!accountId) return;
+    if (!accountId || isNaN(amount)) return;
+    
     let multiplier = 1;
+    // Se for despesa, subtrai. Se for receita, soma.
     if (type === 'EXPENSE') multiplier = -1;
+    
+    // Se for uma reversão (exclusão), inverte o sinal original
     if (isReversal) multiplier *= -1;
-    const finalChange = amount * multiplier;
+    
+    const finalChange = Number(amount) * multiplier;
+    
     await client.query(
         `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
         [finalChange, accountId]
@@ -60,13 +73,11 @@ export const updateAccountBalance = async (client, accountId, amount, type, isRe
 export const familyCheckParam2 = `user_id IN (SELECT id FROM users WHERE family_id = (SELECT family_id FROM users WHERE id = $2))`;
 
 export const getUserWorkspaces = async (userId) => {
-    // Busca permissões E configurações do dono do workspace (u.settings)
     const res = await pool.query(`
         SELECT m.family_id as id, u.name as name, m.role, u.entity_type as "entityType", m.permissions, u.settings as "ownerSettings"
         FROM memberships m JOIN users u ON m.family_id = u.id WHERE m.user_id = $1
     `, [userId]);
     
-    // Safety Parse for Permissions (Handle TEXT column acting as JSON)
     return res.rows.map(w => {
         let perms = w.permissions;
         if (typeof perms === 'string') {

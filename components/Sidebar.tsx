@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor, Target
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor, Target, ScrollText
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -112,6 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { section: 'Configuração', items: [
         { id: 'SYS_ACCESS', label: 'Equipe / Acessos', icon: ShieldCheck },
+        { id: 'SYS_LOGS', label: 'Auditoria & Logs', icon: ScrollText },
         { id: 'SYS_SETTINGS', label: 'Ajustes', icon: Settings },
         { id: 'SYS_HELP', label: 'Central de Ajuda', icon: BookOpen },
     ]}

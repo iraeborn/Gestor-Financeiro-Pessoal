@@ -6,7 +6,6 @@ import { authenticateToken, updateAccountBalance, sanitizeValue } from '../middl
 
 const router = express.Router();
 
-// Campos que devem ser tratados como números decimais/inteiros para evitar erros de tipo no PostgreSQL ou string no Frontend
 const numericFields = [
     'balance', 'amount', 'target_amount', 'current_amount', 
     'total_amount', 'gross_amount', 'discount_amount', 'tax_amount',
@@ -22,23 +21,16 @@ const mapToFrontend = (row) => {
     if (!row) return row;
     const newRow = {};
     for (const key in row) {
-        // Converte snake_case do banco para camelCase do frontend
         const camelKey = key.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
         let value = row[key];
-        
-        // Conversão numérica para evitar strings "123.45" no JS
         if (numericFields.includes(key)) {
             value = value === null ? 0 : Number(value);
         }
-        
-        // Datas do Postgres vem como objeto Date, convertemos para YYYY-MM-DD
         if (value instanceof Date) {
             value = value.toISOString().split('T')[0];
         }
-        
         newRow[camelKey] = value;
     }
-    // Garantia de mapeamento de IDs de família (o filtro do frontend depende disso)
     if (row.family_id && !newRow.familyId) {
         newRow.familyId = row.family_id;
     }
@@ -46,9 +38,6 @@ const mapToFrontend = (row) => {
 };
 
 export default function(logAudit) {
-    /**
-     * Puxa todos os dados ativos do negócio/família do usuário para hidratar o banco local (IndexedDB)
-     */
     router.get('/initial-data', authenticateToken, async (req, res) => {
         try {
             const userId = req.user.id;
@@ -57,7 +46,6 @@ export default function(logAudit) {
             const userRole = userRes.rows[0]?.role;
             const isSalesperson = userRole === 'SALES_OPTICAL';
 
-            // Definições de Queries para todas as entidades operacionais
             const queryDefs = {
                 accounts: ['SELECT * FROM accounts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 transactions: isSalesperson 
@@ -85,15 +73,11 @@ export default function(logAudit) {
             
             res.json(results);
         } catch (err) {
-            console.error("Initial data load error:", err);
             res.status(500).json({ error: err.message });
         }
     });
 
-    /**
-     * Processa itens da fila de sincronização (OFFLINE -> ONLINE)
-     */
-    router.post('/sync/process', authenticateToken, async (req, res, next) => {
+    router.post('/sync/process', authenticateToken, async (req, res) => {
         const { action, store, payload } = req.body;
         const userId = req.user.id;
         let client;
@@ -106,33 +90,38 @@ export default function(logAudit) {
             await client.query('BEGIN');
 
             const tableMap = {
-                'accounts': 'accounts', 
-                'transactions': 'transactions', 
-                'goals': 'goals',
-                'contacts': 'contacts', 
-                'categories': 'categories', 
-                'branches': 'branches',
-                'serviceItems': 'service_items',
-                'serviceOrders': 'service_orders', 
-                'commercialOrders': 'commercial_orders',
-                'opticalRxs': 'optical_rxs', 
-                'salespeople': 'salespeople', 
-                'laboratories': 'laboratories',
-                'salespersonSchedules': 'salesperson_schedules',
-                'serviceClients': 'service_clients'
+                'accounts': 'accounts', 'transactions': 'transactions', 'goals': 'goals',
+                'contacts': 'contacts', 'categories': 'categories', 'branches': 'branches',
+                'serviceItems': 'service_items', 'serviceOrders': 'service_orders', 
+                'commercialOrders': 'commercial_orders', 'opticalRxs': 'optical_rxs', 
+                'salespeople': 'salespeople', 'laboratories': 'laboratories',
+                'salespersonSchedules': 'salesperson_schedules', 'serviceClients': 'service_clients'
             };
 
             const tableName = tableMap[store];
-            if (!tableName) throw new Error(`Loja ${store} não mapeada no servidor.`);
+            if (!tableName) throw new Error(`Loja ${store} não mapeada.`);
 
             if (action === 'DELETE') {
+                // REVERSÃO DE SALDO NA EXCLUSÃO
+                if (tableName === 'transactions') {
+                    const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1', [payload.id]);
+                    const t = tRes.rows[0];
+                    if (t && t.status === 'PAID') {
+                        const amount = Number(t.amount);
+                        if (t.type === 'TRANSFER') {
+                            await updateAccountBalance(client, t.account_id, amount, 'EXPENSE', true);
+                            if (t.destination_account_id) await updateAccountBalance(client, t.destination_account_id, amount, 'INCOME', true);
+                        } else {
+                            await updateAccountBalance(client, t.account_id, amount, t.type, true);
+                        }
+                    }
+                }
                 await client.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else if (action === 'SAVE') {
-                // Filtramos campos que não devem ir para o banco físico (metadados de exibição)
                 const fields = Object.keys(payload).filter(k => {
-                    const lowerK = k.toLowerCase();
-                    if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lowerK) || k.startsWith('_')) return false;
-                    if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at'].includes(lowerK)) return false;
+                    const lk = k.toLowerCase();
+                    if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;
+                    if (['deletedat', 'deleted_at', 'createdat', 'created_at', 'updatedat', 'updated_at'].includes(lk)) return false;
                     if (k.endsWith('Name') || k.endsWith('Label')) return false;
                     return true;
                 });
@@ -145,34 +134,21 @@ export default function(logAudit) {
                                VALUES ($1, $2, $3, ${placeholders}) 
                                ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
                 
-                const values = [
-                    payload.id, 
-                    userId, 
-                    familyId, 
-                    ...fields.map(f => {
-                        let val = payload[f];
-                        if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-                        
-                        // Conversão de volta para número se for um campo numérico conhecido
-                        const physicalField = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
-                        if (numericFields.includes(physicalField)) {
-                            return val === null || val === undefined || val === '' ? 0 : Number(val);
-                        }
-                        
-                        return sanitizeValue(val);
-                    })
-                ];
+                const values = [payload.id, userId, familyId, ...fields.map(f => {
+                    let val = payload[f];
+                    if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+                    const pf = f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
+                    if (numericFields.includes(pf)) return val === null || val === undefined || val === '' ? 0 : Number(val);
+                    return sanitizeValue(val);
+                })];
                 
                 await client.query(query, values);
 
-                // Lógica Especial: Atualização de Saldo Bancário em Tempo Real
                 if (tableName === 'transactions' && payload.status === 'PAID') {
                     const amount = Number(payload.amount);
                     if (payload.type === 'TRANSFER') {
                         await updateAccountBalance(client, payload.accountId, amount, 'EXPENSE');
-                        if (payload.destinationAccountId) {
-                            await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
-                        }
+                        if (payload.destinationAccountId) await updateAccountBalance(client, payload.destinationAccountId, amount, 'INCOME');
                     } else {
                         await updateAccountBalance(client, payload.accountId, amount, payload.type);
                     }
@@ -182,8 +158,7 @@ export default function(logAudit) {
             await client.query('COMMIT');
             res.json({ success: true });
         } catch (err) {
-            if (client) await client.query('ROLLBACK').catch(e => console.error("Rollback error", e));
-            console.error(`[SYNC ERROR] Store: ${store} | Error: ${err.message}`);
+            if (client) await client.query('ROLLBACK').catch(() => {});
             res.status(500).json({ error: err.message });
         } finally {
             if (client) client.release();

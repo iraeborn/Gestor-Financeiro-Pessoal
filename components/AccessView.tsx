@@ -70,7 +70,7 @@ const PERMISSION_GROUPS = [
         name: 'Configuração',
         items: [
             { id: 'SYS_ACCESS', label: 'Equipe / Acessos' },
-            { id: 'SYS_LOGS', label: 'Logs de Auditoria' },
+            { id: 'SYS_LOGS', label: 'Auditoria & Logs' },
             { id: 'SYS_SETTINGS', label: 'Ajustes' },
             { id: 'SYS_HELP', label: 'Central de Ajuda' },
         ]
