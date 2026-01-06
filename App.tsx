@@ -46,6 +46,7 @@ import { HelpProvider, useHelp } from './components/GuidedHelp';
 const AppContent: React.FC<{
     currentUser: User | null;
     state: AppState | null;
+    setState: React.Dispatch<React.SetStateAction<AppState | null>>;
     dataLoaded: boolean;
     syncStatus: string;
     currentView: ViewMode;
@@ -57,7 +58,7 @@ const AppContent: React.FC<{
     members: Member[];
     socket: Socket | null;
 }> = ({ 
-    currentUser, state, dataLoaded, syncStatus, currentView, setCurrentView, 
+    currentUser, state, setState, dataLoaded, syncStatus, currentView, setCurrentView, 
     isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members, socket 
 }) => {
     const { isTrackerVisible, setIsTrackerVisible } = useHelp();
@@ -112,6 +113,16 @@ const AppContent: React.FC<{
 
     const handleSaveOrderWithAutomation = async (order: CommercialOrder) => {
         try {
+            // Optimistic Update: Ordem Comercial
+            setState(prev => {
+                if (!prev) return prev;
+                const exists = prev.commercialOrders.some(o => o.id === order.id);
+                const updatedList = exists 
+                    ? prev.commercialOrders.map(o => o.id === order.id ? order : o)
+                    : [order, ...prev.commercialOrders];
+                return { ...prev, commercialOrders: updatedList };
+            });
+
             if (order.status === 'CONFIRMED' && !order.transactionId) {
                 const targetAccountId = order.accountId || currentUser?.settings?.defaultAccountId || state?.accounts[0]?.id;
                 
@@ -134,6 +145,9 @@ const AppContent: React.FC<{
                     userId: currentUser?.id
                 };
 
+                // Optimistic Update: Transação Gerada
+                setState(prev => prev ? ({ ...prev, transactions: [transaction, ...prev.transactions] }) : prev);
+                
                 await api.saveTransaction(transaction);
                 order.transactionId = transId;
                 order.accountId = targetAccountId;
@@ -163,6 +177,10 @@ const AppContent: React.FC<{
                         moduleTag: 'optical',
                         items: order.items.map(i => ({ ...i, id: crypto.randomUUID(), isBillable: false }))
                     };
+                    
+                    // Optimistic Update: OS Gerada
+                    setState(prev => prev ? ({ ...prev, serviceOrders: [os, ...prev.serviceOrders] }) : prev);
+                    
                     await api.saveOS(os);
                     if (rx) await api.saveOpticalRx({ ...rx, status: 'SOLD' });
                     showAlert("OS de Montagem criada com sucesso!", "success");
@@ -187,6 +205,9 @@ const AppContent: React.FC<{
         });
         if (!confirmDelete) return;
 
+        // Optimistic: Remove da lista
+        setState(prev => prev ? ({ ...prev, commercialOrders: prev.commercialOrders.filter(o => o.id !== id) }) : prev);
+
         if (order.transactionId) {
             const deleteFinance = await showConfirm({
                 title: "Lançamento Vinculado Detectado",
@@ -197,6 +218,7 @@ const AppContent: React.FC<{
             });
             if (deleteFinance) {
                 try {
+                    setState(prev => prev ? ({ ...prev, transactions: prev.transactions.filter(t => t.id !== order.transactionId) }) : prev);
                     await api.deleteTransaction(order.transactionId);
                     showAlert("Lançamento financeiro removido.", "info");
                 } catch (e) { console.error("Erro ao remover transação", e); }
@@ -212,34 +234,54 @@ const AppContent: React.FC<{
 
     const handleUpdateTransactionStatus = async (t: Transaction) => {
         const newStatus = t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID;
+        const updatedT = { ...t, status: newStatus };
         
         const actionLabel = newStatus === TransactionStatus.PAID ? "Confirmação de Pagamento" : "Estorno de Lançamento";
-        const details = `${actionLabel}: ${t.description}`;
         
         try {
-            // Enviamos com uma flag de descrição para o log no payload estendido se necessário,
-            // mas o backend usará a descrição do registro.
-            await api.saveTransaction({ ...t, status: newStatus });
+            // Optimistic Update
+            setState(prev => prev ? ({ ...prev, transactions: prev.transactions.map(item => item.id === t.id ? updatedT : item) }) : prev);
+            
+            await api.saveTransaction(updatedT);
             showAlert(`${actionLabel} realizado com sucesso!`, "success");
             refreshData();
         } catch (e: any) {
             showAlert("Erro ao atualizar status: " + e.message, "error");
+            refreshData(); // Reverte o otimismo
         }
     };
 
     const renderContent = () => {
         if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
+        
         const commonProps = {
             state, settings: currentUser.settings, currentUser,
-            onAddTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
-            onDeleteTransaction: (id: string) => api.deleteTransaction(id).then(refreshData),
-            onEditTransaction: (t: any, nc?: Contact, ncat?: Category) => api.saveTransaction(t, nc, ncat).then(refreshData),
+            onAddTransaction: async (t: any, nc?: Contact, ncat?: Category) => {
+                const newT = { ...t, id: t.id || crypto.randomUUID() };
+                // Optimistic: Adiciona na lista agora
+                setState(prev => prev ? ({ ...prev, transactions: [newT, ...prev.transactions] }) : prev);
+                await api.saveTransaction(t, nc, ncat);
+                refreshData();
+            },
+            onDeleteTransaction: async (id: string) => {
+                // Optimistic: Remove da lista agora
+                setState(prev => prev ? ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }) : prev);
+                await api.deleteTransaction(id);
+                refreshData();
+            },
+            onEditTransaction: async (t: any, nc?: Contact, ncat?: Category) => {
+                // Optimistic: Atualiza na lista agora
+                setState(prev => prev ? ({ ...prev, transactions: prev.transactions.map(item => item.id === t.id ? t : item) }) : prev);
+                await api.saveTransaction(t, nc, ncat);
+                refreshData();
+            },
             onUpdateStatus: handleUpdateTransactionStatus,
             onChangeView: setCurrentView
         };
+
         switch (currentView) {
             case 'FIN_DASHBOARD': return <Dashboard {...commonProps} />;
-            case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} branches={state.branches} costCenters={state.costCenters} departments={state.departments} projects={state.projects} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onAddTransaction} onToggleStatus={commonProps.onUpdateStatus} />;
+            case 'FIN_TRANSACTIONS': return <TransactionsView {...commonProps} transactions={state.transactions} accounts={state.accounts} contacts={state.contacts} categories={state.categories} branches={state.branches} costCenters={state.costCenters} departments={state.departments} projects={state.projects} onAdd={commonProps.onAddTransaction} onDelete={commonProps.onDeleteTransaction} onEdit={commonProps.onEditTransaction} onToggleStatus={commonProps.onUpdateStatus} />;
             case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
             case 'FIN_CARDS': return <CreditCardsView accounts={state.accounts} transactions={state.transactions} contacts={state.contacts} categories={state.categories} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
             case 'FIN_GOALS': return <GoalsView goals={state.goals} accounts={state.accounts} transactions={state.transactions} onSaveGoal={(g) => api.saveGoal(g).then(refreshData)} onDeleteGoal={(id) => api.deleteGoal(id).then(refreshData)} onAddTransaction={commonProps.onAddTransaction} />;
@@ -268,7 +310,16 @@ const AppContent: React.FC<{
                     serviceItems={state.serviceItems} opticalRxs={state.opticalRxs} settings={currentUser.settings}
                     onAddOS={() => { setEditingOS(null); setCurrentView('SRV_OS_EDITOR'); }}
                     onEditOS={(os) => { setEditingOS(os); setCurrentView('SRV_OS_EDITOR'); }}
-                    onSaveOS={(os) => api.saveOS(os).then(refreshData)} onDeleteOS={(id) => api.deleteOS(id).then(refreshData)}
+                    onSaveOS={async (os) => {
+                        setState(prev => prev ? ({ ...prev, serviceOrders: [os, ...prev.serviceOrders.filter(o => o.id !== os.id)] }) : prev);
+                        await api.saveOS(os);
+                        refreshData();
+                    }} 
+                    onDeleteOS={async (id) => {
+                        setState(prev => prev ? ({ ...prev, serviceOrders: prev.serviceOrders.filter(o => o.id !== id) }) : prev);
+                        await api.deleteOS(id);
+                        refreshData();
+                    }}
                     onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}} 
                     onSaveContract={() => {}} onDeleteContract={() => {}} onSaveInvoice={() => {}} onDeleteInvoice={() => {}}
                     onAddTransaction={commonProps.onAddTransaction}
@@ -277,7 +328,12 @@ const AppContent: React.FC<{
                 return <ServiceOrderEditor 
                     initialData={editingOS} contacts={state.contacts} serviceItems={state.serviceItems} opticalRxs={state.opticalRxs}
                     branches={state.branches} settings={currentUser.settings}
-                    onSave={(os) => api.saveOS(os).then(() => { refreshData(); setCurrentView(os.moduleTag === 'optical' ? 'OPTICAL_LAB' : 'SRV_OS'); })}
+                    onSave={async (os) => {
+                        setState(prev => prev ? ({ ...prev, serviceOrders: [os, ...prev.serviceOrders.filter(o => o.id !== os.id)] }) : prev);
+                        await api.saveOS(os);
+                        refreshData();
+                        setCurrentView(os.moduleTag === 'optical' ? 'OPTICAL_LAB' : 'SRV_OS');
+                    }}
                     onCancel={() => setCurrentView(editingOS?.moduleTag === 'optical' ? 'OPTICAL_LAB' : 'SRV_OS')}
                 />;
             case 'OPTICAL_SALES':
@@ -391,7 +447,7 @@ const App: React.FC = () => {
     return (
         <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
             <AppContent 
-                currentUser={currentUser} state={state} dataLoaded={dataLoaded} 
+                currentUser={currentUser} state={state} setState={setState} dataLoaded={dataLoaded} 
                 syncStatus={syncStatus} currentView={currentView} setCurrentView={setCurrentView}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileMenuOpen}
                 refreshData={refreshData} checkAuth={checkAuth} members={members} socket={socket} 

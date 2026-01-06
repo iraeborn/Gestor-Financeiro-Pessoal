@@ -31,6 +31,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 }) => {
   const { showAlert } = useAlert();
   
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -66,7 +67,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+        setIsSubmitting(false);
+        return;
+    }
 
     const defaultAccId = accounts.length > 0 ? accounts[0].id : '';
     const defaultDestAccId = accounts.length > 1 ? accounts[1].id : (accounts.length > 0 ? accounts[0].id : '');
@@ -209,9 +213,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (isSubmitting) return;
+
     // Validação de Negócio
     if (!formData.description.trim()) return showAlert("A descrição é obrigatória.", "warning");
     if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
@@ -227,6 +232,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     if (formData.type !== TransactionType.TRANSFER && (!categorySearch || !categorySearch.trim())) {
         return showAlert("Por favor, informe uma categoria para o lançamento.", "warning");
     }
+
+    setIsSubmitting(true);
 
     // Process Category
     let finalCategory = categorySearch?.trim() || '';
@@ -253,14 +260,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         }
     }
 
-    onSave({
-      ...formData,
-      amount: parseFloat(formData.amount),
-      category: finalCategory,
-      contactId: finalContactId || undefined,
-      destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
-    }, newContactObj, newCategoryObj);
-    onClose();
+    try {
+        await onSave({
+            ...formData,
+            amount: parseFloat(formData.amount),
+            category: finalCategory,
+            contactId: finalContactId || undefined,
+            destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
+        }, newContactObj, newCategoryObj);
+        
+        onClose();
+    } catch (err) {
+        console.error("Erro ao salvar lançamento:", err);
+        setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -279,7 +292,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
             <h2 className="text-base font-bold text-slate-800">
                 {initialData?.id ? 'Editar Registro' : 'Novo Registro'}
             </h2>
-            <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-all text-slate-400">
+            <button onClick={onClose} disabled={isSubmitting} className="p-2 hover:bg-white rounded-full transition-all text-slate-400">
                 <X className="w-5 h-5" />
             </button>
         </div>
@@ -299,20 +312,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   step="0.01"
                   required
                   autoFocus
+                  disabled={isSubmitting}
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="block w-full pl-14 pr-12 py-2 bg-transparent border-b-2 border-slate-100 focus:border-indigo-500 rounded-none text-5xl font-black text-slate-900 outline-none transition-all placeholder-slate-200"
+                  className="block w-full pl-14 pr-12 py-2 bg-transparent border-b-2 border-slate-100 focus:border-indigo-500 rounded-none text-5xl font-black text-slate-900 outline-none transition-all placeholder-slate-200 disabled:opacity-60"
                   placeholder="0,00"
                 />
                 {!initialData && formData.type === TransactionType.EXPENSE && (
-                    <button type="button" onClick={() => setShowScanner(true)} className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-indigo-600 transition-colors">
+                    <button type="button" disabled={isSubmitting} onClick={() => setShowScanner(true)} className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-indigo-600 transition-colors">
                         <QrCode className="w-6 h-6" />
                     </button>
                 )}
               </div>
               <div className="flex gap-2">
                 {[10, 50, 100].map(v => (
-                    <button key={v} type="button" onClick={() => setFormData({...formData, amount: String((Number(formData.amount)||0) + v)})} className="px-4 py-1.5 bg-slate-50 hover:bg-indigo-50 rounded-full text-[11px] font-black text-slate-500 hover:text-indigo-600 border border-slate-100 transition-all">+ {v}</button>
+                    <button key={v} type="button" disabled={isSubmitting} onClick={() => setFormData({...formData, amount: String((Number(formData.amount)||0) + v)})} className="px-4 py-1.5 bg-slate-50 hover:bg-indigo-50 rounded-full text-[11px] font-black text-slate-500 hover:text-indigo-600 border border-slate-100 transition-all">+ {v}</button>
                 ))}
               </div>
           </div>
@@ -326,12 +340,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                     <button
                         key={item.id}
                         type="button"
+                        disabled={isSubmitting}
                         onClick={() => setFormData({ ...formData, type: item.id })}
                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black transition-all ${
                             formData.type === item.id 
                             ? 'bg-white shadow-sm text-indigo-600' 
                             : 'text-slate-400 hover:text-slate-600'
-                        }`}
+                        } disabled:opacity-50`}
                     >
                         <item.icon className="w-4 h-4" /> {item.label}
                     </button>
@@ -344,6 +359,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <input
                     type="text"
                     required
+                    disabled={isSubmitting}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-1 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent transition-all"
@@ -355,7 +371,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Data</label>
                   <div className="relative">
                       <Calendar className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
-                      <input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent" />
+                      <input type="date" required disabled={isSubmitting} value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent" />
                   </div>
               </div>
 
@@ -365,6 +381,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                     <User className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                     <input 
                         type="text"
+                        disabled={isSubmitting}
                         value={contactSearch}
                         onFocus={() => setShowContactDropdown(true)}
                         onChange={(e) => {
@@ -385,7 +402,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                               </button>
                           ))}
                           {contactSearch && !contacts.some(c => c.name.toLowerCase() === contactSearch.toLowerCase()) && (
-                              <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1">
+                              <button type="button" onClick={() => setShowContactDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1 transition-all hover:bg-indigo-100">
                                   <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
                               </button>
                           )}
@@ -401,6 +418,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   <div className="relative">
                     <CreditCard className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                     <select 
+                        disabled={isSubmitting}
                         value={formData.accountId} 
                         onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} 
                         className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
@@ -417,6 +435,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       <div className="relative">
                         <ArrowRightLeft className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                         <select 
+                            disabled={isSubmitting}
                             value={formData.destinationAccountId} 
                             onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })} 
                             className="w-full pl-6 py-2 border-b border-slate-100 focus:border-indigo-500 outline-none text-sm font-bold text-slate-800 bg-transparent appearance-none cursor-pointer"
@@ -433,6 +452,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                         <Tag className="w-4 h-4 text-slate-300 absolute left-0 top-2" />
                         <input 
                             type="text" 
+                            disabled={isSubmitting}
                             value={categorySearch} 
                             onFocus={() => setShowCategoryDropdown(true)} 
                             onChange={(e) => {setCategorySearch(e.target.value); setShowCategoryDropdown(true);}} 
@@ -447,6 +467,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                                       {c.name}
                                   </button>
                               ))}
+                              {categorySearch && !categories.some(c => c.name.toLowerCase() === categorySearch.toLowerCase() && c.type === formData.type) && (
+                                  <button type="button" onClick={() => setShowCategoryDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1 transition-all hover:bg-indigo-100">
+                                      <Plus className="w-3 h-3" /> Criar nova: "{categorySearch}"
+                                  </button>
+                              )}
                           </div>
                       )}
                   </div>
@@ -462,8 +487,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Filial</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Filial</label>
                           <select 
+                            disabled={isSubmitting}
                             value={formData.branchId} 
                             onChange={e => setFormData({...formData, branchId: e.target.value})}
                             className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -473,8 +499,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                           </select>
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Centro de Custo</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Centro de Custo</label>
                           <select 
+                            disabled={isSubmitting}
                             value={formData.costCenterId} 
                             onChange={e => setFormData({...formData, costCenterId: e.target.value})}
                             className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -484,8 +511,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                           </select>
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Departamento</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Departamento</label>
                           <select 
+                            disabled={isSubmitting}
                             value={formData.departmentId} 
                             onChange={e => setFormData({...formData, departmentId: e.target.value})}
                             className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -495,8 +523,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                           </select>
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Projeto</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Projeto</label>
                           <select 
+                            disabled={isSubmitting}
                             value={formData.projectId} 
                             onChange={e => setFormData({...formData, projectId: e.target.value})}
                             className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -516,7 +545,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                       <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Repetir Lançamento</span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
+                      <input type="checkbox" disabled={isSubmitting} className="sr-only peer" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                   </label>
               </div>
@@ -524,8 +553,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               {formData.isRecurring && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Frequência</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Frequência</label>
                           <select 
+                            disabled={isSubmitting}
                             value={formData.recurrenceFrequency} 
                             onChange={e => setFormData({...formData, recurrenceFrequency: e.target.value as any})}
                             className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -536,11 +566,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                           </select>
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Término (Opcional)</label>
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Término (Opcional)</label>
                           <div className="relative">
                             <CalendarDays className="w-4 h-4 text-slate-300 absolute left-3 top-2" />
                             <input 
                                 type="date" 
+                                disabled={isSubmitting}
                                 value={formData.recurrenceEndDate} 
                                 onChange={e => setFormData({...formData, recurrenceEndDate: e.target.value})}
                                 className="w-full pl-9 py-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
@@ -553,7 +584,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
           <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Situação</label>
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Situação</label>
                   <div className="flex gap-1.5 mt-1">
                       {[
                           { id: TransactionStatus.PAID, label: 'Pago', icon: Check, color: 'bg-emerald-50 text-emerald-700' },
@@ -563,10 +594,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                           <button
                             key={opt.id}
                             type="button"
+                            disabled={isSubmitting}
                             onClick={() => setFormData({...formData, status: opt.id})}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[10px] font-black transition-all ${
                                 formData.status === opt.id ? opt.color : 'bg-slate-50 text-slate-400 grayscale'
-                            }`}
+                            } disabled:opacity-50`}
                           >
                             <opt.icon className="w-3 h-3" /> {opt.label}
                           </button>
@@ -575,17 +607,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Documentos Digitais</label>
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Documentos Digitais</label>
                   <div className="mt-1">
                       <button 
                         type="button" 
-                        disabled={isProcessingFiles}
+                        disabled={isProcessingFiles || isSubmitting}
                         onClick={() => setShowAttachments(true)}
                         className={`w-full flex items-center justify-between gap-2 py-2.5 px-4 rounded-xl text-[10px] font-black transition-all border ${
                             formData.receiptUrls.length > 0 
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
                             : 'bg-slate-50 border-slate-100 border-dashed text-slate-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
-                        }`}
+                        } disabled:opacity-50`}
                       >
                         <div className="flex items-center gap-2">
                             {isProcessingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : (formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />)}
@@ -598,13 +630,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
 
           <div className="pt-6 flex items-center justify-end gap-4 border-t border-slate-50">
-              <button type="button" onClick={onClose} className="px-6 py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
+              <button type="button" onClick={onClose} disabled={isSubmitting} className="px-6 py-3 text-sm font-black text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
               <button
                   type="submit"
-                  disabled={isProcessingFiles}
-                  className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl shadow-slate-200 active:scale-95 disabled:opacity-50"
+                  disabled={isProcessingFiles || isSubmitting}
+                  className="bg-slate-900 text-white min-w-[200px] px-12 py-4 rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl shadow-slate-200 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
               >
-                  {initialData?.id ? 'Atualizar' : 'Salvar Registro'}
+                  {isSubmitting ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Salvando...</>
+                  ) : (
+                    initialData?.id ? 'Atualizar' : 'Salvar Registro'
+                  )}
               </button>
           </div>
         </form>
