@@ -41,7 +41,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS salespeople (id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), family_id TEXT, branch_id TEXT, created_at TIMESTAMP DEFAULT NOW(), deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS salesperson_schedules (id TEXT PRIMARY KEY, salesperson_id TEXT REFERENCES salespeople(id), date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, title TEXT NOT NULL, contact_id TEXT REFERENCES contacts(id), status TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, description TEXT NOT NULL, contact_id TEXT REFERENCES contacts(id), amount DECIMAL(15,2) NOT NULL, date DATE NOT NULL, status TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, description TEXT NOT NULL, contact_id TEXT REFERENCES contacts(id), amount DECIMAL(15,2) NOT NULL, date DATE NOT NULL, status TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP, account_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS optical_rxs (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), rx_date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS laboratories (id TEXT PRIMARY KEY, name TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), family_id TEXT, deleted_at TIMESTAMP)`
@@ -131,7 +131,8 @@ export const initDb = async () => {
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`,
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS account_id TEXT`
     ];
     
     try {
