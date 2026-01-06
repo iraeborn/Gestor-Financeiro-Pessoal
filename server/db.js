@@ -26,7 +26,7 @@ export const initDb = async () => {
     // 1. Criação das tabelas base
     const createQueries = [
         `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP, stripe_customer_id TEXT, stripe_subscription_id TEXT)`,
-        `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, PRIMARY KEY (user_id, family_id))`,
+        `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, contact_id TEXT, PRIMARY KEY (user_id, family_id))`,
         `CREATE TABLE IF NOT EXISTS invites (code TEXT PRIMARY KEY, family_id TEXT, created_by TEXT REFERENCES users(id), expires_at TIMESTAMP, role_template TEXT DEFAULT 'MEMBER')`,
         `CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id TEXT, action TEXT, entity TEXT, entity_id TEXT, details TEXT, previous_state JSONB, changes JSONB, family_id TEXT, timestamp TIMESTAMP DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS notification_logs (id SERIAL PRIMARY KEY, status TEXT, channel TEXT, recipient TEXT, subject TEXT, content TEXT, user_id TEXT REFERENCES users(id), family_id TEXT, created_at TIMESTAMP DEFAULT NOW())`,
@@ -47,9 +47,9 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), family_id TEXT, deleted_at TIMESTAMP)`
     ];
 
-    // 2. Migrações de Colunas (Garante que colunas novas sejam adicionadas a tabelas existentes)
+    // 2. Migrações de Colunas
     const migrationQueries = [
-        // Contatos (Ótica e Crédito)
+        `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS contact_id TEXT`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_defaulter BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS credit_limit DECIMAL(15,2) DEFAULT 0`,
@@ -60,8 +60,6 @@ export const initDb = async () => {
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_consultation_date DATE`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS years_of_use INTEGER`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS optical_category TEXT`,
-        
-        // Itens de Serviço (Ótica)
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS default_price DECIMAL(15,2) DEFAULT 0`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS module_tag TEXT`,
@@ -72,8 +70,6 @@ export const initDb = async () => {
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS description TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS image_url TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS unit TEXT`,
-
-        // Receitas RX (Campos técnicos)
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS professional_name TEXT`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS expiration_date DATE`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS sphere_od_longe DECIMAL(5,2)`,
@@ -102,8 +98,6 @@ export const initDb = async () => {
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_status TEXT`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_sent_date DATE`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_return_date DATE`,
-
-        // Migrações adicionais para Laboratórios (Fix para erro de sincronização)
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS contact_person TEXT`,
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS email TEXT`,
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS phone TEXT`,
@@ -112,8 +106,6 @@ export const initDb = async () => {
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS preferred_communication TEXT`,
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id)`,
         `ALTER TABLE laboratories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
-
-        // Migrações adicionais para Ordens de Serviço
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS description TEXT`,
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS total_amount DECIMAL(15,2) DEFAULT 0`,
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS start_date DATE`,
@@ -128,8 +120,6 @@ export const initDb = async () => {
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
         `ALTER TABLE service_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`,
-
-        // Migrações adicionais para Pedidos Comerciais
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS type TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(15,2) DEFAULT 0`,
@@ -143,11 +133,8 @@ export const initDb = async () => {
     ];
     
     try {
-        // Executa criação de tabelas
         for (const q of createQueries) { await pool.query(q); }
-        // Executa migrações de colunas
         for (const q of migrationQueries) { await pool.query(q).catch(e => console.warn("Migration notice:", e.message)); }
-        
         console.log("✅ [DATABASE] Tabelas e migrações operacionais prontas.");
     } catch (e) {
         console.error("❌ [DATABASE] Erro fatal na preparação:", e);

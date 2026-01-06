@@ -124,20 +124,12 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
     return await res.json();
 };
 
-// Fix: Added missing export for LogsView
-/**
- * Busca logs de notificações enviadas
- */
 export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
     const res = await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() });
     if (!res.ok) return [];
     return await res.json();
 };
 
-// Fix: Added missing export for LogsView
-/**
- * Restaura um registro deletado logicamente
- */
 export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
     const res = await fetch(`${API_URL}/audit/restore`, {
         method: 'POST',
@@ -148,10 +140,6 @@ export const restoreRecord = async (entity: string, entityId: string): Promise<a
     return await res.json();
 };
 
-// Fix: Added missing export for LogsView
-/**
- * Reverte uma alteração específica baseada no log de auditoria
- */
 export const revertLogChange = async (logId: number): Promise<any> => {
     const res = await fetch(`${API_URL}/audit/revert/${logId}`, {
         method: 'POST',
@@ -161,20 +149,12 @@ export const revertLogChange = async (logId: number): Promise<any> => {
     return await res.json();
 };
 
-// Fix: Added missing export for AdminDashboard
-/**
- * Busca estatísticas globais para o painel de super admin
- */
 export const getAdminStats = async (): Promise<any> => {
     const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Falha ao buscar estatísticas');
     return await res.json();
 };
 
-// Fix: Added missing export for AdminDashboard
-/**
- * Busca lista de usuários para o painel de super admin
- */
 export const getAdminUsers = async (): Promise<any[]> => {
     const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
     if (!res.ok) return [];
@@ -200,7 +180,6 @@ export const createInvite = async (role?: string): Promise<{ code: string }> => 
 export const joinFamily = async (code: string): Promise<User> => {
     const res = await fetch(`${API_URL}/invites/join`, {
         method: 'POST',
-        // Fix: Added missing auth headers
         headers: getHeaders(),
         body: JSON.stringify({ code })
     });
@@ -212,11 +191,11 @@ export const joinFamily = async (code: string): Promise<User> => {
     return data.user;
 };
 
-export const updateMemberRole = async (memberId: string, role: string, permissions: string[]): Promise<any> => {
+export const updateMemberRole = async (memberId: string, role: string, permissions: string[], contactId?: string): Promise<any> => {
     const res = await fetch(`${API_URL}/members/${memberId}`, {
         method: 'PUT',
         headers: getHeaders(),
-        body: JSON.stringify({ role, permissions })
+        body: JSON.stringify({ role, permissions, contactId })
     });
     if (!res.ok) throw new Error('Falha ao atualizar membro');
     return await res.json();
@@ -264,7 +243,6 @@ export const loadInitialData = async (): Promise<AppState> => {
         }
     }
 
-    // Lista exaustiva de todas as stores que precisam ser carregadas
     const stores = [
         'accounts', 'transactions', 'goals', 'contacts', 'categories',
         'branches', 'costCenters', 'departments', 'projects',

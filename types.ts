@@ -120,6 +120,7 @@ export interface Member {
   role: 'ADMIN' | 'MEMBER';
   permissions?: string[] | string;
   ownerSettings?: AppSettings;
+  contactId?: string; // Novo: Vínculo com registro do CRM
 }
 
 export interface Salesperson {

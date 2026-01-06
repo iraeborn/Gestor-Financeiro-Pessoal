@@ -128,10 +128,6 @@ export default function(logAudit) {
         } catch(err) { res.status(500).json({ error: err.message }); }
     });
 
-    // Endpoints para LogsView
-    /**
-     * Busca logs de notificações enviadas
-     */
     router.get('/notification-logs', authenticateToken, async (req, res) => {
         try {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [req.user.id]);
@@ -149,9 +145,6 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    /**
-     * Restaura um registro deletado logicamente
-     */
     router.post('/audit/restore', authenticateToken, async (req, res) => {
         const { entity, entityId } = req.body;
         const userId = req.user.id;
@@ -159,7 +152,6 @@ export default function(logAudit) {
             const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
             const familyId = userRes.rows[0]?.family_id || userId;
 
-            // Mapeamento de tabelas para restauração
             const tableMap = {
                 'transaction': 'transactions',
                 'account': 'accounts',
@@ -175,9 +167,6 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    /**
-     * Reverte uma alteração baseada no estado anterior salvo no log
-     */
     router.post('/audit/revert/:logId', authenticateToken, async (req, res) => {
         const { logId } = req.params;
         const userId = req.user.id;
@@ -191,7 +180,6 @@ export default function(logAudit) {
             const log = logRes.rows[0];
             if (!log.previous_state) return res.status(400).json({ error: 'Estado anterior não disponível para reversão' });
 
-            // Mapeamento de tabelas
             const tableMap = {
                 'transaction': 'transactions',
                 'account': 'accounts',
@@ -201,7 +189,6 @@ export default function(logAudit) {
             const tableName = tableMap[log.entity];
             if (!tableName) return res.status(400).json({ error: 'Entidade inválida para reversão' });
 
-            // Reverte o registro para o estado anterior
             const prevState = log.previous_state;
             const fields = Object.keys(prevState).filter(k => k !== 'id' && k !== 'user_id' && k !== 'family_id' && k !== 'created_at' && k !== 'updated_at');
             const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
@@ -213,10 +200,6 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    // Endpoints para AdminDashboard (Super Admin)
-    /**
-     * Estatísticas globais do sistema
-     */
     router.get('/admin/stats', authenticateToken, async (req, res) => {
         if (req.user.email !== process.env.ADMIN_EMAIL && req.user.role !== 'SUPER_ADMIN') {
             return res.status(403).json({ error: 'Acesso restrito a administradores do sistema.' });
@@ -236,9 +219,6 @@ export default function(logAudit) {
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
 
-    /**
-     * Lista de usuários do sistema
-     */
     router.get('/admin/users', authenticateToken, async (req, res) => {
         if (req.user.email !== process.env.ADMIN_EMAIL && req.user.role !== 'SUPER_ADMIN') {
             return res.status(403).json({ error: 'Acesso restrito.' });
@@ -256,7 +236,7 @@ export default function(logAudit) {
             const familyId = userRes.rows[0]?.family_id || req.user.id;
 
             const members = await pool.query(`
-                SELECT u.id, u.name, u.email, m.role, m.permissions, u.entity_type as "entityType"
+                SELECT u.id, u.name, u.email, m.role, m.permissions, u.entity_type as "entityType", m.contact_id as "contactId"
                 FROM users u
                 JOIN memberships m ON u.id = m.user_id
                 WHERE m.family_id = $1
@@ -272,7 +252,7 @@ export default function(logAudit) {
     });
 
     router.put('/members/:memberId', authenticateToken, async (req, res) => {
-        const { role, permissions } = req.body;
+        const { role, permissions, contactId } = req.body;
         const { memberId } = req.params;
         const userId = req.user.id;
         try {
@@ -282,8 +262,11 @@ export default function(logAudit) {
             const adminCheck = await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2', [userId, familyId]);
             if (adminCheck.rows[0]?.role !== 'ADMIN') return res.status(403).json({ error: 'Apenas administradores podem gerenciar a equipe.' });
 
-            await pool.query('UPDATE memberships SET role = $1, permissions = $2 WHERE user_id = $3 AND family_id = $4', [role, JSON.stringify(permissions || []), memberId, familyId]);
-            await logAudit(pool, userId, 'UPDATE', 'membership', memberId, `Permissões atualizadas`);
+            await pool.query(
+                'UPDATE memberships SET role = $1, permissions = $2, contact_id = $3 WHERE user_id = $4 AND family_id = $5', 
+                [role, JSON.stringify(permissions || []), sanitizeValue(contactId), memberId, familyId]
+            );
+            await logAudit(pool, userId, 'UPDATE', 'membership', memberId, `Permissões e Vínculo CRM atualizados`);
             res.json({ success: true });
         } catch (err) { res.status(500).json({ error: err.message }); }
     });
