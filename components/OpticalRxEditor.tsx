@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { OpticalRx, Contact, Branch, Laboratory, LensType } from '../types';
-import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity } from 'lucide-react';
+// Fix: Added missing RefreshCw icon import
+import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity, UserPlus, X, Phone, Mail, RefreshCw } from 'lucide-react';
 import { useAlert } from './AlertSystem';
+import { api } from '../services/storageService';
 
 interface OpticalRxEditorProps {
     contacts: Contact[];
@@ -29,15 +31,47 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
         status: 'PENDING'
     });
 
+    // Estados para Cadastro Rápido de Contato
+    const [showQuickContact, setShowQuickContact] = useState(false);
+    const [quickContact, setQuickContact] = useState({ name: '', phone: '', email: '' });
+    const [isSavingContact, setIsSavingContact] = useState(false);
+
     useEffect(() => {
         if (initialData) {
             setFormData(initialData);
         } else {
-            // Gera um número de receita aleatório para o rascunho
             const num = `RX-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
             setFormData(prev => ({ ...prev, rxNumber: num }));
         }
     }, [initialData]);
+
+    const handleQuickSaveContact = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!quickContact.name) return showAlert("O nome é obrigatório.", "warning");
+        
+        setIsSavingContact(true);
+        try {
+            const newId = crypto.randomUUID();
+            const contact: Contact = {
+                id: newId,
+                name: quickContact.name,
+                phone: quickContact.phone,
+                email: quickContact.email,
+                type: 'PF'
+            };
+            await api.saveContact(contact);
+            
+            // Seleciona automaticamente o novo contato no formulário principal
+            setFormData(prev => ({ ...prev, contactId: newId }));
+            setShowQuickContact(false);
+            setQuickContact({ name: '', phone: '', email: '' });
+            showAlert("Novo cliente cadastrado e selecionado!", "success");
+        } catch (err) {
+            showAlert("Erro ao cadastrar cliente.", "error");
+        } finally {
+            setIsSavingContact(false);
+        }
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,7 +89,6 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
 
     return (
         <div className="max-w-6xl mx-auto animate-fade-in pb-20">
-            {/* Header Estratégico */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-4">
                     <button onClick={onCancel} className="p-2.5 hover:bg-white rounded-xl border border-gray-200 shadow-sm transition-all text-gray-400 hover:text-indigo-600">
@@ -87,7 +120,16 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Paciente / Cliente</label>
+                                <div className="flex justify-between items-center mb-2 ml-1">
+                                    <label className="text-[10px] font-black uppercase text-gray-400">Paciente / Cliente</label>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setShowQuickContact(true)}
+                                        className="text-[9px] font-black text-indigo-600 uppercase flex items-center gap-1 hover:underline"
+                                    >
+                                        <UserPlus className="w-3 h-3" /> Novo Cliente
+                                    </button>
+                                </div>
                                 <div className="flex gap-2">
                                     <select 
                                         className="flex-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -96,10 +138,10 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                                         required
                                     >
                                         <option value="">Selecione o paciente...</option>
-                                        {contacts.map(c => <option key={c.id} value={c.id}>{c.name} (CID: {c.id.substring(0,6)})</option>)}
+                                        {contacts.map(c => <option key={c.id} value={c.id}>{c.name} (ID: {c.id.substring(0,4)})</option>)}
                                     </select>
                                     <div className="bg-slate-100 p-4 rounded-2xl flex items-center justify-center">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CID: {formData.contactId?.substring(0,6) || '----'}</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CID: {formData.contactId?.substring(0,4) || '----'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -280,6 +322,71 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                     </div>
                 </div>
             </form>
+
+            {/* Modal de Cadastro Rápido de Contato */}
+            {showQuickContact && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[210] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-10 animate-scale-up border border-slate-100">
+                        <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
+                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-3">
+                                <UserPlus className="w-6 h-6 text-indigo-600" />
+                                Cadastro Expresso
+                            </h2>
+                            <button onClick={() => setShowQuickContact(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={handleQuickSaveContact} className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome Completo</label>
+                                <input 
+                                    type="text" 
+                                    autoFocus
+                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                    value={quickContact.name}
+                                    onChange={e => setQuickContact({...quickContact, name: e.target.value})}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">WhatsApp / Celular</label>
+                                <div className="relative">
+                                    <Phone className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                    <input 
+                                        type="text" 
+                                        className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
+                                        value={quickContact.phone}
+                                        onChange={e => setQuickContact({...quickContact, phone: e.target.value})}
+                                        placeholder="(00) 00000-0000"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">E-mail</label>
+                                <div className="relative">
+                                    <Mail className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                    <input 
+                                        type="email" 
+                                        className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
+                                        value={quickContact.email}
+                                        onChange={e => setQuickContact({...quickContact, email: e.target.value})}
+                                        placeholder="exemplo@email.com"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-6 border-t border-gray-100">
+                                <button type="button" onClick={() => setShowQuickContact(false)} className="flex-1 py-3 text-gray-400 font-bold uppercase text-[10px]">Cancelar</button>
+                                <button 
+                                    type="submit" 
+                                    disabled={isSavingContact}
+                                    className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    {isSavingContact ? <RefreshCw className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>}
+                                    Cadastrar Cliente
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
