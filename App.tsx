@@ -155,7 +155,6 @@ const AppContent: React.FC<{
 
     const processOrderFinancials = async (order: CommercialOrder): Promise<CommercialOrder> => {
         const prevOrder = state?.commercialOrders.find(o => o.id === order.id);
-        // Detecta se a venda foi confirmada agora
         const isConfirmedNow = order.status === 'CONFIRMED' && (!prevOrder || prevOrder.status !== 'CONFIRMED');
 
         if (isConfirmedNow && !order.transactionId) {
@@ -173,7 +172,6 @@ const AppContent: React.FC<{
                 branchId: order.branchId
             };
             order.transactionId = transId;
-            // Gera o lançamento e atualiza o saldo localmente
             await handleAddTransaction(newT);
             showAlert("Lançamento financeiro de receita gerado!", "success");
         }
@@ -181,23 +179,16 @@ const AppContent: React.FC<{
     };
 
     const handleStartSaleFromRx = (rx: OpticalRx) => {
-        const lensItem: OSItem = {
-            id: crypto.randomUUID(),
-            description: `Par de Lentes (RX #${rx.rxNumber || rx.id.substring(0,4)})`,
-            quantity: 1,
-            unitPrice: 0,
-            totalPrice: 0,
-            isBillable: true
-        };
+        // Correção do fluxo: Inicia com carrinho vazio para escolha real no catálogo
         setEditingSale({
             id: crypto.randomUUID(),
             type: 'SALE',
-            description: `Venda p/ ${rx.contactName} (Via RX)`,
+            description: `Venda p/ ${rx.contactName} (Via RX #${rx.rxNumber || rx.id.substring(0,4)})`,
             contactId: rx.contactId,
             contactName: rx.contactName,
             rxId: rx.id,
             branchId: rx.branchId,
-            items: [lensItem],
+            items: [], // Vazio para permitir escolha correta
             amount: 0,
             date: new Date().toISOString().split('T')[0],
             status: 'DRAFT',

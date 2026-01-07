@@ -39,7 +39,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
   };
 
   const onDragStart = (e: React.DragEvent, itemId: string, status: string) => {
-    // TRAVA: Impede iniciar o arraste se o item já estiver confirmado ou finalizado
+    // TRAVA CRÍTICA: Impede o arraste de itens faturados ou consolidados
     if (status === 'CONFIRMED' || status === 'FINALIZADA') {
         e.preventDefault();
         return;

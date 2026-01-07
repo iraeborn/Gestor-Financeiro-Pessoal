@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch, Salesperson, User as UserType, Account } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck, Landmark, Lock } from 'lucide-react';
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck, Landmark, Lock, Microscope, Activity } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -77,6 +77,11 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
             setTeamMembers(list || []);
         } catch (e) {}
     };
+
+    const linkedRx = useMemo(() => {
+        if (!formData.rxId) return null;
+        return opticalRxs.find(r => r.id === formData.rxId);
+    }, [formData.rxId, opticalRxs]);
 
     const pricing = useMemo(() => {
         const items = (formData.items || []) as OSItem[];
@@ -329,6 +334,47 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                 </div>
 
                 <div className="lg:col-span-1 space-y-6">
+                    {linkedRx && (
+                        <div className="bg-indigo-900 rounded-[2.5rem] p-6 text-white shadow-xl animate-fade-in space-y-4">
+                            <div className="flex items-center gap-3 border-b border-white/10 pb-3">
+                                <Glasses className="w-5 h-5 text-indigo-400" />
+                                <div className="flex-1">
+                                    <h4 className="text-xs font-black uppercase tracking-widest">Referência Técnica RX</h4>
+                                    <p className="text-[10px] text-indigo-300 font-bold uppercase">{linkedRx.rxNumber || 'RECEITA VINCULADA'}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                                    <p className="text-[9px] font-black text-indigo-400 uppercase mb-1">OD (Direito)</p>
+                                    <p className="text-xs font-bold leading-tight">
+                                        E: {linkedRx.sphereOdLonge?.toFixed(2)}<br/>
+                                        C: {linkedRx.cylOdLonge?.toFixed(2)}<br/>
+                                        A: {linkedRx.axisOdLonge}°
+                                    </p>
+                                </div>
+                                <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
+                                    <p className="text-[9px] font-black text-sky-400 uppercase mb-1">OE (Esquerdo)</p>
+                                    <p className="text-xs font-bold leading-tight">
+                                        E: {linkedRx.sphereOeLonge?.toFixed(2)}<br/>
+                                        C: {linkedRx.cylOeLonge?.toFixed(2)}<br/>
+                                        A: {linkedRx.axisOeLonge}°
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                <div>
+                                    <p className="text-[9px] font-black text-amber-400 uppercase">Adição (ADD)</p>
+                                    <p className="text-sm font-black">{linkedRx.addition ? `+${linkedRx.addition.toFixed(2)}` : 'N/A'}</p>
+                                </div>
+                                <Activity className="w-5 h-5 text-amber-400 opacity-30" />
+                            </div>
+                            
+                            <p className="text-[9px] text-center text-indigo-400 font-bold uppercase tracking-tighter">Use estes dados para escolher a lente no catálogo</p>
+                        </div>
+                    )}
+
                     <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
                         <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status da Venda</label>
@@ -447,9 +493,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         {formData.rxId && (
                             <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-2">
                                 <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest">
-                                    <Glasses className="w-4 h-4" /> Origem: Receita RX
+                                    <CheckCircle className="w-4 h-4" /> Venda p/ RX Vinculada
                                 </div>
-                                <p className="text-xs text-emerald-600 font-medium leading-relaxed">Uma Ordem de Serviço de montagem será gerada automaticamente após salvar.</p>
+                                <p className="text-xs text-emerald-600 font-medium leading-relaxed">Uma Ordem de Serviço de montagem será gerada automaticamente ao confirmar.</p>
                             </div>
                         )}
 
