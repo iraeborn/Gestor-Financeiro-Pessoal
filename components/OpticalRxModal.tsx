@@ -1,19 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
-import { OpticalRx, Contact, Laboratory } from '../types';
-import { X, User, Eye, Stethoscope, Save, Calendar, Info, FileText, Microscope } from 'lucide-react';
+import { OpticalRx, Contact, Laboratory, Branch } from '../types';
+import { X, User, Eye, Stethoscope, Save, Calendar, Info, FileText, Microscope, Store } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 
 interface OpticalRxModalProps {
     isOpen: boolean;
     onClose: () => void;
     contacts: Contact[];
+    branches: Branch[];
     laboratories?: Laboratory[];
     initialData?: OpticalRx | null;
     onSave: (rx: OpticalRx) => void;
 }
 
-const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contacts, laboratories = [], initialData, onSave }) => {
+const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contacts, branches, laboratories = [], initialData, onSave }) => {
     const { showAlert } = useAlert();
     const [formData, setFormData] = useState<Partial<OpticalRx>>({
         rxDate: new Date().toISOString().split('T')[0],
@@ -28,6 +29,7 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.contactId) { showAlert("Selecione um cliente.", "warning"); return; }
+        if (!formData.branchId) { showAlert("Selecione a unidade de atendimento.", "warning"); return; }
         
         const contact = contacts.find(c => c.id === formData.contactId);
         onSave({
@@ -65,6 +67,21 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
                                 <option value="">Selecione o cliente...</option>
                                 {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Atendimento</label>
+                            <div className="relative">
+                                <Store className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                                <select 
+                                    className="w-full pl-10 bg-gray-50 border-none rounded-2xl p-3 text-sm font-bold outline-none"
+                                    value={formData.branchId || ''}
+                                    onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                    required
+                                >
+                                    <option value="">Selecione a filial...</option>
+                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data da Receita</label>

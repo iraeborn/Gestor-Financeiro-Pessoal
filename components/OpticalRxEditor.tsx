@@ -104,12 +104,29 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data da Prescrição</label>
-                                <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.rxDate} onChange={e => setFormData({...formData, rxDate: e.target.value})} required />
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Atendimento</label>
+                                <div className="relative">
+                                    <Store className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                    <select 
+                                        className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"
+                                        value={formData.branchId || ''}
+                                        onChange={e => setFormData({...formData, branchId: e.target.value})}
+                                        required
+                                    >
+                                        <option value="">Selecione a filial...</option>
+                                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade Sugerida</label>
-                                <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data da Receita</label>
+                                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.rxDate} onChange={e => setFormData({...formData, rxDate: e.target.value})} required />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Validade Sugerida</label>
+                                    <input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={formData.expirationDate} onChange={e => setFormData({...formData, expirationDate: e.target.value})} />
+                                </div>
                             </div>
                         </div>
                     </div>

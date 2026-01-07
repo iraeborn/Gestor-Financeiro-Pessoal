@@ -6,7 +6,7 @@ import {
     Plus, QrCode, Loader2, Check, Clock, AlertCircle, 
     Repeat, CalendarDays, Briefcase, Calculator, 
     Layers, ReceiptText, ShieldCheck, DollarSign,
-    CheckCircle, CreditCard as CardIcon, FileText
+    CheckCircle, CreditCard as CardIcon, FileText, Store
 } from 'lucide-react';
 import { 
     Transaction, TransactionType, TransactionStatus, 
@@ -48,7 +48,8 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
         classification: TransactionClassification.STANDARD,
         isRecurring: false,
         recurrenceFrequency: RecurrenceFrequency.MONTHLY,
-        receiptUrls: []
+        receiptUrls: [],
+        branchId: ''
     });
 
     // Estados de busca/seleção
@@ -79,10 +80,11 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
             setFormData(prev => ({ 
                 ...prev, 
                 accountId: defaultAccId,
-                destinationAccountId: accounts.length > 1 ? accounts[1].id : defaultAccId
+                destinationAccountId: accounts.length > 1 ? accounts[1].id : defaultAccId,
+                branchId: branches.length > 0 ? branches[0].id : ''
             }));
         }
-    }, [initialData, accounts, contacts]);
+    }, [initialData, accounts, contacts, branches]);
 
     // Lógica de Descrição Automática
     useEffect(() => {
@@ -249,7 +251,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                         <div className="space-y-4">
                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Valor Total</label>
                             <div className="relative group">
-                                <div className={`absolute left-0 top-1/2 -translate-y-1/2 text-4xl font-black ${typeColors[formData.type as TransactionType]} transition-colors`}>R$</div>
+                                <div className={`absolute left-0 top-1/2 -translate-y-1/2 text-3xl font-black ${typeColors[formData.type as TransactionType]} transition-colors`}>R$</div>
                                 <input
                                     type="number"
                                     step="0.01"
@@ -257,7 +259,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                                     autoFocus
                                     value={formData.amount === 0 ? '' : formData.amount}
                                     onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-                                    className="block w-full pl-16 pr-4 py-4 bg-transparent border-b-4 border-slate-50 focus:border-indigo-500 rounded-none text-6xl font-black text-slate-900 outline-none transition-all placeholder-slate-100"
+                                    className="block w-full pl-14 pr-4 py-4 bg-transparent border-b-4 border-slate-50 focus:border-indigo-500 rounded-none text-5xl font-black text-slate-900 outline-none transition-all placeholder-slate-100"
                                     placeholder="0,00"
                                 />
                             </div>
@@ -340,7 +342,24 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                                 )}
                             </div>
 
-                            <div className="md:col-span-2 space-y-3">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Filial</label>
+                                <div className="relative">
+                                    <Store className="w-5 h-5 text-slate-300 absolute left-4 top-4" />
+                                    <select 
+                                        value={formData.branchId || ''} 
+                                        onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} 
+                                        className="w-full pl-12 pr-8 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer"
+                                    >
+                                        <option value="">Nenhuma / Sede</option>
+                                        {branches.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Descrição</label>
                                 <input
                                     type="text"
@@ -506,7 +525,8 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                             <div className="grid grid-cols-1 gap-3">
                                 {[
                                     { id: TransactionStatus.PAID, label: 'Liquidado / Pago', color: 'bg-emerald-500' },
-                                    { id: TransactionStatus.PENDING, label: 'Aguardando', color: 'bg-amber-500' }
+                                    { id: TransactionStatus.PENDING, label: 'Aguardando', color: 'bg-amber-500' },
+                                    { id: TransactionStatus.OVERDUE, label: 'Atrasado', color: 'bg-rose-500' }
                                 ].map(opt => (
                                     <button
                                         key={opt.id}

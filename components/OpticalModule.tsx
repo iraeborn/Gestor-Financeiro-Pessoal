@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
-import { OpticalRx, Contact, Laboratory, OpticalDeliveryStatus } from '../types';
-// Fix: Added missing ChevronDown icon import
-import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart, MessageSquare, ExternalLink, Hash, Filter, X, ChevronDown } from 'lucide-react';
+import { OpticalRx, Contact, Laboratory, OpticalDeliveryStatus, Branch } from '../types';
+import { Eye, Plus, Search, Trash2, Pencil, User, Calendar, Microscope, Send, Mail, Printer, CheckCircle, Clock, Package, AlertCircle, ShoppingCart, MessageSquare, ExternalLink, Hash, Filter, X, ChevronDown, Store } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
+import OpticalRxModal from './OpticalRxModal';
 
 interface OpticalModuleProps {
     opticalRxs: OpticalRx[];
     contacts: Contact[];
     laboratories: Laboratory[];
+    branches: Branch[];
     onAddRx: () => void;
     onEditRx: (rx: OpticalRx) => void;
     onDeleteRx: (id: string) => void;
@@ -17,7 +18,7 @@ interface OpticalModuleProps {
 }
 
 const OpticalModule: React.FC<OpticalModuleProps> = ({ 
-    opticalRxs, contacts, laboratories, onAddRx, onEditRx, onDeleteRx, onUpdateRx, onStartSaleFromRx
+    opticalRxs, contacts, laboratories, branches, onAddRx, onEditRx, onDeleteRx, onUpdateRx, onStartSaleFromRx
 }) => {
     const { showAlert } = useAlert();
     const { showConfirm } = useConfirm();
@@ -181,9 +182,10 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                     </div>
                 ) : filteredRxs.map(rx => {
                     const lab = laboratories.find(l => l.id === rx.laboratoryId);
+                    const branch = branches.find(b => b.id === rx.branchId);
                     
                     return (
-                    <div key={rx.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-all group flex flex-col lg:flex-row gap-8 relative overflow-hidden">
+                    <div key={rx.id} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 hover:shadow-lg transition-all group flex flex-col lg:flex-row gap-8 relative overflow-hidden">
                         {/* ID da Receita em Marca D'água */}
                         <div className="absolute top-0 right-0 p-4 opacity-[0.03] select-none pointer-events-none">
                             <span className="text-8xl font-black">{rx.rxNumber}</span>
@@ -202,9 +204,11 @@ const OpticalModule: React.FC<OpticalModuleProps> = ({
                                                 <User className="w-3 h-3" /> CID: {rx.contactId.substring(0,6)}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">
+                                        <div className="flex flex-wrap items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">
                                             <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black mr-2">RX: {rx.rxNumber}</span>
                                             <Calendar className="w-3.5 h-3.5"/> {new Date(rx.rxDate).toLocaleDateString()}
+                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-200"></span>
+                                            <span className="flex items-center gap-1"><Store className="w-3.5 h-3.5"/> {branch?.name || 'Sede'}</span>
                                             <span className="w-1.5 h-1.5 rounded-full bg-gray-200"></span>
                                             <span className={`px-2 py-0.5 rounded border text-[10px] font-black ${getStatusColor(rx.status)}`}>{rx.status || 'PENDENTE'}</span>
                                         </div>
