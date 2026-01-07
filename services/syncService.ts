@@ -34,14 +34,33 @@ class SyncService {
         this.triggerSync();
     }
 
-    async triggerSync(): Promise<void> {
-        // Se já houver um processo de sync em andamento, retorna a promessa existente
-        if (this.syncPromise) return this.syncPromise;
+    /**
+     * Mapeia a store local para o endpoint especializado no backend.
+     * Caso não haja rota específica, usa a rota legada (fallback opcional).
+     */
+    private getEndpoint(store: string): string {
+        const map: Record<string, string> = {
+            'transactions': '/api/transactions/sync',
+            'contacts': '/api/contacts/sync',
+            'accounts': '/api/sync/process', // Mantido como exemplo se ainda não migrado
+            'goals': '/api/sync/process',
+            'categories': '/api/sync/process',
+            'branches': '/api/sync/process',
+            'serviceItems': '/api/sync/process',
+            'serviceOrders': '/api/sync/process',
+            'commercialOrders': '/api/sync/process',
+            'opticalRxs': '/api/sync/process',
+            'salespeople': '/api/sync/process',
+            'laboratories': '/api/sync/process',
+            'salespersonSchedules': '/api/sync/process',
+            'serviceClients': '/api/sync/process'
+        };
+        return map[store] || '/api/sync/process';
+    }
 
-        if (!navigator.onLine) {
-            this.notify('offline');
-            return;
-        }
+    async triggerSync(): Promise<void> {
+        if (this.syncPromise) return this.syncPromise;
+        if (!navigator.onLine) { this.notify('offline'); return; }
 
         this.syncPromise = (async () => {
             const queue = await localDb.getAll<SyncItem>('sync_queue');
@@ -60,7 +79,8 @@ class SyncService {
 
                 for (const item of sortedQueue) {
                     try {
-                        const response = await fetch(`/api/sync/process`, {
+                        const url = this.getEndpoint(item.store);
+                        const response = await fetch(url, {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
@@ -73,7 +93,7 @@ class SyncService {
                             await localDb.delete('sync_queue', item.id);
                         } else {
                             const errorData = await response.json();
-                            console.error(`[SYNC] Erro no servidor ao processar item ${item.id}:`, errorData.error);
+                            console.error(`[SYNC] Erro no servidor (${url}) ao processar item ${item.id}:`, errorData.error);
                             break;
                         }
                     } catch (fetchErr) {
@@ -100,9 +120,7 @@ class SyncService {
             const response = await fetch(`/api/initial-data`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            
             if (!response.ok) throw new Error("Erro ao puxar dados do servidor");
-            
             const data = await response.json();
             
             const storesToClear = [
@@ -113,27 +131,16 @@ class SyncService {
                 'opticalRxs', 'companyProfile', 'salespeople', 'laboratories', 'salespersonSchedules'
             ];
 
-            // Limpa o banco local antes de repopular para evitar dados órfãos ou inconsistentes
             await Promise.all(storesToClear.map(async (storeName) => {
-                try {
-                    await localDb.clearStore(storeName);
-                } catch (e) {
-                    console.warn(`Could not clear store ${storeName}`);
-                }
+                try { await localDb.clearStore(storeName); } catch (e) { console.warn(`Could not clear store ${storeName}`); }
             }));
 
-            // Repopula o IndexedDB com os dados mais recentes do servidor
             for (const [storeName, items] of Object.entries(data)) {
                 if (Array.isArray(items)) {
-                    for (const item of items) {
-                        await localDb.put(storeName, item);
-                    }
-                } else if (items) {
-                   await localDb.put(storeName, items);
-                }
+                    for (const item of items) { await localDb.put(storeName, item); }
+                } else if (items) { await localDb.put(storeName, items); }
             }
-            
-            console.log("✅ [SYNC] Banco local sincronizado com sucesso.");
+            console.log("✅ [SYNC] Banco local sincronizado.");
         } catch (e) {
             console.error("❌ [SYNC] Falha na sincronização:", e);
             throw e;

@@ -15,6 +15,8 @@ import { uploadFiles } from './services/storage.js';
 // Import Routes
 import authRoutes from './routes/auth.js';
 import financeRoutes from './routes/finance.js';
+import transactionRoutes from './routes/transactions.js';
+import contactRoutes from './routes/contacts.js';
 import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
 import servicesRoutes from './routes/services.js';
@@ -26,11 +28,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-
-// Multer para processamento de arquivos em memória antes do envio ao GCS
 const upload = multer({ storage: multer.memoryStorage() });
 
-// --- Socket.io Setup ---
 const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
   allowEIO3: true,
@@ -60,12 +59,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('REQUEST_ONLINE_USERS', (familyId) => {
-    const room = String(familyId).trim();
-    const onlineInRoom = Array.from(connectedSockets.values()).filter(u => u.familyId === room).map(u => u.userId);
-    socket.emit('ONLINE_LIST', [...new Set(onlineInRoom)]);
-  });
-
   socket.on('SEND_MESSAGE', async (msg) => {
       if (!msg.familyId) return;
       const room = String(msg.familyId).trim();
@@ -79,9 +72,7 @@ io.on('connection', (socket) => {
           const payload = { ...msg, id, createdAt: new Date() };
           if (msg.receiverId) io.to(msg.receiverId).to(msg.senderId).emit('NEW_MESSAGE', payload);
           else io.to(room).emit('NEW_MESSAGE', payload);
-      } catch (e) {
-          console.error("[CHAT ERROR]", e.message);
-      }
+      } catch (e) { console.error("[CHAT ERROR]", e.message); }
   });
 
   socket.on('disconnect', () => {
@@ -99,43 +90,27 @@ app.use(cors());
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
-// Rota de Upload - Corrigindo 404
 app.post('/api/upload', authenticateToken, upload.array('files'), async (req, res) => {
     try {
         const urls = await uploadFiles(req.files, req.user.id);
         res.json({ urls });
-    } catch (err) {
-        res.status(500).json({ error: "Falha no upload para o Storage: " + err.message });
-    }
+    } catch (err) { res.status(500).json({ error: "Falha no upload: " + err.message }); }
 });
 
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
+app.use('/api/transactions', transactionRoutes(logAudit)); // Rota especializada
+app.use('/api/contacts', contactRoutes(logAudit));       // Rota especializada
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
 app.use('/api', billingRoutes(logAudit));
 
-app.get('/api/chat/history', authenticateToken, async (req, res) => {
-    const familyId = req.query.familyId;
-    const userId = req.user.id;
-    try {
-        const history = await pool.query(
-            `SELECT * FROM chat_messages WHERE family_id = $1 AND (receiver_id IS NULL OR receiver_id = $2 OR sender_id = $2) ORDER BY created_at ASC LIMIT 300`,
-            [familyId, userId]
-        );
-        res.json(history.rows.map(r => ({
-            id: r.id, senderId: r.sender_id, senderName: r.sender_name, receiverId: r.receiver_id,
-            familyId: r.family_id, content: r.content, type: r.type, attachmentUrl: r.attachment_url, createdAt: r.created_at
-        })));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 const renderIndex = (req, res) => {
     const indexPath = [path.join(process.cwd(), 'dist/index.html'), path.join(process.cwd(), 'index.html')].find(p => fs.existsSync(p));
     if (indexPath) {
         let content = fs.readFileSync(indexPath, 'utf8');
-        content = content.replace(/__GOOGLE_CLIENT_ID__/g, process.env.GOOGLE_CLIENT_ID || "272556908691-3gnld5rsjj6cv2hspp96jt2fb3okkbhv.apps.googleusercontent.com");
+        content = content.replace(/__GOOGLE_CLIENT_ID__/g, process.env.GOOGLE_CLIENT_ID || "");
         content = content.replace(/__API_KEY__/g, process.env.API_KEY || "");
         res.send(content);
     } else res.status(404).send('Sistema em inicialização...');
