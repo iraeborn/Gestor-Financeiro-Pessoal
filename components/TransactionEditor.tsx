@@ -175,9 +175,9 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                         category: finalCategory,
                         contactId: finalContactId,
                         description: `${formData.description} (Entrada)`,
-                        status: TransactionStatus.PAID
+                        status: TransactionStatus.PAID,
+                        isRecurring: false
                     } as Transaction, newContactObj, newCategoryObj);
-                    // Limpa para não criar contatos duplicados nas próximas chamadas do loop
                     newContactObj = undefined;
                     newCategoryObj = undefined;
                 }
@@ -190,7 +190,8 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                         contactId: finalContactId,
                         description: `${formData.description} (${inst.idx}/${numInstallments})`,
                         date: inst.date,
-                        status: TransactionStatus.PENDING
+                        status: TransactionStatus.PENDING,
+                        isRecurring: false
                     } as Transaction, newContactObj, newCategoryObj);
                     newContactObj = undefined;
                     newCategoryObj = undefined;
@@ -372,118 +373,181 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                         </div>
                     </div>
 
-                    {/* Bloco 3: Motor de Parcelamento Inteligente */}
+                    {/* Bloco 3: Opções de Repetição (Parcelamento vs Recorrência) */}
                     {!initialData && formData.type !== TransactionType.TRANSFER && (
-                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8 animate-slide-in-bottom">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calculator className="w-5 h-5"/></div>
-                                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Configuração de Parcelamento</h3>
+                        <div className="space-y-8 animate-slide-in-bottom">
+                            {/* OPÇÃO 1: PARCELAMENTO */}
+                            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calculator className="w-5 h-5"/></div>
+                                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Parcelamento (Dividir Total)</h3>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            className="sr-only peer" 
+                                            checked={isParcelado} 
+                                            onChange={e => {
+                                                setIsParcelado(e.target.checked);
+                                                if (e.target.checked) setFormData(prev => ({ ...prev, isRecurring: false }));
+                                            }} 
+                                        />
+                                        <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                                        <span className="ml-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Habilitar</span>
+                                    </label>
                                 </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" className="sr-only peer" checked={isParcelado} onChange={e => setIsParcelado(e.target.checked)} />
-                                    <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
-                                    <span className="ml-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Habilitar</span>
-                                </label>
-                            </div>
 
-                            {isParcelado && (
-                                <div className="space-y-8 animate-fade-in">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Método de Pagamento</label>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setInstallmentMethod('CREDIT_CARD')}
-                                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${installmentMethod === 'CREDIT_CARD' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-50 bg-slate-50 text-slate-400'}`}
-                                                >
-                                                    <CardIcon className="w-6 h-6" />
-                                                    <span className="text-[10px] font-black uppercase">Cartão</span>
-                                                </button>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setInstallmentMethod('BOLETO')}
-                                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${installmentMethod === 'BOLETO' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-50 bg-slate-50 text-slate-400'}`}
-                                                >
-                                                    <FileText className="w-6 h-6" />
-                                                    <span className="text-[10px] font-black uppercase">Boleto</span>
-                                                </button>
+                                {isParcelado && (
+                                    <div className="space-y-8 animate-fade-in">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Método de Pagamento</label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setInstallmentMethod('CREDIT_CARD')}
+                                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${installmentMethod === 'CREDIT_CARD' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-50 bg-slate-50 text-slate-400'}`}
+                                                    >
+                                                        <CardIcon className="w-6 h-6" />
+                                                        <span className="text-[10px] font-black uppercase">Cartão</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setInstallmentMethod('BOLETO')}
+                                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${installmentMethod === 'BOLETO' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-50 bg-slate-50 text-slate-400'}`}
+                                                    >
+                                                        <FileText className="w-6 h-6" />
+                                                        <span className="text-[10px] font-black uppercase">Boleto</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <label className="text-[10px] font-black uppercase text-slate-400">Possui Entrada?</label>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input type="checkbox" className="sr-only peer" checked={hasDownPayment} onChange={e => setHasDownPayment(e.target.checked)} />
+                                                        <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
+                                                    </label>
+                                                </div>
+                                                {hasDownPayment ? (
+                                                    <div className="relative">
+                                                        <DollarSign className="absolute left-4 top-4 w-4 h-4 text-emerald-500" />
+                                                        <input type="number" step="0.01" className="w-full pl-11 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500" value={downPayment} onChange={e => setDownPayment(parseFloat(e.target.value) || 0)} placeholder="Valor da Entrada" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="h-[52px] flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl text-[9px] font-black text-slate-300 uppercase">Sem entrada definida</div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center px-1">
-                                                <label className="text-[10px] font-black uppercase text-slate-400">Possui Entrada?</label>
-                                                <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" className="sr-only peer" checked={hasDownPayment} onChange={e => setHasDownPayment(e.target.checked)} />
-                                                    <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
-                                                </label>
-                                            </div>
-                                            {hasDownPayment ? (
-                                                <div className="relative">
-                                                    <DollarSign className="absolute left-4 top-4 w-4 h-4 text-emerald-500" />
-                                                    <input type="number" step="0.01" className="w-full pl-11 py-4 bg-slate-50 border-none rounded-2xl text-sm font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500" value={downPayment} onChange={e => setDownPayment(parseFloat(e.target.value) || 0)} placeholder="Valor da Entrada" />
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Quantidade de Parcelas</label>
+                                                <div className="flex items-center gap-4">
+                                                    <input type="range" min="1" max="60" step="1" className="flex-1 accent-indigo-600" value={numInstallments} onChange={e => setNumInstallments(parseInt(e.target.value))} />
+                                                    <div className="w-16 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg">{numInstallments}x</div>
                                                 </div>
-                                            ) : (
-                                                <div className="h-[52px] flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl text-[9px] font-black text-slate-300 uppercase">Sem entrada definida</div>
+                                            </div>
+                                            
+                                            {installmentMethod === 'CREDIT_CARD' && settings?.installmentRules?.creditCard?.interestRate > 0 && (
+                                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3">
+                                                    <TrendingUp className="w-5 h-5 text-amber-600" />
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-amber-600 uppercase">Taxa Aplicada</p>
+                                                        <p className="text-xs font-bold text-amber-800">{settings.installmentRules.creditCard.interestRate}% ao mês (Simples)</p>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Quantidade de Parcelas</label>
-                                            <div className="flex items-center gap-4">
-                                                <input type="range" min="1" max="60" step="1" className="flex-1 accent-indigo-600" value={numInstallments} onChange={e => setNumInstallments(parseInt(e.target.value))} />
-                                                <div className="w-16 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg">{numInstallments}x</div>
+                                        <div className="bg-slate-50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-inner">
+                                            <div className="p-4 bg-white/50 border-b border-slate-100 flex justify-between items-center">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Preview das Parcelas</span>
+                                                <span className="text-[10px] font-black text-indigo-600">Total Final: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentData.totalWithInterest)}</span>
                                             </div>
+                                            <table className="w-full text-left">
+                                                <thead className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                    <tr>
+                                                        <th className="p-4">Parcela</th>
+                                                        <th className="p-4">Data Vencimento</th>
+                                                        <th className="p-4 text-right">Valor</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {hasDownPayment && downPayment > 0 && (
+                                                        <tr className="bg-emerald-50/50">
+                                                            <td className="p-4 text-[10px] font-black text-emerald-600 uppercase flex items-center gap-2"><CheckCircle className="w-3 h-3" /> Entrada</td>
+                                                            <td className="p-4 text-xs font-bold text-slate-700">{new Date(formData.date!).toLocaleDateString()}</td>
+                                                            <td className="p-4 text-right text-sm font-black text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(downPayment)}</td>
+                                                        </tr>
+                                                    )}
+                                                    {installmentData.items.map(inst => (
+                                                        <tr key={inst.idx}>
+                                                            <td className="p-4 text-xs font-bold text-slate-500">{inst.idx}ª Parcela</td>
+                                                            <td className="p-4 text-xs font-bold text-slate-700">{new Date(inst.date).toLocaleDateString()}</td>
+                                                            <td className="p-4 text-right text-sm font-black text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.value)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
-                                        
-                                        {installmentMethod === 'CREDIT_CARD' && settings?.installmentRules?.creditCard?.interestRate > 0 && (
-                                            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3">
-                                                <TrendingUp className="w-5 h-5 text-amber-600" />
-                                                <div>
-                                                    <p className="text-[9px] font-black text-amber-600 uppercase">Taxa Aplicada</p>
-                                                    <p className="text-xs font-bold text-amber-800">{settings.installmentRules.creditCard.interestRate}% ao mês (Simples)</p>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
+                                )}
+                            </div>
 
-                                    <div className="bg-slate-50 rounded-[2rem] border border-slate-100 overflow-hidden shadow-inner">
-                                        <div className="p-4 bg-white/50 border-b border-slate-100 flex justify-between items-center">
-                                            <span className="text-[10px] font-black uppercase text-slate-400">Preview das Parcelas</span>
-                                            <span className="text-[10px] font-black text-indigo-600">Total Final: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(installmentData.totalWithInterest)}</span>
-                                        </div>
-                                        <table className="w-full text-left">
-                                            <thead className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                                                <tr>
-                                                    <th className="p-4">Parcela</th>
-                                                    <th className="p-4">Data Vencimento</th>
-                                                    <th className="p-4 text-right">Valor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {hasDownPayment && downPayment > 0 && (
-                                                    <tr className="bg-emerald-50/50">
-                                                        <td className="p-4 text-[10px] font-black text-emerald-600 uppercase flex items-center gap-2"><CheckCircle className="w-3 h-3" /> Entrada</td>
-                                                        <td className="p-4 text-xs font-bold text-slate-700">{new Date(formData.date!).toLocaleDateString()}</td>
-                                                        <td className="p-4 text-right text-sm font-black text-emerald-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(downPayment)}</td>
-                                                    </tr>
-                                                )}
-                                                {installmentData.items.map(inst => (
-                                                    <tr key={inst.idx}>
-                                                        <td className="p-4 text-xs font-bold text-slate-500">{inst.idx}ª Parcela</td>
-                                                        <td className="p-4 text-xs font-bold text-slate-700">{new Date(inst.date).toLocaleDateString()}</td>
-                                                        <td className="p-4 text-right text-sm font-black text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.value)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                            {/* OPÇÃO 2: RECORRÊNCIA FIXA */}
+                            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Repeat className="w-5 h-5"/></div>
+                                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Recorrência Fixa (Gasto Mensal/Fixo)</h3>
                                     </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            className="sr-only peer" 
+                                            checked={formData.isRecurring} 
+                                            onChange={e => {
+                                                setFormData({...formData, isRecurring: e.target.checked});
+                                                if (e.target.checked) setIsParcelado(false);
+                                            }} 
+                                        />
+                                        <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                                        <span className="ml-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ativar</span>
+                                    </label>
                                 </div>
-                            )}
+
+                                {formData.isRecurring && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fade-in">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Frequência da Repetição</label>
+                                            <select 
+                                                className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
+                                                value={formData.recurrenceFrequency}
+                                                onChange={e => setFormData({...formData, recurrenceFrequency: e.target.value as any})}
+                                            >
+                                                <option value="WEEKLY">Semanalmente</option>
+                                                <option value="MONTHLY">Mensalmente (Padrão)</option>
+                                                <option value="YEARLY">Anualmente</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Data de Término (Opcional)</label>
+                                            <div className="relative">
+                                                <CalendarDays className="w-5 h-5 text-slate-300 absolute left-4 top-4" />
+                                                <input 
+                                                    type="date" 
+                                                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    value={formData.recurrenceEndDate || ''}
+                                                    onChange={e => setFormData({...formData, recurrenceEndDate: e.target.value})}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
