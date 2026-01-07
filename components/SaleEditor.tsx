@@ -27,9 +27,6 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const workspace = currentUser.workspaces?.find(w => w.id === familyId);
     const isAdmin = currentUser.id === familyId || workspace?.role === 'ADMIN' || currentUser.role === 'ADMIN';
 
-    // Trava de Segurança: Vendas Confirmadas são apenas leitura
-    const isLocked = initialData?.status === 'CONFIRMED';
-
     const [formData, setFormData] = useState<Partial<CommercialOrder>>({
         status: 'DRAFT',
         type: 'SALE',
@@ -40,6 +37,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         taxAmount: 0,
         accountId: initialData?.accountId || settings?.defaultAccountId || accounts[0]?.id || ''
     });
+
+    // Trava de Segurança: Vendas Confirmadas ou em processo de confirmação são apenas leitura
+    const isLocked = initialData?.status === 'CONFIRMED' || formData.status === 'CONFIRMED';
 
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
@@ -120,7 +120,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isLocked) return;
+        // Não permite salvar se já estava confirmado no banco (bloqueio total)
+        if (initialData?.status === 'CONFIRMED') return;
+        
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
         if (!formData.accountId) return showAlert("Selecione a conta de destino para o faturamento.", "warning");
@@ -143,7 +145,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const selectedAccount = accounts.find(a => a.id === formData.accountId);
 
     return (
-        <div className={`max-w-6xl mx-auto animate-fade-in pb-20 ${isLocked ? 'grayscale-[0.5] opacity-90' : ''}`}>
+        <div className={`max-w-6xl mx-auto animate-fade-in pb-20 ${isLocked ? 'grayscale-[0.3]' : ''}`}>
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 border-b border-gray-100 pb-6">
                 <div className="flex items-center gap-4">
                     <button onClick={onCancel} className="p-2.5 hover:bg-white rounded-xl border border-gray-200 shadow-sm transition-all text-gray-400 hover:text-indigo-600">
@@ -155,7 +157,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             {isLocked && <Lock className="w-6 h-6 text-amber-500" />}
                         </h1>
                         <p className="text-gray-500 font-medium">
-                            {isLocked ? 'Esta venda já foi paga e não permite mais alterações.' : 'Configure itens, armação e valide o faturamento.'}
+                            {isLocked ? 'Esta venda está consolidada e não permite alterações de valores.' : 'Configure itens, armação e valide o faturamento.'}
                         </p>
                     </div>
                 </div>
@@ -163,14 +165,14 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                     <button onClick={onCancel} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase text-[10px] tracking-widest">
                         {isLocked ? 'Voltar' : 'Descartar'}
                     </button>
-                    {!isLocked && (
+                    {(!initialData || initialData.status !== 'CONFIRMED') && (
                         <button onClick={handleSave} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2">
-                            <Save className="w-4 h-4" /> Salvar Venda
+                            <Save className="w-4 h-4" /> {formData.status === 'CONFIRMED' ? 'Confirmar e Faturar' : 'Salvar Venda'}
                         </button>
                     )}
-                    {isLocked && (
-                        <div className="bg-emerald-50 text-emerald-700 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 border border-emerald-200">
-                            <CheckCircle className="w-4 h-4" /> Venda Consolidada
+                    {initialData?.status === 'CONFIRMED' && (
+                        <div className="bg-emerald-50 text-emerald-700 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 border border-emerald-200 shadow-sm">
+                            <CheckCircle className="w-4 h-4" /> Venda Faturada
                         </div>
                     )}
                 </div>
@@ -331,10 +333,10 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status da Venda</label>
                             <select 
-                                disabled={isLocked}
+                                disabled={initialData?.status === 'CONFIRMED'}
                                 value={formData.status || 'DRAFT'} 
                                 onChange={e => setFormData({...formData, status: e.target.value as any})}
-                                className="w-full bg-gray-50 text-gray-700 rounded-xl p-4 text-sm font-black uppercase tracking-widest outline-none border border-gray-100 cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-70"
+                                className={`w-full text-gray-700 rounded-xl p-4 text-sm font-black uppercase tracking-widest outline-none border border-gray-100 cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all ${isLocked ? 'bg-indigo-50' : 'bg-gray-50'}`}
                             >
                                 <option value="DRAFT">📝 Rascunho</option>
                                 <option value="APPROVED">✅ Aprovado</option>
@@ -380,7 +382,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                     <Landmark className="w-4 h-4 text-slate-400" />
                                     <div className="overflow-hidden">
                                         <p className="text-xs font-bold text-slate-700 truncate">{selectedAccount?.name || 'Conta Padrão'}</p>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fixado pelo Gestor</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fixado p/ Auditoria</p>
                                     </div>
                                 </div>
                             )}
@@ -451,13 +453,13 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             </div>
                         )}
 
-                        {!isLocked && (
+                        {(!initialData || initialData.status !== 'CONFIRMED') && (
                             <button 
                                 onClick={handleSave} 
                                 disabled={pricing.isOverDiscount}
                                 className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50 disabled:grayscale"
                             >
-                                <CheckCircle className="w-5 h-5" /> Confirmar Venda
+                                <CheckCircle className="w-5 h-5" /> {formData.status === 'CONFIRMED' ? 'Confirmar e Faturar' : 'Salvar Venda'}
                             </button>
                         )}
                     </div>
@@ -468,11 +470,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         </h4>
                         <p className="text-xs text-slate-300 leading-relaxed">
                             {isLocked ? (
-                                <>Este pedido foi bloqueado pelo sistema após a confirmação do pagamento. Para realizar ajustes, realize um <strong>estorno no financeiro</strong> primeiro.</>
-                            ) : isRestrictedUser ? (
-                                <>O desconto máximo permitido para sua função é de <strong>{effectiveMaxDiscount}%</strong>. Vendas fora dessa regra serão bloqueadas.</>
+                                <>Este pedido foi bloqueado automaticamente. Ajustes de valor exigem um <strong>estorno no financeiro</strong> para garantir a rastreabilidade.</>
                             ) : (
-                                <>Você possui <strong>Alçada Administrativa</strong>. Descontos de até 100% são permitidos para este perfil.</>
+                                <>Ao definir o status como <strong>Confirmado / Pago</strong>, o sistema gerará automaticamente uma receita no seu fluxo de caixa.</>
                             )}
                         </p>
                     </div>
