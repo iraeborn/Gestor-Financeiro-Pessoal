@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { OpticalRx, Contact, Branch, Laboratory, LensType } from '../types';
-import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity, UserPlus, X, Phone, Mail, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity, UserPlus, X, Phone, Mail, RefreshCw, Check } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { api } from '../services/storageService';
 
@@ -30,10 +30,22 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
         status: 'PENDING'
     });
 
-    // Ordenação alfabética dos contatos para o select
+    // Estados para Busca de Paciente (Autocomplete)
+    const [patientSearch, setPatientSearch] = useState('');
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+    const patientDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Ordenação alfabética dos contatos
     const sortedContacts = useMemo(() => {
         return [...contacts].sort((a, b) => a.name.localeCompare(b.name));
     }, [contacts]);
+
+    // Filtragem para o Autocomplete
+    const filteredContacts = useMemo(() => {
+        return sortedContacts.filter(c => 
+            c.name.toLowerCase().includes(patientSearch.toLowerCase())
+        );
+    }, [sortedContacts, patientSearch]);
 
     // Estados para Cadastro Rápido de Contato
     const [showQuickContact, setShowQuickContact] = useState(false);
@@ -43,11 +55,27 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
     useEffect(() => {
         if (initialData) {
             setFormData(initialData);
+            const contact = contacts.find(c => c.id === initialData.contactId);
+            if (contact) setPatientSearch(contact.name);
         } else {
             const num = `RX-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
             setFormData(prev => ({ ...prev, rxNumber: num }));
         }
-    }, [initialData]);
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (patientDropdownRef.current && !patientDropdownRef.current.contains(event.target as Node)) {
+                setShowPatientDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [initialData, contacts]);
+
+    const handleSelectPatient = (contact: Contact) => {
+        setFormData(prev => ({ ...prev, contactId: contact.id }));
+        setPatientSearch(contact.name);
+        setShowPatientDropdown(false);
+    };
 
     const handleQuickSaveContact = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -65,12 +93,13 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
             };
             await api.saveContact(contact);
             
-            // Força a seleção do novo contato imediatamente no formulário
+            // Seleção automática após cadastro
             setFormData(prev => ({ 
                 ...prev, 
                 contactId: newId,
-                contactName: contact.name // Preenche o nome virtualmente para exibição imediata
+                contactName: contact.name 
             }));
+            setPatientSearch(contact.name);
             
             setShowQuickContact(false);
             setQuickContact({ name: '', phone: '', email: '' });
@@ -140,17 +169,40 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                                     </button>
                                 </div>
                                 <div className="flex gap-2">
-                                    <select 
-                                        className="flex-1 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        value={formData.contactId || ''}
-                                        onChange={e => setFormData({...formData, contactId: e.target.value})}
-                                        required
-                                    >
-                                        <option value="">Selecione o paciente...</option>
-                                        {/* Lista ordenada alfabeticamente */}
-                                        {sortedContacts.map(c => <option key={c.id} value={c.id}>{c.name} (ID: {c.id.substring(0,4)})</option>)}
-                                    </select>
-                                    <div className="bg-slate-100 p-4 rounded-2xl flex items-center justify-center">
+                                    <div className="flex-1 relative" ref={patientDropdownRef}>
+                                        <input 
+                                            type="text"
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            placeholder="Pesquisar paciente por nome..."
+                                            value={patientSearch}
+                                            onFocus={() => setShowPatientDropdown(true)}
+                                            onChange={(e) => {
+                                                setPatientSearch(e.target.value);
+                                                setShowPatientDropdown(true);
+                                                setFormData(prev => ({ ...prev, contactId: '' }));
+                                            }}
+                                            required
+                                        />
+                                        {showPatientDropdown && (
+                                            <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-2xl mt-1 max-h-60 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                                                {filteredContacts.map(c => (
+                                                    <button 
+                                                        key={c.id} 
+                                                        type="button" 
+                                                        onClick={() => handleSelectPatient(c)}
+                                                        className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl text-sm font-bold text-gray-700 transition-colors flex justify-between items-center"
+                                                    >
+                                                        <span>{c.name}</span>
+                                                        <span className="text-[10px] text-gray-400 font-black uppercase">ID: {c.id.substring(0,4)}</span>
+                                                    </button>
+                                                ))}
+                                                {filteredContacts.length === 0 && (
+                                                    <div className="p-4 text-center text-gray-400 text-xs italic">Nenhum paciente encontrado.</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="bg-slate-100 p-4 rounded-2xl flex items-center justify-center min-w-[100px]">
                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CID: {formData.contactId?.substring(0,4) || '----'}</span>
                                     </div>
                                 </div>

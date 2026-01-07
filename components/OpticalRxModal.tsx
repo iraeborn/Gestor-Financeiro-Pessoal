@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { OpticalRx, Contact, Laboratory, Branch } from '../types';
-import { X, User, Eye, Stethoscope, Save, Calendar, Info, FileText, Microscope, Store, UserPlus, Phone, Mail, RefreshCw } from 'lucide-react';
+import { X, User, Eye, Stethoscope, Save, Calendar, Info, FileText, Microscope, Store, UserPlus, Phone, Mail, RefreshCw, Check } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { api } from '../services/storageService';
 
@@ -22,10 +22,22 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
         expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]
     });
 
-    // Ordenação alfabética dos contatos para o select
+    // Estados para Busca de Paciente (Autocomplete)
+    const [patientSearch, setPatientSearch] = useState('');
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+    const patientDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Ordenação alfabética dos contatos
     const sortedContacts = useMemo(() => {
         return [...contacts].sort((a, b) => a.name.localeCompare(b.name));
     }, [contacts]);
+
+    // Filtragem para o Autocomplete
+    const filteredContacts = useMemo(() => {
+        return sortedContacts.filter(c => 
+            c.name.toLowerCase().includes(patientSearch.toLowerCase())
+        );
+    }, [sortedContacts, patientSearch]);
 
     // Estados para Cadastro Rápido de Contato
     const [showQuickContact, setShowQuickContact] = useState(false);
@@ -33,9 +45,29 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
     const [isSavingContact, setIsSavingContact] = useState(false);
 
     useEffect(() => {
-        if (initialData) setFormData(initialData);
-        else setFormData({ rxDate: new Date().toISOString().split('T')[0] });
-    }, [initialData, isOpen]);
+        if (initialData) {
+            setFormData(initialData);
+            const contact = contacts.find(c => c.id === initialData.contactId);
+            if (contact) setPatientSearch(contact.name);
+        } else {
+            setFormData({ rxDate: new Date().toISOString().split('T')[0] });
+            setPatientSearch('');
+        }
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (patientDropdownRef.current && !patientDropdownRef.current.contains(event.target as Node)) {
+                setShowPatientDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [initialData, isOpen, contacts]);
+
+    const handleSelectPatient = (contact: Contact) => {
+        setFormData(prev => ({ ...prev, contactId: contact.id }));
+        setPatientSearch(contact.name);
+        setShowPatientDropdown(false);
+    };
 
     const handleQuickSaveContact = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -53,16 +85,17 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
             };
             await api.saveContact(contact);
             
-            // Força a seleção do novo contato imediatamente no formulário
+            // Seleção automática após cadastro
             setFormData(prev => ({ 
                 ...prev, 
                 contactId: newId,
                 contactName: contact.name 
             }));
+            setPatientSearch(contact.name);
             
             setShowQuickContact(false);
             setQuickContact({ name: '', phone: '', email: '' });
-            showAlert("Novo cliente cadastrado e selecionado!", "success");
+            showAlert("Novo cliente cadastrado!", "success");
         } catch (err) {
             showAlert("Erro ao cadastrar cliente.", "error");
         } finally {
@@ -112,16 +145,39 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
                                         <UserPlus className="w-3 h-3" /> Novo Cadastro
                                     </button>
                                 </div>
-                                <select 
-                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    value={formData.contactId || ''}
-                                    onChange={e => setFormData({...formData, contactId: e.target.value})}
-                                    required
-                                >
-                                    <option value="">Selecione o cliente...</option>
-                                    {/* Lista ordenada alfabeticamente */}
-                                    {sortedContacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <div className="relative" ref={patientDropdownRef}>
+                                    <input 
+                                        type="text"
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        placeholder="Buscar cliente..."
+                                        value={patientSearch}
+                                        onFocus={() => setShowPatientDropdown(true)}
+                                        onChange={(e) => {
+                                            setPatientSearch(e.target.value);
+                                            setShowPatientDropdown(true);
+                                            setFormData(prev => ({ ...prev, contactId: '' }));
+                                        }}
+                                        required
+                                    />
+                                    {showPatientDropdown && (
+                                        <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-2xl mt-1 max-h-60 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
+                                            {filteredContacts.map(c => (
+                                                <button 
+                                                    key={c.id} 
+                                                    type="button" 
+                                                    onClick={() => handleSelectPatient(c)}
+                                                    className="w-full text-left px-4 py-3 hover:bg-indigo-50 rounded-xl text-sm font-bold text-gray-700 transition-colors flex justify-between items-center"
+                                                >
+                                                    <span>{c.name}</span>
+                                                    <span className="text-[10px] text-gray-400 font-black uppercase">ID: {c.id.substring(0,4)}</span>
+                                                </button>
+                                            ))}
+                                            {filteredContacts.length === 0 && (
+                                                <div className="p-4 text-center text-gray-400 text-xs italic">Nenhum cliente encontrado.</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Unidade de Atendimento</label>
