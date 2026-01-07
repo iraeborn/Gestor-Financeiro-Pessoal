@@ -1,7 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { OpticalRx, Contact, Branch, Laboratory, LensType } from '../types';
-// Fix: Added missing RefreshCw icon import
 import { ArrowLeft, Save, Eye, Stethoscope, Info, Store, Microscope, Glasses, User, Calendar, Award, Package, HeartPulse, Activity, UserPlus, X, Phone, Mail, RefreshCw } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { api } from '../services/storageService';
@@ -30,6 +29,11 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
         lensType: 'MONOFOCAL',
         status: 'PENDING'
     });
+
+    // Ordenação alfabética dos contatos para o select
+    const sortedContacts = useMemo(() => {
+        return [...contacts].sort((a, b) => a.name.localeCompare(b.name));
+    }, [contacts]);
 
     // Estados para Cadastro Rápido de Contato
     const [showQuickContact, setShowQuickContact] = useState(false);
@@ -61,8 +65,13 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
             };
             await api.saveContact(contact);
             
-            // Seleciona automaticamente o novo contato no formulário principal
-            setFormData(prev => ({ ...prev, contactId: newId }));
+            // Força a seleção do novo contato imediatamente no formulário
+            setFormData(prev => ({ 
+                ...prev, 
+                contactId: newId,
+                contactName: contact.name // Preenche o nome virtualmente para exibição imediata
+            }));
+            
             setShowQuickContact(false);
             setQuickContact({ name: '', phone: '', email: '' });
             showAlert("Novo cliente cadastrado e selecionado!", "success");
@@ -82,7 +91,7 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
         onSave({
             ...formData,
             id: formData.id || crypto.randomUUID(),
-            contactName: contact?.name,
+            contactName: contact?.name || formData.contactName,
             rxDate: formData.rxDate || new Date().toISOString().split('T')[0]
         } as OpticalRx);
     };
@@ -138,7 +147,8 @@ const OpticalRxEditor: React.FC<OpticalRxEditorProps> = ({ contacts, branches, l
                                         required
                                     >
                                         <option value="">Selecione o paciente...</option>
-                                        {contacts.map(c => <option key={c.id} value={c.id}>{c.name} (ID: {c.id.substring(0,4)})</option>)}
+                                        {/* Lista ordenada alfabeticamente */}
+                                        {sortedContacts.map(c => <option key={c.id} value={c.id}>{c.name} (ID: {c.id.substring(0,4)})</option>)}
                                     </select>
                                     <div className="bg-slate-100 p-4 rounded-2xl flex items-center justify-center">
                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CID: {formData.contactId?.substring(0,4) || '----'}</span>

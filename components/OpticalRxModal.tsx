@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { OpticalRx, Contact, Laboratory, Branch } from '../types';
 import { X, User, Eye, Stethoscope, Save, Calendar, Info, FileText, Microscope, Store, UserPlus, Phone, Mail, RefreshCw } from 'lucide-react';
 import { useAlert } from './AlertSystem';
@@ -21,6 +21,11 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
         rxDate: new Date().toISOString().split('T')[0],
         expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]
     });
+
+    // Ordenação alfabética dos contatos para o select
+    const sortedContacts = useMemo(() => {
+        return [...contacts].sort((a, b) => a.name.localeCompare(b.name));
+    }, [contacts]);
 
     // Estados para Cadastro Rápido de Contato
     const [showQuickContact, setShowQuickContact] = useState(false);
@@ -48,11 +53,16 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
             };
             await api.saveContact(contact);
             
-            // Seleciona automaticamente o novo contato no formulário
-            setFormData(prev => ({ ...prev, contactId: newId }));
+            // Força a seleção do novo contato imediatamente no formulário
+            setFormData(prev => ({ 
+                ...prev, 
+                contactId: newId,
+                contactName: contact.name 
+            }));
+            
             setShowQuickContact(false);
             setQuickContact({ name: '', phone: '', email: '' });
-            showAlert("Novo cliente cadastrado!", "success");
+            showAlert("Novo cliente cadastrado e selecionado!", "success");
         } catch (err) {
             showAlert("Erro ao cadastrar cliente.", "error");
         } finally {
@@ -69,7 +79,7 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
         onSave({
             ...formData,
             id: formData.id || crypto.randomUUID(),
-            contactName: contact?.name,
+            contactName: contact?.name || formData.contactName,
             rxDate: formData.rxDate || new Date().toISOString().split('T')[0]
         } as OpticalRx);
     };
@@ -109,7 +119,8 @@ const OpticalRxModal: React.FC<OpticalRxModalProps> = ({ isOpen, onClose, contac
                                     required
                                 >
                                     <option value="">Selecione o cliente...</option>
-                                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    {/* Lista ordenada alfabeticamente */}
+                                    {sortedContacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
                             <div className="md:col-span-2">
