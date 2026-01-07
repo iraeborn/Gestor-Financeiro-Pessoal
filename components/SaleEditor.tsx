@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CommercialOrder, OSItem, Contact, ServiceItem, OpticalRx, AppSettings, TransactionStatus, Member, Branch, Salesperson, User as UserType, Account } from '../types';
-import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck, Landmark, Lock, Microscope, Activity } from 'lucide-react';
+// Fix: Added missing ChevronDown icon import
+import { ArrowLeft, Save, Package, Trash2, Plus, Info, Tag, User, DollarSign, Calendar, Percent, CheckCircle, ShoppingBag, Eye, Glasses, Receipt, Store, AlertTriangle, Zap, ImageIcon, ShieldCheck, Landmark, Lock, Microscope, Activity, ChevronDown } from 'lucide-react';
 import { useAlert } from './AlertSystem';
 import { getFamilyMembers } from '../services/storageService';
 
@@ -35,31 +35,37 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         grossAmount: 0,
         discountAmount: 0,
         taxAmount: 0,
-        accountId: initialData?.accountId || settings?.defaultAccountId || accounts[0]?.id || ''
+        accountId: ''
     });
 
-    // Trava de Segurança: Vendas Confirmadas são apenas leitura
     const isLocked = initialData?.status === 'CONFIRMED' || formData.status === 'CONFIRMED';
-
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
     const isRestrictedUser = useMemo(() => {
         if (isAdmin) return false;
-        const isRegisteredSalesperson = salespeople.some(s => s.userId === currentUser.id);
-        if (!isRegisteredSalesperson) return false;
-        return true;
+        return salespeople.some(s => s.userId === currentUser.id);
     }, [currentUser, salespeople, isAdmin]);
 
     const effectiveMaxDiscount = isRestrictedUser ? (settings?.maxDiscountPct || 100) : 100;
 
     useEffect(() => {
         loadTeam();
+        
+        // Determinar a conta padrão para inicialização
+        const defaultAccId = initialData?.accountId || settings?.defaultAccountId || (accounts.length > 0 ? accounts[0].id : '');
+
         if (initialData) {
-            setFormData({ ...initialData });
+            setFormData({ ...initialData, accountId: defaultAccId });
             const c = contacts.find(c => c.id === initialData.contactId);
             setContactSearch(c ? c.name : initialData.contactName || '');
+        } else {
+            setFormData(prev => ({ 
+                ...prev, 
+                accountId: defaultAccId,
+                branchId: branches.length > 0 ? branches[0].id : ''
+            }));
         }
         
         const handleClickOutside = (event: MouseEvent) => {
@@ -69,7 +75,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [initialData]);
+    }, [initialData, accounts, branches, settings]);
 
     const loadTeam = async () => {
         try {
@@ -202,7 +208,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             value={contactSearch}
                                             onFocus={() => !isLocked && setShowContactDropdown(true)}
                                             onChange={e => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
-                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
+                                            className="w-full pl-11 pr-4 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
                                             placeholder="Buscar cliente..."
                                         />
                                     </div>
@@ -400,27 +406,20 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
                         <div>
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Faturar para Conta</label>
-                            {isAdmin && !isLocked ? (
-                                <div className="relative">
-                                    <Landmark className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
-                                    <select 
-                                        value={formData.accountId || ''} 
-                                        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} 
-                                        className="w-full pl-11 py-4 bg-gray-50 text-gray-700 rounded-xl text-sm font-bold outline-none border border-gray-100 cursor-pointer appearance-none"
-                                        required
-                                    >
-                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} (R$ {acc.balance.toFixed(2)})</option>)}
-                                    </select>
-                                </div>
-                            ) : (
-                                <div className="p-4 bg-slate-50 rounded-xl border border-gray-100 flex items-center gap-3">
-                                    <Landmark className="w-4 h-4 text-slate-400" />
-                                    <div className="overflow-hidden">
-                                        <p className="text-xs font-bold text-slate-700 truncate">{selectedAccount?.name || 'Conta Padrão'}</p>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Fixado p/ Auditoria</p>
-                                    </div>
-                                </div>
-                            )}
+                            <div className="relative">
+                                <Landmark className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
+                                <select 
+                                    disabled={isLocked}
+                                    value={formData.accountId || ''} 
+                                    onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} 
+                                    className="w-full pl-11 py-4 bg-gray-50 text-gray-700 rounded-xl text-sm font-bold outline-none border border-gray-100 cursor-pointer appearance-none disabled:bg-slate-100"
+                                    required
+                                >
+                                    <option value="">Selecionar Conta...</option>
+                                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name} (Saldo: {formatCurrency(acc.balance)})</option>)}
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-4 pointer-events-none" />
+                            </div>
                         </div>
 
                         <div>
