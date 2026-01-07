@@ -31,15 +31,16 @@ export default function(logAudit) {
                 const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1 FOR UPDATE', [payload.id]);
                 const t = tRes.rows[0];
                 if (t && t.status === 'PAID') {
+                    const amount = Number(t.amount);
                     if (t.type === 'TRANSFER') {
-                        await updateAccountBalance(client, t.account_id, t.amount, 'EXPENSE', true);
-                        if (t.destination_account_id) await updateAccountBalance(client, t.destination_account_id, t.amount, 'INCOME', true);
+                        await updateAccountBalance(client, t.account_id, amount, 'EXPENSE', true);
+                        if (t.destination_account_id) await updateAccountBalance(client, t.destination_account_id, amount, 'INCOME', true);
                     } else {
-                        await updateAccountBalance(client, t.account_id, t.amount, t.type, true);
+                        await updateAccountBalance(client, t.account_id, amount, t.type, true);
                     }
                 }
                 await client.query(`UPDATE transactions SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
-                await logAudit(client, userId, 'DELETE', 'transaction', payload.id, `Exclusão de transação: ${payload.description || ''}`);
+                await logAudit(client, userId, 'DELETE', 'transaction', payload.id, `Exclusão de transação`);
 
             } else if (action === 'SAVE') {
                 const existingRes = await client.query('SELECT status, amount, type, account_id, destination_account_id FROM transactions WHERE id = $1 FOR UPDATE', [payload.id]);
@@ -55,14 +56,13 @@ export default function(logAudit) {
                     await client.query(`UPDATE accounts SET balance = balance + $1 WHERE id = $2`, [delta, payload.accountId]);
                 }
 
-                // Lógica de Destino para Transferências
                 if (payload.type === 'TRANSFER') {
                     const oldDestImpact = (oldT?.type === 'TRANSFER' && oldT?.status === 'PAID') ? Number(oldT.amount) : 0;
                     const newDestImpact = (payload.status === 'PAID') ? Number(payload.amount) : 0;
                     if (oldT && oldT.destination_account_id && oldT.destination_account_id !== payload.destinationAccountId) {
                         if (oldDestImpact !== 0) await updateAccountBalance(client, oldT.destination_account_id, oldDestImpact, 'INCOME', true);
                         if (newDestImpact !== 0) await updateAccountBalance(client, payload.destinationAccountId, newDestImpact, 'INCOME', false);
-                    } else {
+                    } else if (payload.destinationAccountId) {
                         const destDelta = newDestImpact - oldDestImpact;
                         if (destDelta !== 0) await client.query(`UPDATE accounts SET balance = balance + $1 WHERE id = $2`, [destDelta, payload.destinationAccountId]);
                     }

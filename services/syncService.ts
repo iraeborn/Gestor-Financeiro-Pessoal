@@ -35,14 +35,14 @@ class SyncService {
     }
 
     /**
-     * Mapeia a store local para o endpoint especializado no backend.
-     * Caso não haja rota específica, usa a rota legada (fallback opcional).
+     * Mapeia a loja local para o endpoint especializado no backend.
      */
     private getEndpoint(store: string): string {
         const map: Record<string, string> = {
             'transactions': '/api/transactions/sync',
             'contacts': '/api/contacts/sync',
-            'accounts': '/api/sync/process', // Mantido como exemplo se ainda não migrado
+            // Itens ainda não refatorados usam a rota genérica legada
+            'accounts': '/api/sync/process',
             'goals': '/api/sync/process',
             'categories': '/api/sync/process',
             'branches': '/api/sync/process',
@@ -93,11 +93,11 @@ class SyncService {
                             await localDb.delete('sync_queue', item.id);
                         } else {
                             const errorData = await response.json();
-                            console.error(`[SYNC] Erro no servidor (${url}) ao processar item ${item.id}:`, errorData.error);
-                            break;
+                            console.error(`[SYNC] Erro no servidor (${url}) para ${item.store}:`, errorData.error);
+                            break; // Para o processamento da fila em caso de erro no servidor
                         }
                     } catch (fetchErr) {
-                        console.error(`[SYNC] Erro de rede ao processar item ${item.id}:`, fetchErr);
+                        console.error(`[SYNC] Erro de rede ao processar ${item.store}:`, fetchErr);
                         break;
                     }
                 }

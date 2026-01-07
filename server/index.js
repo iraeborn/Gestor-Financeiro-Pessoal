@@ -99,8 +99,8 @@ app.post('/api/upload', authenticateToken, upload.array('files'), async (req, re
 
 app.use('/api/auth', authRoutes(logAudit));
 app.use('/api', financeRoutes(logAudit));
-app.use('/api/transactions', transactionRoutes(logAudit)); // Rota especializada
-app.use('/api/contacts', contactRoutes(logAudit));       // Rota especializada
+app.use('/api/transactions', transactionRoutes(logAudit)); // Nova rota isolada
+app.use('/api/contacts', contactRoutes(logAudit));           // Nova rota isolada
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));
