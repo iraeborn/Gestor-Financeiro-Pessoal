@@ -41,15 +41,15 @@ class SyncService {
         const map: Record<string, string> = {
             'transactions': '/api/transactions/sync',
             'contacts': '/api/contacts/sync',
-            // Itens ainda não refatorados usam a rota genérica legada
-            'accounts': '/api/sync/process',
+            'accounts': '/api/accounts/sync',
+            'opticalRxs': '/api/optical-rxs/sync',
+            // Itens menores ainda usam o fallback até serem refatorados
             'goals': '/api/sync/process',
             'categories': '/api/sync/process',
             'branches': '/api/sync/process',
             'serviceItems': '/api/sync/process',
             'serviceOrders': '/api/sync/process',
             'commercialOrders': '/api/sync/process',
-            'opticalRxs': '/api/sync/process',
             'salespeople': '/api/sync/process',
             'laboratories': '/api/sync/process',
             'salespersonSchedules': '/api/sync/process',
@@ -94,7 +94,7 @@ class SyncService {
                         } else {
                             const errorData = await response.json();
                             console.error(`[SYNC] Erro no servidor (${url}) para ${item.store}:`, errorData.error);
-                            break; // Para o processamento da fila em caso de erro no servidor
+                            break; 
                         }
                     } catch (fetchErr) {
                         console.error(`[SYNC] Erro de rede ao processar ${item.store}:`, fetchErr);
