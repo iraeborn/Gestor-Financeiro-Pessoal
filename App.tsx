@@ -155,13 +155,14 @@ const AppContent: React.FC<{
 
     const processOrderFinancials = async (order: CommercialOrder): Promise<CommercialOrder> => {
         const prevOrder = state?.commercialOrders.find(o => o.id === order.id);
+        // Detecta se a venda foi confirmada agora
         const isConfirmedNow = order.status === 'CONFIRMED' && (!prevOrder || prevOrder.status !== 'CONFIRMED');
 
         if (isConfirmedNow && !order.transactionId) {
             const transId = crypto.randomUUID();
             const newT: Transaction = {
                 id: transId,
-                description: `Venda #${order.id.substring(0,6).toUpperCase()}: ${order.description}`,
+                description: `Receita Venda #${order.id.substring(0,6).toUpperCase()}: ${order.description}`,
                 amount: order.amount,
                 type: order.type === 'SALE' ? TransactionType.INCOME : TransactionType.EXPENSE,
                 category: order.moduleTag === 'optical' ? 'Venda de Óculos' : 'Vendas e Serviços',
@@ -172,8 +173,9 @@ const AppContent: React.FC<{
                 branchId: order.branchId
             };
             order.transactionId = transId;
+            // Gera o lançamento e atualiza o saldo localmente
             await handleAddTransaction(newT);
-            showAlert("Lançamento financeiro gerado com sucesso!", "success");
+            showAlert("Lançamento financeiro de receita gerado!", "success");
         }
         return order;
     };
@@ -181,7 +183,7 @@ const AppContent: React.FC<{
     const handleStartSaleFromRx = (rx: OpticalRx) => {
         const lensItem: OSItem = {
             id: crypto.randomUUID(),
-            description: `Par de Lentes (RX de ${new Date(rx.rxDate).toLocaleDateString()})`,
+            description: `Par de Lentes (RX #${rx.rxNumber || rx.id.substring(0,4)})`,
             quantity: 1,
             unitPrice: 0,
             totalPrice: 0,
@@ -190,7 +192,7 @@ const AppContent: React.FC<{
         setEditingSale({
             id: crypto.randomUUID(),
             type: 'SALE',
-            description: `Venda p/ ${rx.contactName} (Início via RX)`,
+            description: `Venda p/ ${rx.contactName} (Via RX)`,
             contactId: rx.contactId,
             contactName: rx.contactName,
             rxId: rx.id,

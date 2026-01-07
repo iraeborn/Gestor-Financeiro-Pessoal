@@ -42,7 +42,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS salesperson_schedules (id TEXT PRIMARY KEY, salesperson_id TEXT REFERENCES salespeople(id), date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_orders (id TEXT PRIMARY KEY, title TEXT NOT NULL, contact_id TEXT REFERENCES contacts(id), status TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS commercial_orders (id TEXT PRIMARY KEY, description TEXT NOT NULL, contact_id TEXT REFERENCES contacts(id), amount DECIMAL(15,2) NOT NULL, date DATE NOT NULL, status TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP, account_id TEXT)`,
-        `CREATE TABLE IF NOT EXISTS optical_rxs (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), rx_date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
+        `CREATE TABLE IF NOT EXISTS optical_rxs (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), rx_date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP, status TEXT DEFAULT 'PENDING')`,
         `CREATE TABLE IF NOT EXISTS laboratories (id TEXT PRIMARY KEY, name TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), family_id TEXT, deleted_at TIMESTAMP)`
     ];
@@ -62,7 +62,37 @@ export const initDb = async () => {
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS assignee_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
-        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`
+        `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`,
+        // Migrações para Receitas Óticas (optical_rxs)
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING'`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS rx_number TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS professional_name TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS professional_reg TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS expiration_date DATE`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS sphere_od_longe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS cyl_od_longe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS axis_od_longe INTEGER`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS sphere_oe_longe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS cyl_oe_longe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS axis_oe_longe INTEGER`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS sphere_od_perto DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS cyl_od_perto DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS axis_od_perto INTEGER`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS sphere_oe_perto DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS cyl_oe_perto DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS axis_oe_perto INTEGER`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS addition DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS dnp_od DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS dnp_oe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS height_od DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS height_oe DECIMAL(5,2)`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS observations TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS branch_id TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS laboratory_id TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_status TEXT`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_sent_date DATE`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS lab_return_date DATE`,
+        `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS image_url TEXT`
     ];
     
     try {
