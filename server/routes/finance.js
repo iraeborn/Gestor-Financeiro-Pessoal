@@ -61,16 +61,16 @@ export default function(logAudit) {
                 transactions: isSalesperson 
                     ? ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.user_id = $2 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId, userId]]
                     : ['SELECT t.*, u.name as created_by_name FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE t.family_id = $1 AND t.deleted_at IS NULL ORDER BY t.date DESC', [familyId]],
-                contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                contacts: ['SELECT *, family_id FROM contacts WHERE family_id = $1 AND deleted_at IS NULL ORDER BY name ASC', [familyId]],
                 categories: ['SELECT *, family_id FROM categories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 serviceItems: ['SELECT *, family_id FROM service_items WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 branches: ['SELECT *, family_id FROM branches WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL', [familyId]],
-                salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch LEFT JOIN salespeople s ON sch.salesperson_id = s.id LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL', [familyId]],
+                salespeople: ['SELECT s.*, u.name, u.email, b.name as branch_name FROM salespeople s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON s.branch_id = b.id WHERE s.family_id = $1 AND s.deleted_at IS NULL ORDER BY u.name ASC', [familyId]],
+                salespersonSchedules: ['SELECT sch.*, u.name as salesperson_name, b.name as branch_name FROM salesperson_schedules sch LEFT JOIN salespeople s ON sch.salesperson_id = s.id LEFT JOIN users u ON s.user_id = u.id LEFT JOIN branches b ON sch.branch_id = b.id WHERE sch.family_id = $1 AND sch.deleted_at IS NULL ORDER BY sch.date DESC', [familyId]],
                 serviceOrders: ['SELECT *, family_id FROM service_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 commercialOrders: ['SELECT *, family_id FROM commercial_orders WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                opticalRxs: ['SELECT rx.*, c.name as contact_name FROM optical_rxs rx LEFT JOIN contacts c ON rx.contact_id = c.id WHERE rx.family_id = $1 AND rx.deleted_at IS NULL', [familyId]],
-                laboratories: ['SELECT *, family_id FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                opticalRxs: ['SELECT rx.*, c.name as contact_name FROM optical_rxs rx LEFT JOIN contacts c ON rx.contact_id = c.id WHERE rx.family_id = $1 AND rx.deleted_at IS NULL ORDER BY rx.rx_date DESC', [familyId]],
+                laboratories: ['SELECT *, family_id FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL ORDER BY name ASC', [familyId]],
                 goals: ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 serviceClients: ['SELECT *, family_id FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
             };
@@ -113,7 +113,6 @@ export default function(logAudit) {
 
             if (action === 'DELETE') {
                 if (tableName === 'transactions') {
-                    // Lock e Reversão
                     const tRes = await client.query('SELECT amount, type, account_id, destination_account_id, status FROM transactions WHERE id = $1 FOR UPDATE', [payload.id]);
                     const t = tRes.rows[0];
                     if (t && t.status === 'PAID') {
@@ -131,32 +130,22 @@ export default function(logAudit) {
 
             } else if (action === 'SAVE') {
                 if (tableName === 'transactions') {
-                    // BLOQUEIO E LÓGICA DE DELTA (EVITA CONTAGEM DUPLA)
                     const existingRes = await client.query(
                         'SELECT status, amount, type, account_id, destination_account_id FROM transactions WHERE id = $1 FOR UPDATE', 
                         [payload.id]
                     );
                     const oldT = existingRes.rows[0];
-
-                    // Cálculo da variação para a conta de origem (ou conta principal)
                     const oldImpact = calculateImpact(oldT?.status, oldT?.amount, oldT?.type);
                     const newImpact = calculateImpact(payload.status, payload.amount, payload.type);
                     const delta = newImpact - oldImpact;
 
-                    // Aplica delta na conta de origem se houver mudança ou se a conta mudou
                     if (oldT && oldT.account_id !== payload.accountId) {
-                        // Se mudou de conta, reverte impacto na antiga e aplica na nova
                         if (oldImpact !== 0) await updateAccountBalance(client, oldT.account_id, Math.abs(oldImpact), oldT.type, true);
                         if (newImpact !== 0) await updateAccountBalance(client, payload.accountId, Math.abs(newImpact), payload.type, false);
                     } else if (delta !== 0) {
-                        // Ajusta saldo pela diferença (Soma o delta diretamente)
-                        await client.query(
-                            `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
-                            [delta, payload.accountId]
-                        );
+                        await client.query(`UPDATE accounts SET balance = balance + $1 WHERE id = $2`, [delta, payload.accountId]);
                     }
 
-                    // Cálculo da variação para a conta de destino (Apenas Transferências)
                     if (payload.type === 'TRANSFER') {
                         const oldDestImpact = (oldT?.type === 'TRANSFER' && oldT?.status === 'PAID') ? Number(oldT.amount) : 0;
                         const newDestImpact = (payload.status === 'PAID') ? Number(payload.amount) : 0;
@@ -167,16 +156,12 @@ export default function(logAudit) {
                         } else if (payload.destinationAccountId) {
                             const destDelta = newDestImpact - oldDestImpact;
                             if (destDelta !== 0) {
-                                await client.query(
-                                    `UPDATE accounts SET balance = balance + $1 WHERE id = $2`,
-                                    [destDelta, payload.destinationAccountId]
-                                );
+                                await client.query(`UPDATE accounts SET balance = balance + $1 WHERE id = $2`, [destDelta, payload.destinationAccountId]);
                             }
                         }
                     }
                 }
 
-                // Inserção / Atualização Atômica
                 const fields = Object.keys(payload).filter(k => {
                     const lk = k.toLowerCase();
                     if (['id', 'userid', 'familyid', 'user_id', 'family_id'].includes(lk) || k.startsWith('_')) return false;

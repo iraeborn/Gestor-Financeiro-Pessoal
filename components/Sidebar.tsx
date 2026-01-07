@@ -99,7 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'SRV_CATALOG', label: 'Produtos e Serviços', icon: Package },
         { id: 'SRV_SALES', label: 'Vendas / PDV', icon: ShoppingBag },
         { id: 'FIN_CONTACTS', label: 'Contatos / Clientes', icon: Users },
-        { id: 'SYS_SALESPEOPLE', label: 'Vendedores', icon: BadgeDollarSign, enabled: isAdmin },
+        { id: 'SYS_SALESPEOPLE', label: 'Colaboradores', icon: BadgeDollarSign, enabled: isAdmin },
         { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
     ]},
     { section: 'Comunicação', items: [

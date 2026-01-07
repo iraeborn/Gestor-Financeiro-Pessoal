@@ -38,7 +38,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
         accountId: initialData?.accountId || settings?.defaultAccountId || accounts[0]?.id || ''
     });
 
-    // Trava de Segurança: Vendas Confirmadas ou em processo de confirmação são apenas leitura
+    // Trava de Segurança: Vendas Confirmadas são apenas leitura
     const isLocked = initialData?.status === 'CONFIRMED' || formData.status === 'CONFIRMED';
 
     const [contactSearch, setContactSearch] = useState('');
@@ -125,13 +125,12 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
-        // Não permite salvar se já estava confirmado no banco (bloqueio total)
         if (initialData?.status === 'CONFIRMED') return;
         
         if (!formData.description) return showAlert("A descrição é obrigatória", "warning");
         if (!formData.branchId) return showAlert("Selecione a filial.", "warning");
-        if (!formData.accountId) return showAlert("Selecione a conta de destino para o faturamento.", "warning");
-        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Sua alçada permite no máximo ${effectiveMaxDiscount}%.`, "error");
+        if (!formData.accountId) return showAlert("Selecione a conta para o faturamento.", "warning");
+        if (pricing.isOverDiscount) return showAlert(`Desconto excedido! Limite de ${effectiveMaxDiscount}%.`, "error");
 
         const assignedMember = teamMembers.find(m => m.id === formData.assigneeId);
         onSave({
@@ -158,27 +157,20 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                     </button>
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                            {initialData ? 'Detalhes da Venda' : 'Nova Venda de Óculos'}
+                            {initialData ? 'Editar Venda' : 'Configurar Venda'}
                             {isLocked && <Lock className="w-6 h-6 text-amber-500" />}
                         </h1>
-                        <p className="text-gray-500 font-medium">
-                            {isLocked ? 'Esta venda está consolidada e não permite alterações de valores.' : 'Configure itens, armação e valide o faturamento.'}
-                        </p>
+                        <p className="text-gray-500 font-medium">#{formData.id?.substring(0,8).toUpperCase() || 'Rascunho'}</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
                     <button onClick={onCancel} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase text-[10px] tracking-widest">
                         {isLocked ? 'Voltar' : 'Descartar'}
                     </button>
-                    {(!initialData || initialData.status !== 'CONFIRMED') && (
+                    {!isLocked && (
                         <button onClick={handleSave} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2">
                             <Save className="w-4 h-4" /> {formData.status === 'CONFIRMED' ? 'Confirmar e Faturar' : 'Salvar Venda'}
                         </button>
-                    )}
-                    {initialData?.status === 'CONFIRMED' && (
-                        <div className="bg-emerald-50 text-emerald-700 px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-2 border border-emerald-200 shadow-sm">
-                            <CheckCircle className="w-4 h-4" /> Venda Faturada
-                        </div>
                     )}
                 </div>
             </div>
@@ -189,14 +181,14 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         <div className="space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Descrição do Pedido</label>
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Título do Pedido</label>
                                     <input 
                                         type="text" 
                                         disabled={isLocked}
                                         value={formData.description || ''} 
                                         onChange={e => setFormData({...formData, description: e.target.value})}
-                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none disabled:text-gray-500"
-                                        placeholder="Ex: Venda de Armação e Lentes..."
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Ex: Armação de Grau + Lente Multifocal"
                                         required
                                     />
                                 </div>
@@ -210,12 +202,12 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             value={contactSearch}
                                             onFocus={() => !isLocked && setShowContactDropdown(true)}
                                             onChange={e => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
-                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none disabled:text-gray-500"
+                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
                                             placeholder="Buscar cliente..."
                                         />
                                     </div>
                                     {showContactDropdown && !isLocked && (
-                                        <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in">
+                                        <div className="absolute z-50 w-full bg-white border border-gray-100 rounded-2xl shadow-xl mt-1 max-h-48 overflow-y-auto p-1.5 animate-fade-in border-t-4 border-t-indigo-500">
                                             {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase())).map(c => (
                                                 <button key={c.id} type="button" onClick={() => { setContactSearch(c.name); setFormData({...formData, contactId: c.id}); setShowContactDropdown(false); }} className="w-full text-left px-4 py-2 hover:bg-indigo-50 rounded-lg text-sm font-bold text-gray-600 transition-colors">
                                                     {c.name}
@@ -233,7 +225,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                             disabled={isLocked}
                                             value={formData.date} 
                                             onChange={e => setFormData({...formData, date: e.target.value})}
-                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none disabled:text-gray-500"
+                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
                                         />
                                     </div>
                                 </div>
@@ -241,21 +233,19 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
 
                             <div className="space-y-4 pt-6 border-t border-gray-100">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-indigo-500" /> Itens no Carrinho</h3>
+                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-indigo-500" /> Itens no Pedido</h3>
                                     {!isLocked && (
-                                        <div className="flex gap-2">
-                                            <select 
-                                                className="bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase px-4 py-2 rounded-xl border border-indigo-100 outline-none"
-                                                onChange={e => { if(e.target.value) handleAddItem(e.target.value); e.target.value = ''; }}
-                                            >
-                                                <option value="">+ Selecionar Armação/Lente</option>
-                                                {serviceItems.map(i => <option key={i.id} value={i.id}>[{i.type === 'PRODUCT' ? 'P' : 'S'}] {i.name}</option>)}
-                                            </select>
-                                        </div>
+                                        <select 
+                                            className="bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase px-4 py-2 rounded-xl border border-indigo-100 outline-none"
+                                            onChange={e => { if(e.target.value) handleAddItem(e.target.value); e.target.value = ''; }}
+                                        >
+                                            <option value="">+ Adicionar do Catálogo</option>
+                                            {serviceItems.map(i => <option key={i.id} value={i.id}>[{i.type === 'PRODUCT' ? 'P' : 'S'}] {i.name}</option>)}
+                                        </select>
                                     )}
                                 </div>
 
-                                <div className="bg-slate-50 rounded-[2rem] border border-gray-100 shadow-inner overflow-x-auto">
+                                <div className="bg-slate-50 rounded-[2rem] border border-gray-100 overflow-hidden shadow-inner overflow-x-auto">
                                     <table className="w-full text-left min-w-[700px]">
                                         <thead className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100">
                                             <tr>
@@ -288,7 +278,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                                 disabled={isLocked}
                                                                 value={item.description} 
                                                                 onChange={e => handleUpdateItem(item.id, 'description', e.target.value)}
-                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 p-0 disabled:text-gray-500"
+                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 p-0"
                                                             />
                                                             {item.code && <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mt-1">Ref: {item.code}</span>}
                                                         </div>
@@ -299,7 +289,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                             disabled={isLocked}
                                                             value={item.quantity} 
                                                             onChange={e => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
-                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-black text-center disabled:text-gray-500"
+                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-black text-center"
                                                         />
                                                     </td>
                                                     <td className="p-4">
@@ -309,7 +299,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                             step="0.01"
                                                             value={item.unitPrice} 
                                                             onChange={e => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))}
-                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-black text-center text-indigo-600 disabled:text-indigo-400"
+                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-black text-center text-indigo-600"
                                                         />
                                                     </td>
                                                     <td className="p-4 text-right font-black text-gray-900 text-sm">
@@ -317,13 +307,13 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                     </td>
                                                     {!isLocked && (
                                                         <td className="p-4">
-                                                            <button onClick={() => setFormData(prev => ({...prev, items: prev.items?.filter(i => i.id !== item.id)}))} className="text-gray-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+                                                            <button onClick={() => setFormData(prev => ({...prev, items: prev.items?.filter(i => i.id !== item.id)}))} className="text-gray-300 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
                                                         </td>
                                                     )}
                                                 </tr>
                                             )})}
                                             {(formData.items || []).length === 0 && (
-                                                <tr><td colSpan={6} className="p-10 text-center text-gray-300 italic text-sm">O carrinho está vazio. Adicione armação e lentes.</td></tr>
+                                                <tr><td colSpan={6} className="p-10 text-center text-gray-300 italic text-sm">Carrinho vazio. Adicione itens para calcular o total.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -334,13 +324,14 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                 </div>
 
                 <div className="lg:col-span-1 space-y-6">
+                    {/* Referência Técnica RX (Informativo) */}
                     {linkedRx && (
                         <div className="bg-indigo-900 rounded-[2.5rem] p-6 text-white shadow-xl animate-fade-in space-y-4">
                             <div className="flex items-center gap-3 border-b border-white/10 pb-3">
                                 <Glasses className="w-5 h-5 text-indigo-400" />
                                 <div className="flex-1">
-                                    <h4 className="text-xs font-black uppercase tracking-widest">Referência Técnica RX</h4>
-                                    <p className="text-[10px] text-indigo-300 font-bold uppercase">{linkedRx.rxNumber || 'RECEITA VINCULADA'}</p>
+                                    <h4 className="text-xs font-black uppercase tracking-widest leading-none">Dados da Receita</h4>
+                                    <p className="text-[10px] text-indigo-300 font-bold uppercase mt-1">Ref: {linkedRx.rxNumber || 'RECEITA'}</p>
                                 </div>
                             </div>
                             
@@ -366,18 +357,16 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             <div className="bg-white/5 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
                                 <div>
                                     <p className="text-[9px] font-black text-amber-400 uppercase">Adição (ADD)</p>
-                                    <p className="text-sm font-black">{linkedRx.addition ? `+${linkedRx.addition.toFixed(2)}` : 'N/A'}</p>
+                                    <p className="text-sm font-black">{linkedRx.addition ? `+${linkedRx.addition.toFixed(2)}` : '0.00'}</p>
                                 </div>
                                 <Activity className="w-5 h-5 text-amber-400 opacity-30" />
                             </div>
-                            
-                            <p className="text-[9px] text-center text-indigo-400 font-bold uppercase tracking-tighter">Use estes dados para escolher a lente no catálogo</p>
                         </div>
                     )}
 
                     <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status da Venda</label>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Status do Pedido</label>
                             <select 
                                 disabled={initialData?.status === 'CONFIRMED'}
                                 value={formData.status || 'DRAFT'} 
@@ -400,7 +389,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                     disabled={isLocked}
                                     value={formData.branchId || ''} 
                                     onChange={e => setFormData({...formData, branchId: e.target.value})}
-                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none shadow-lg shadow-slate-200 disabled:bg-slate-700"
+                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none disabled:bg-slate-700"
                                     required
                                 >
                                     <option value="">Selecionar Filial...</option>
@@ -435,33 +424,26 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                         </div>
 
                         <div>
-                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Vendedor</label>
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Colaborador (Venda)</label>
                             <select 
                                 disabled={isLocked}
                                 value={formData.assigneeId || ''} 
                                 onChange={e => setFormData({...formData, assigneeId: e.target.value})}
-                                className="w-full bg-gray-50 border-none rounded-xl p-4 text-sm font-bold outline-none disabled:text-gray-500"
+                                className="w-full bg-gray-50 border-none rounded-xl p-4 text-sm font-bold outline-none"
                             >
-                                <option value="">Quem está atendendo?</option>
-                                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                <option value="">Quem realizou a venda?</option>
+                                {teamMembers.sort((a,b) => a.name.localeCompare(b.name)).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                         </div>
 
                         <div className="pt-6 border-t border-gray-100 space-y-4">
                             <div className="flex justify-between text-xs font-bold text-gray-400 uppercase">
-                                <span>Subtotal Bruto</span>
+                                <span>Subtotal</span>
                                 <span>{formatCurrency(pricing.gross)}</span>
                             </div>
                             
                             <div>
-                                <div className="flex justify-between items-center mb-2 ml-1">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400">Desconto Negociado</label>
-                                    {!isRestrictedUser && !isLocked && (
-                                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest flex items-center gap-1">
-                                            <ShieldCheck className="w-3 h-3" /> Alçada Liberada
-                                        </span>
-                                    )}
-                                </div>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Desconto Negociado</label>
                                 <div className="relative">
                                     <DollarSign className={`w-4 h-4 absolute left-4 top-4 ${pricing.isOverDiscount ? 'text-rose-500' : 'text-emerald-500'}`} />
                                     <input 
@@ -470,18 +452,13 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                         step="0.01"
                                         value={formData.discountAmount || ''} 
                                         onChange={e => setFormData({...formData, discountAmount: Number(e.target.value)})}
-                                        className={`w-full pl-11 py-4 rounded-xl text-sm font-black outline-none border-2 transition-all ${pricing.isOverDiscount ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-gray-50 border-transparent focus:bg-white disabled:text-gray-500'}`}
+                                        className={`w-full pl-11 py-4 rounded-xl text-sm font-black outline-none border-2 transition-all ${pricing.isOverDiscount ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-gray-50 border-transparent focus:bg-white'}`}
                                         placeholder="0,00"
                                     />
                                     <span className={`absolute right-4 top-4 text-[10px] font-black uppercase ${pricing.isOverDiscount ? 'text-rose-600' : 'text-gray-400'}`}>
                                         {Math.round(pricing.discountPct)}% OFF
                                     </span>
                                 </div>
-                                {pricing.isOverDiscount && !isLocked && (
-                                    <p className="text-[9px] font-black text-rose-500 uppercase mt-2 flex items-center gap-1">
-                                        <AlertTriangle className="w-3 h-3" /> Limite de {effectiveMaxDiscount}% excedido
-                                    </p>
-                                )}
                             </div>
 
                             <div className="pt-4 flex justify-between items-center">
@@ -490,37 +467,15 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                             </div>
                         </div>
 
-                        {formData.rxId && (
-                            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-2">
-                                <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest">
-                                    <CheckCircle className="w-4 h-4" /> Venda p/ RX Vinculada
-                                </div>
-                                <p className="text-xs text-emerald-600 font-medium leading-relaxed">Uma Ordem de Serviço de montagem será gerada automaticamente ao confirmar.</p>
-                            </div>
-                        )}
-
-                        {(!initialData || initialData.status !== 'CONFIRMED') && (
+                        {!isLocked && (
                             <button 
                                 onClick={handleSave} 
                                 disabled={pricing.isOverDiscount}
-                                className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50 disabled:grayscale"
+                                className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50"
                             >
-                                <CheckCircle className="w-5 h-5" /> {formData.status === 'CONFIRMED' ? 'Confirmar e Faturar' : 'Salvar Venda'}
+                                <CheckCircle className="w-5 h-5" /> Confirmar e Salvar
                             </button>
                         )}
-                    </div>
-
-                    <div className="bg-slate-900 p-6 rounded-3xl text-white">
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
-                            <Info className="w-4 h-4" /> Informações do Pedido
-                        </h4>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                            {isLocked ? (
-                                <>Este pedido foi bloqueado automaticamente. Ajustes de valor exigem um <strong>estorno no financeiro</strong> para garantir a rastreabilidade.</>
-                            ) : (
-                                <>Ao definir o status como <strong>Confirmado / Pago</strong>, o sistema gerará automaticamente uma receita no seu fluxo de caixa.</>
-                            )}
-                        </p>
                     </div>
                 </div>
             </div>

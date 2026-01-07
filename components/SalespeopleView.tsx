@@ -26,10 +26,6 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
         (s.branchName || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Permitir selecionar qualquer membro da equipe que não seja o dono se necessário, 
-    // mas geralmente são os que possuem o papel de MEMBER ou SALES_OPTICAL
-    const eligibleMembers = members;
-
     const handleOpenModal = (s?: Salesperson) => {
         if (s) setFormData(s);
         else setFormData({ commissionRate: 0 });
@@ -53,13 +49,13 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
         } as Salesperson);
         
         setIsModalOpen(false);
-        showAlert("Vendedor atualizado!", "success");
+        showAlert("Colaborador atualizado!", "success");
     };
 
     const handleDelete = async (id: string, name?: string) => {
         const confirm = await showConfirm({
-            title: "Remover Vendedor",
-            message: `Deseja remover as configurações de vendas de ${name || 'este colaborador'}?`,
+            title: "Remover Colaborador",
+            message: `Deseja remover as configurações de comissão e escala de ${name || 'este colaborador'}?`,
             variant: "danger"
         });
         if (confirm) onDeleteSalesperson(id);
@@ -71,15 +67,15 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
                         <Users className="w-6 h-6 text-indigo-600" />
-                        Equipe de Vendas
+                        Gestão de Colaboradores
                     </h1>
-                    <p className="text-gray-500">Gestão de vendedores, comissões e alocação por unidade.</p>
+                    <p className="text-gray-500">Gestão de equipe, comissões de venda e alocação por unidade.</p>
                 </div>
                 <button 
                     onClick={() => handleOpenModal()}
                     className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-indigo-700 shadow-lg transition-all"
                 >
-                    <UserPlus className="w-4 h-4" /> Configurar Vendedor
+                    <UserPlus className="w-4 h-4" /> Configurar Colaborador
                 </button>
             </div>
 
@@ -87,7 +83,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                 <Search className="w-5 h-5 text-gray-400" />
                 <input 
                     type="text" 
-                    placeholder="Filtrar vendedores..." 
+                    placeholder="Filtrar colaboradores..." 
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     className="flex-1 text-sm outline-none border-none bg-transparent"
@@ -97,7 +93,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filtered.length === 0 ? (
                     <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-3xl border border-dashed border-gray-200">
-                        Nenhum vendedor configurado.
+                        Nenhum colaborador configurado para comissões.
                     </div>
                 ) : filtered.map(seller => (
                     <div key={seller.id} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-6 group hover:shadow-xl transition-all relative overflow-hidden">
@@ -138,10 +134,10 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-10 animate-scale-up border border-slate-100">
-                        <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-8">Configurar Vendedor</h2>
+                        <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-8">Configurar Colaborador</h2>
                         <form onSubmit={handleSave} className="space-y-6">
                             <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Colaborador</label>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Colaborador (Membro da Equipe)</label>
                                 <select 
                                     className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                                     value={formData.userId || ''}
@@ -150,7 +146,7 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                                     required
                                 >
                                     <option value="">Selecionar membro...</option>
-                                    {eligibleMembers.map(m => (
+                                    {members.sort((a,b) => a.name.localeCompare(b.name)).map(m => (
                                         <option key={m.id} value={m.id}>{m.name} ({m.email})</option>
                                     ))}
                                 </select>
@@ -187,13 +183,13 @@ const SalespeopleView: React.FC<SalespeopleViewProps> = ({ salespeople, branches
                             <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
                                 <Info className="w-5 h-5 text-amber-600 shrink-0" />
                                 <p className="text-[10px] font-bold text-amber-800 uppercase leading-relaxed">
-                                    Vendedores configurados aqui terão as vendas associadas automaticamente para cálculo de comissões futuras.
+                                    Colaboradores configurados aqui podem ser vinculados a vendas e orçamentos para rastreabilidade e bonificação.
                                 </p>
                             </div>
 
                             <div className="flex gap-4 pt-6 border-t border-gray-100">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-gray-400 font-bold uppercase text-[10px]">Cancelar</button>
-                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg">Confirmar Vendedor</button>
+                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg">Confirmar Cadastro</button>
                             </div>
                         </form>
                     </div>
