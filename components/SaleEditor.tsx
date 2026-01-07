@@ -368,7 +368,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                     <Landmark className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
                                     <select 
                                         value={formData.accountId || ''} 
-                                        onChange={e => setFormData({...formData, accountId: e.target.value})}
+                                        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })} 
                                         className="w-full pl-11 py-4 bg-gray-50 text-gray-700 rounded-xl text-sm font-bold outline-none border border-gray-100 cursor-pointer appearance-none"
                                         required
                                     >

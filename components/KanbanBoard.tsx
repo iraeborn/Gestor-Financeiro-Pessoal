@@ -1,7 +1,7 @@
 
 import React, { useRef, useState } from 'react';
 import { KanbanItem, KanbanColumnConfig, OSPriority } from '../types';
-import { User, Clock, MoreHorizontal, Zap, ChevronRight, ChevronLeft, UserCog, GripVertical } from 'lucide-react';
+import { User, Clock, MoreHorizontal, Zap, ChevronRight, ChevronLeft, UserCog, GripVertical, Lock } from 'lucide-react';
 
 interface KanbanBoardProps {
   items: KanbanItem[];
@@ -38,7 +38,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
     containerRef.current.scrollLeft = scrollLeft - walk;
   };
 
-  const onDragStart = (e: React.DragEvent, itemId: string) => {
+  const onDragStart = (e: React.DragEvent, itemId: string, status: string) => {
+    // TRAVA: Impede iniciar o arraste se o item já estiver confirmado ou finalizado
+    if (status === 'CONFIRMED' || status === 'FINALIZADA') {
+        e.preventDefault();
+        return;
+    }
+    
     setDraggedItemId(itemId);
     e.dataTransfer.setData('itemId', itemId);
     e.dataTransfer.effectAllowed = 'move';
@@ -111,20 +117,24 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[200px] scrollbar-thin">
-                    {columnItems.map(item => (
+                    {columnItems.map(item => {
+                        const isLocked = item.status === 'CONFIRMED' || item.status === 'FINALIZADA';
+                        
+                        return (
                         <div 
                             key={item.id}
-                            draggable="true"
-                            onDragStart={(e) => onDragStart(e, item.id)}
+                            draggable={!isLocked}
+                            onDragStart={(e) => onDragStart(e, item.id, item.status)}
                             onDragEnd={onDragEnd}
                             onClick={() => onItemClick(item.raw || item)}
-                            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing group relative overflow-hidden animate-scale-up"
+                            className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all group relative overflow-hidden animate-scale-up ${isLocked ? 'cursor-default opacity-90' : 'cursor-grab active:cursor-grabbing'}`}
                         >
                             <div className={`absolute top-0 left-0 bottom-0 w-1 ${getPriorityColor(item.priority)}`}></div>
 
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-1">
-                                    <GripVertical className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    {!isLocked && <GripVertical className="w-3 h-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                    {isLocked && <Lock className="w-3 h-3 text-amber-500" />}
                                     <span className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter bg-indigo-50 px-1.5 py-0.5 rounded">#{item.id.substring(0,6)}</span>
                                 </div>
                                 <button className="p-1 text-slate-300 hover:text-indigo-600 transition-all">
@@ -161,7 +171,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ items, columns, onItemClick, 
                                 )}
                             </div>
                         </div>
-                    ))}
+                    )})}
                     
                     {columnItems.length === 0 && (
                         <div className="py-12 text-center border-2 border-dashed border-slate-200/50 rounded-xl m-2 opacity-50">

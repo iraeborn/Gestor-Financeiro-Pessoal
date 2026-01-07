@@ -127,15 +127,12 @@ const AppContent: React.FC<{
                 const updatedAccounts = prev.accounts.map(acc => {
                     if (acc.id === t.accountId) {
                         let diff = t.amount;
-                        // Débito ou Saída de Transferência subtrai
                         if (t.type === TransactionType.EXPENSE || t.type === TransactionType.TRANSFER) diff *= -1;
-                        
-                        // Se estamos estornando (PAID -> PENDING), invertemos o impacto original (subtraímos a subtração = soma)
                         if (newStatus === TransactionStatus.PENDING) diff *= -1;
                         return { ...acc, balance: acc.balance + diff };
                     }
                     if (t.type === TransactionType.TRANSFER && acc.id === t.destinationAccountId) {
-                        let diff = t.amount; // Na conta de destino é sempre entrada (+)
+                        let diff = t.amount; 
                         if (newStatus === TransactionStatus.PENDING) diff *= -1;
                         return { ...acc, balance: acc.balance + diff };
                     }
@@ -167,7 +164,6 @@ const AppContent: React.FC<{
             if (!prev) return prev;
             
             let updatedAccounts = prev.accounts;
-            // Se o lançamento já for cadastrado como PAGO, atualizamos o saldo localmente agora
             if (newT.status === TransactionStatus.PAID) {
                 updatedAccounts = prev.accounts.map(acc => {
                     if (acc.id === newT.accountId) {
@@ -227,7 +223,6 @@ const AppContent: React.FC<{
                 refreshData();
             },
             onEditTransaction: async (t: any, nc?: Contact, ncat?: Category) => {
-                // A edição completa redireciona o saldo no backend para ser mais seguro devido a possíveis mudanças de conta
                 await api.saveTransaction(t, nc, ncat);
                 refreshData();
             },
@@ -329,6 +324,29 @@ const AppContent: React.FC<{
                     onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
                     onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
                     onSaveOrder={async (order) => {
+                         // Lógica de Geração Automática de Venda Financeira
+                         const prevOrder = state?.commercialOrders.find(o => o.id === order.id);
+                         const becameConfirmed = order.status === 'CONFIRMED' && (!prevOrder || prevOrder.status !== 'CONFIRMED');
+
+                         if (becameConfirmed && !order.transactionId) {
+                             const transId = crypto.randomUUID();
+                             const newT: Transaction = {
+                                 id: transId,
+                                 description: `Venda: ${order.description}`,
+                                 amount: order.amount,
+                                 type: order.type === 'SALE' ? TransactionType.INCOME : TransactionType.EXPENSE,
+                                 category: order.moduleTag === 'optical' ? 'Venda de Óculos' : 'Vendas e Serviços',
+                                 date: order.date,
+                                 status: TransactionStatus.PAID,
+                                 accountId: order.accountId || state?.accounts[0]?.id || '',
+                                 contactId: order.contactId,
+                                 branchId: order.branchId
+                             };
+                             order.transactionId = transId;
+                             // handleAddTransaction já cuida do Optimistic UI do saldo
+                             await handleAddTransaction(newT);
+                         }
+
                          setState(prev => prev ? ({ ...prev, commercialOrders: [order, ...prev.commercialOrders.filter(o => o.id !== order.id)] }) : prev);
                          await api.saveOrder(order);
                          refreshData();
@@ -346,7 +364,37 @@ const AppContent: React.FC<{
                     initialData={editingSale} contacts={state.contacts} serviceItems={state.serviceItems} opticalRxs={state.opticalRxs}
                     branches={state.branches} salespeople={state.salespeople} accounts={state.accounts} currentUser={currentUser} settings={currentUser.settings}
                     onSave={async (order) => {
-                        setState(prev => prev ? ({ ...prev, commercialOrders: [order, ...prev.commercialOrders.filter(o => o.id !== order.id)] }) : prev);
+                        // Reutiliza a mesma lógica de salvamento com confirmação
+                        setState(prev => {
+                            if (!prev) return prev;
+                            const prevOrder = prev.commercialOrders.find(o => o.id === order.id);
+                            if (order.status === 'CONFIRMED' && (!prevOrder || prevOrder.status !== 'CONFIRMED') && !order.transactionId) {
+                                // A geração da transação ocorre no onSaveOrder definido acima se chamarmos a mesma rota.
+                                // Para simplificar e garantir consistência, vamos apenas despachar.
+                            }
+                            return { ...prev, commercialOrders: [order, ...prev.commercialOrders.filter(o => o.id !== order.id)] };
+                        });
+                        
+                        // Chamando a mesma lógica centralizada para gerar financeiro
+                        const prevOrder = state?.commercialOrders.find(o => o.id === order.id);
+                        if (order.status === 'CONFIRMED' && (!prevOrder || prevOrder.status !== 'CONFIRMED') && !order.transactionId) {
+                            const transId = crypto.randomUUID();
+                             const newT: Transaction = {
+                                 id: transId,
+                                 description: `Venda: ${order.description}`,
+                                 amount: order.amount,
+                                 type: order.type === 'SALE' ? TransactionType.INCOME : TransactionType.EXPENSE,
+                                 category: order.moduleTag === 'optical' ? 'Venda de Óculos' : 'Vendas e Serviços',
+                                 date: order.date,
+                                 status: TransactionStatus.PAID,
+                                 accountId: order.accountId || state?.accounts[0]?.id || '',
+                                 contactId: order.contactId,
+                                 branchId: order.branchId
+                             };
+                             order.transactionId = transId;
+                             await handleAddTransaction(newT);
+                        }
+
                         await api.saveOrder(order);
                         refreshData();
                         setCurrentView(order.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES');
