@@ -3,6 +3,8 @@ import { OSPriority, OSStatus, OSType, OSOrigin } from './enums_legacy';
 
 export type { OSStatus, OSType, OSOrigin, OSPriority };
 
+export type PaymentMethod = 'CARD' | 'BOLETO' | 'PIX' | 'CASH';
+
 export interface Branch { 
     id: string; 
     name: string; 
@@ -156,6 +158,8 @@ export interface CommercialOrder {
   assigneeName?: string;
   rxId?: string;
   branchId?: string;
+  paymentMethod?: PaymentMethod;
+  installments?: number;
 }
 
 export interface Contract {

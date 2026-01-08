@@ -148,16 +148,18 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
     };
 
     const generateSKUs = async () => {
-        const attrs = formData.variationAttributes || [];
-        if (attrs.length === 0 || attrs.some(a => a.values.length === 0)) {
-            showAlert("Defina atributos e valores primeiro.", "warning");
+        // CORREÇÃO: Filtrar atributos que não possuem nome ou valores para evitar erro de geração
+        const validAttrs = (formData.variationAttributes || []).filter(a => a.name.trim() !== '' && a.values.length > 0);
+
+        if (validAttrs.length === 0) {
+            showAlert("Defina atributos (ex: Cor) e adicione valores (ex: Azul) antes de gerar os SKUs.", "warning");
             return;
         }
 
         if (formData.skus && formData.skus.length > 0) {
             const confirm = await showConfirm({
-                title: "Regerar SKUs?",
-                message: "A tabela atual será substituída. Deseja continuar?",
+                title: "Substituir Tabela?",
+                message: "A tabela de variações atual será removida e uma nova será criada. Continuar?",
                 variant: "warning"
             });
             if (!confirm) return;
@@ -176,10 +178,10 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
             return res;
         };
 
-        const combinations = combine(attrs);
+        const combinations = combine(validAttrs);
         const newSkus: ProductSKU[] = combinations.map((combo, i) => ({
             id: crypto.randomUUID(),
-            sku: `${formData.code || 'SKU'}-${i + 1}`,
+            sku: `${formData.code || 'ITEM'}-${i + 1}`,
             attributes: combo,
             price: formData.defaultPrice,
             costPrice: formData.costPrice,
@@ -187,7 +189,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
         }));
 
         setFormData(prev => ({ ...prev, skus: newSkus }));
-        showAlert(`${newSkus.length} variações geradas!`, "success");
+        showAlert(`${newSkus.length} SKUs gerados com sucesso!`, "success");
     };
 
     const handleAddComponent = (itemId: string) => {
