@@ -37,7 +37,6 @@ class SyncService {
     private getEndpoint(item: SyncItem): string {
         const store = item.store;
         
-        // Regra especial para transferências
         if (item.action === 'TRANSFER' && store === 'stockTransfers') {
             return '/api/catalog/transfer';
         }
@@ -83,13 +82,18 @@ class SyncService {
                 for (const item of sortedQueue) {
                     try {
                         const url = this.getEndpoint(item);
+                        // ENVELOPE CORRIGIDO: Enviamos action, store e payload
+                        const body = (item.action === 'TRANSFER') 
+                            ? item.payload 
+                            : { action: item.action, store: item.store, payload: item.payload };
+
                         const response = await fetch(url, {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
                             },
-                            body: JSON.stringify(item.payload)
+                            body: JSON.stringify(body)
                         });
 
                         if (response.ok) {

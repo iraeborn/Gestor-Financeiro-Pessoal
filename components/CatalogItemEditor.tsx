@@ -41,7 +41,8 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
         isComposite: false,
         items: [],
         variationAttributes: [],
-        skus: []
+        skus: [],
+        description: ''
     });
 
     useEffect(() => {
@@ -50,7 +51,8 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                 ...initialData,
                 variationAttributes: initialData.variationAttributes || [],
                 skus: initialData.skus || [],
-                items: initialData.items || []
+                items: initialData.items || [],
+                description: initialData.description || ''
             });
         }
     }, [initialData]);
@@ -151,7 +153,6 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
         showAlert(`${newSkus.length} variações geradas!`, "success");
     };
 
-    // --- Lógica de Itens Compostos (Kits) ---
     const handleAddComponent = (itemId: string) => {
         const item = serviceItems.find(i => i.id === itemId);
         if (!item) return;
@@ -163,7 +164,6 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
             unitPrice: item.defaultPrice,
             totalPrice: item.defaultPrice,
             isBillable: true,
-            // Added unit property from source item to fix property missing error
             unit: item.unit
         };
         setFormData(prev => ({ ...prev, items: [...(prev.items || []), newComp] }));
@@ -324,6 +324,17 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                                     <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black" value={formData.unit || ''} onChange={e => setFormData({...formData, unit: e.target.value})} placeholder="un, par, cx" />
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Campo de Descrição */}
+                        <div className="space-y-2">
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Descrição Comercial</label>
+                            <textarea 
+                                className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-medium min-h-[100px] outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner" 
+                                placeholder="Descreva os benefícios e detalhes técnicos deste item..."
+                                value={formData.description || ''}
+                                onChange={e => setFormData({...formData, description: e.target.value})}
+                            />
                         </div>
                     </div>
 
@@ -502,16 +513,6 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                                 </div>
                             </div>
                         )}
-                    </div>
-                    
-                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-8 md:p-10 space-y-4">
-                         <label className="block text-[10px] font-black uppercase text-gray-400 ml-1">Descrição Comercial / Técnica</label>
-                         <textarea 
-                            className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-medium min-h-[120px] outline-none shadow-inner" 
-                            placeholder="Destaque as qualidades deste item no orçamento do cliente..."
-                            value={formData.description || ''}
-                            onChange={e => setFormData({...formData, description: e.target.value})}
-                        />
                     </div>
                 </div>
             </form>
