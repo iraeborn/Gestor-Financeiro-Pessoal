@@ -44,7 +44,7 @@ import HelpCenter from './components/HelpCenter';
 import { HelpProvider, useHelp } from './components/GuidedHelp';
 
 const AppContent: React.FC<{
-    currentUser: User | null;
+    currentUser: User;
     state: AppState | null;
     setState: React.Dispatch<React.SetStateAction<AppState | null>>;
     dataLoaded: boolean;
@@ -195,7 +195,7 @@ const AppContent: React.FC<{
     };
 
     const renderContent = () => {
-        if (!dataLoaded || !state || !currentUser) return <LoadingOverlay isVisible={true} />;
+        if (!dataLoaded || !state) return <LoadingOverlay isVisible={true} />;
         
         const commonFinanceProps = {
             state, settings: currentUser.settings, currentUser,
@@ -277,7 +277,6 @@ const AppContent: React.FC<{
             case 'SYS_HELP': return <HelpCenter activeModules={currentUser.settings?.activeModules} />;
             case 'OPTICAL_LAB':
             case 'SRV_OS':
-                // Fix: Removed invalid contracts/invoices and added missing event handlers to satisfy ServicesViewProps
                 return <ServicesView 
                     currentView={currentView} serviceOrders={state.serviceOrders} commercialOrders={state.commercialOrders}
                     contacts={state.contacts} accounts={state.accounts}
@@ -311,7 +310,6 @@ const AppContent: React.FC<{
                 />;
             case 'OPTICAL_SALES':
             case 'SRV_SALES':
-                // Fix: Removed invalid contracts/invoices and added missing event handlers to satisfy ServicesViewProps
                 return <ServicesView 
                     currentView={currentView} serviceOrders={state.serviceOrders} commercialOrders={state.commercialOrders}
                     contacts={state.contacts} accounts={state.accounts}
@@ -346,7 +344,6 @@ const AppContent: React.FC<{
                     onCancel={() => setCurrentView(editingSale?.moduleTag === 'optical' ? 'OPTICAL_SALES' : 'SRV_SALES')}
                 />;
             case 'SRV_CATALOG':
-                // Fix: Removed invalid contracts/invoices and added missing event handlers to satisfy ServicesViewProps
                 return <ServicesView 
                     currentView={currentView} serviceOrders={state.serviceOrders} commercialOrders={state.commercialOrders}
                     contacts={state.contacts} accounts={state.accounts}
@@ -362,7 +359,7 @@ const AppContent: React.FC<{
 
     return (
         <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden relative">
-            <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser!} onUserUpdate={() => {}} isMobileOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen} />
+            <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={() => {}} isMobileOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen} />
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-40 shrink-0">
                     <button onClick={() => setIsMobileOpen(true)} className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"><MenuIcon className="w-6 h-6" /></button>
@@ -376,12 +373,11 @@ const AppContent: React.FC<{
                     <div className="p-3 md:p-8 max-w-[1600px] mx-auto pb-32 md:pb-8">{renderContent()}</div>
                 </div>
             </main>
-            <ChatFloating currentUser={currentUser!} socket={socket} />
+            <ChatFloating currentUser={currentUser} socket={socket} />
         </div>
     );
 };
 
-// Fix: Added App component to manage global state and providers, and exported it as default
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [state, setState] = useState<AppState | null>(null);
@@ -442,7 +438,11 @@ const App: React.FC = () => {
         }
     }, [currentUser, socket]);
 
-    if (!currentUser && dataLoaded) {
+    if (!dataLoaded) {
+        return <LoadingOverlay isVisible={true} message="Iniciando FinManager..." />;
+    }
+
+    if (!currentUser) {
         return <Auth onLoginSuccess={(user) => { setCurrentUser(user); refreshData(); }} />;
     }
 
