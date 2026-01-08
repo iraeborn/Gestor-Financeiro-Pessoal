@@ -1,5 +1,12 @@
 
-import { AppState, Account, Transaction, FinancialGoal, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, StockTransfer, CommercialOrder, ServiceOrder, Contract, Invoice } from '../types';
+import { 
+    AppState, Account, Transaction, FinancialGoal, User, AppSettings, 
+    Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, 
+    Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, 
+    NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, 
+    StockTransfer, CommercialOrder, ServiceOrder, Contract, Invoice,
+    Branch, CostCenter, Department, Project
+} from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
@@ -17,7 +24,7 @@ const getHeaders = () => ({
 });
 
 // Fix: Implemented missing Auth exports
-export const login = async (email, password) => {
+export const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,7 +35,14 @@ export const login = async (email, password) => {
     return data;
 };
 
-export const register = async (name, email, password, entityType, plan, pjPayload) => {
+export const register = async (
+    name: string, 
+    email: string, 
+    password: string, 
+    entityType: EntityType, 
+    plan: SubscriptionPlan, 
+    pjPayload?: any
+) => {
     const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,7 +53,7 @@ export const register = async (name, email, password, entityType, plan, pjPayloa
     return data;
 };
 
-export const loginWithGoogle = async (credential, entityType, pjPayload) => {
+export const loginWithGoogle = async (credential: string, entityType: EntityType, pjPayload?: any) => {
     const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

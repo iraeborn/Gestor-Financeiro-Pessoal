@@ -1,7 +1,7 @@
 
-import { OSPriority, OSStatus, OSType, OSOrigin } from './enums_legacy'; // Mantendo enums auxiliares
+import { OSPriority, OSStatus, OSType, OSOrigin } from './enums_legacy';
 
-export { OSStatus, OSType, OSOrigin, OSPriority };
+export type { OSStatus, OSType, OSOrigin, OSPriority };
 
 export interface Branch { 
     id: string; 
@@ -18,7 +18,6 @@ export interface CostCenter { id: string; name: string; code?: string; }
 export interface Department { id: string; name: string; }
 export interface Project { id: string; name: string; }
 
-// Added Salesperson interface to fix export errors
 export interface Salesperson {
     id: string;
     userId: string;
@@ -30,7 +29,6 @@ export interface Salesperson {
     commissionRate: number;
 }
 
-// Added SalespersonSchedule interface to fix export errors
 export interface SalespersonSchedule {
     id: string;
     salespersonId: string;
