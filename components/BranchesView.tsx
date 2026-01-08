@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Branch } from '../types';
-import { Store, Plus, MapPin, Phone, Search, Pencil, Trash2, Calendar, ChevronRight, CheckCircle2, XCircle, Globe, Users } from 'lucide-react';
+import { Store, Plus, MapPin, Phone, Search, Pencil, Trash2, Calendar, ChevronRight, CheckCircle2, XCircle, Globe, Users, LayoutDashboard } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface BranchesViewProps {
@@ -10,9 +10,10 @@ interface BranchesViewProps {
     onDeleteBranch: (id: string) => void;
     onManageSchedule: (b: Branch) => void;
     onManageSalesSchedule: (b: Branch) => void;
+    onViewDetails: (b: Branch) => void;
 }
 
-const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch, onDeleteBranch, onManageSchedule, onManageSalesSchedule }) => {
+const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch, onDeleteBranch, onManageSchedule, onManageSalesSchedule, onViewDetails }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -116,18 +117,24 @@ const BranchesView: React.FC<BranchesViewProps> = ({ branches = [], onSaveBranch
                             </div>
 
                             <div className="grid grid-cols-1 gap-2 pt-4 border-t border-gray-50">
+                                <button 
+                                    onClick={() => onViewDetails(branch)}
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                                >
+                                    <LayoutDashboard className="w-4 h-4" /> Cockpit da Unidade
+                                </button>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button 
                                         onClick={() => onManageSchedule(branch)}
                                         className="flex items-center justify-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-bold hover:bg-indigo-100 transition-colors"
                                     >
-                                        <Calendar className="w-3.5 h-3.5" /> Agenda Clínica
+                                        <Calendar className="w-3.5 h-3.5" /> Agenda
                                     </button>
                                     <button 
                                         onClick={() => onManageSalesSchedule(branch)}
                                         className="flex items-center justify-center gap-2 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-bold hover:bg-emerald-100 transition-colors"
                                     >
-                                        <Users className="w-3.5 h-3.5" /> Escala Vendas
+                                        <Users className="w-3.5 h-3.5" /> Escala
                                     </button>
                                 </div>
                                 <div className="flex gap-1">

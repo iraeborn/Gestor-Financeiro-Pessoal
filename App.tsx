@@ -30,6 +30,7 @@ import SettingsView from './components/SettingsView';
 import BranchesView from './components/BranchesView';
 import BranchScheduleView from './components/BranchScheduleView';
 import SalespersonScheduleView from './components/SalespersonScheduleView';
+import BranchDetailsView from './components/BranchDetailsView';
 import OpticalModule from './components/OpticalModule';
 import OpticalRxEditor from './components/OpticalRxEditor';
 import LabsView from './components/LabsView';
@@ -277,7 +278,8 @@ const AppContent: React.FC<{
             case 'SYS_CHAT': return <ChatView currentUser={currentUser} socket={socket} />;
             case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
             case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
-            case 'SYS_BRANCHES': return <BranchesView branches={state.branches || []} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} onManageSalesSchedule={(b) => { setEditingBranch(b); setCurrentView('SYS_SALES_SCHEDULE'); }} />;
+            case 'SYS_BRANCHES': return <BranchesView branches={state.branches || []} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} onManageSalesSchedule={(b) => { setEditingBranch(b); setCurrentView('SYS_SALES_SCHEDULE'); }} onViewDetails={(b) => { setEditingBranch(b); setCurrentView('SYS_BRANCH_DETAILS'); }} />;
+            case 'SYS_BRANCH_DETAILS': return editingBranch ? <BranchDetailsView branch={editingBranch} state={state} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'SRV_BRANCH_SCHEDULE': return editingBranch ? <BranchScheduleView branch={editingBranch} appointments={state.serviceAppointments || []} clients={state.serviceClients || []} onSaveAppointment={(a) => api.saveAppointment(a as ServiceAppointment).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'SYS_SALES_SCHEDULE': return editingBranch ? <SalespersonScheduleView branch={editingBranch} schedules={state.salespersonSchedules || []} salespeople={state.salespeople || []} onSaveSchedule={(s) => api.saveSalespersonSchedule(s).then(refreshData)} onDeleteSchedule={(id) => api.deleteSalespersonSchedule(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs || []} contacts={state.contacts || []} laboratories={state.laboratories || []} branches={state.branches || []} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} onStartSaleFromRx={handleStartSaleFromRx} />;
