@@ -21,7 +21,8 @@ import accountRoutes from './routes/accounts.js';
 import opticalRoutes from './routes/optical.js';
 import orderRoutes from './routes/orders.js';
 import goalRoutes from './routes/goals.js';
-import branchRoutes from './routes/branches.js'; // Nova rota
+import branchRoutes from './routes/branches.js';
+import catalogRoutes from './routes/catalog.js'; // Novo
 import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
 import servicesRoutes from './routes/services.js';
@@ -110,7 +111,8 @@ app.use('/api/accounts', accountRoutes(logAudit));
 app.use('/api/optical-rxs', opticalRoutes(logAudit));
 app.use('/api/orders', orderRoutes(logAudit));
 app.use('/api/goals', goalRoutes(logAudit));
-app.use('/api/branches', branchRoutes(logAudit)); // Nova rota registrada
+app.use('/api/branches', branchRoutes(logAudit));
+app.use('/api/catalog', catalogRoutes(logAudit)); // Novo
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));

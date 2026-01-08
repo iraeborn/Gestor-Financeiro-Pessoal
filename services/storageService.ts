@@ -1,5 +1,5 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, StockTransfer } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
@@ -248,7 +248,8 @@ export const loadInitialData = async (): Promise<AppState> => {
         'branches', 'costCenters', 'departments', 'projects',
         'serviceClients', 'serviceItems', 'serviceAppointments',
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices',
-        'opticalRxs', 'salespeople', 'salespersonSchedules', 'laboratories'
+        'opticalRxs', 'salespeople', 'salespersonSchedules', 'laboratories',
+        'stockTransfers'
     ];
 
     const results: any = {};
@@ -302,6 +303,7 @@ export interface ApiClient {
     deleteLaboratory: (id: string) => Promise<{ success: boolean }>;
     saveSalespersonSchedule: (s: SalespersonSchedule) => Promise<{ success: boolean; id: string }>;
     deleteSalespersonSchedule: (id: string) => Promise<{ success: boolean }>;
+    transferStock: (t: Partial<StockTransfer>) => Promise<{ success: boolean; id: string }>;
 }
 
 export const api: ApiClient = {
@@ -370,6 +372,25 @@ export const api: ApiClient = {
     deleteLaboratory: async (id: string) => api.deleteLocallyAndQueue('laboratories', id),
     saveSalespersonSchedule: async (s: SalespersonSchedule) => api.saveLocallyAndQueue('salespersonSchedules', s),
     deleteSalespersonSchedule: async (id: string) => api.deleteLocallyAndQueue('salespersonSchedules', id),
+
+    transferStock: async (t: Partial<StockTransfer>) => {
+        const id = t.id || crypto.randomUUID();
+        const familyId = getActiveUserFamilyId();
+        const payload = { ...t, id, familyId };
+        
+        // Atualiza localmente o item (estoque)
+        const items = await localDb.getAll<ServiceItem>('serviceItems');
+        const targetItem = items.find(i => i.id === t.serviceItemId);
+        if (targetItem) {
+            // Se for transferência, removemos da origem localmente para feedback visual rápido
+            const updatedItem = { ...targetItem, stockQuantity: (targetItem.stockQuantity || 0) - (t.quantity || 0) };
+            await localDb.put('serviceItems', updatedItem);
+        }
+
+        await localDb.put('stockTransfers', payload);
+        await syncService.enqueue('TRANSFER', 'stockTransfers', payload);
+        return { success: true, id };
+    },
 
     savePJEntity: async (type: string, payload: any) => {
         const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };

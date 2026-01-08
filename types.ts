@@ -289,6 +289,21 @@ export interface AppState {
   salespersonSchedules: SalespersonSchedule[];
   laboratories: Laboratory[];
   companyProfile?: CompanyProfile | null;
+  stockTransfers: StockTransfer[];
+}
+
+export interface StockTransfer {
+    id: string;
+    serviceItemId: string;
+    serviceItemName?: string;
+    fromBranchId: string;
+    fromBranchName?: string;
+    toBranchId: string;
+    toBranchName?: string;
+    quantity: number;
+    date: string;
+    notes?: string;
+    familyId: string;
 }
 
 export interface RoleDefinition {
@@ -456,6 +471,7 @@ export interface ServiceItem {
   name: string; 
   code?: string;
   type: 'SERVICE' | 'PRODUCT';
+  category?: string;
   defaultPrice: number;
   moduleTag: string;
   costPrice?: number;
@@ -466,6 +482,13 @@ export interface ServiceItem {
   description?: string;
   imageUrl?: string;
   unit?: string;
+  // Campos de Estoque e Garantia
+  branchId?: string;
+  stockQuantity?: number;
+  warrantyEnabled?: boolean;
+  warrantyDays?: number;
+  isFreeAllowed?: boolean;
+  autoGenerateOS?: boolean;
 }
 
 export interface OSItem {

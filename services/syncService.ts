@@ -3,7 +3,7 @@ import { localDb } from './localDb';
 
 export interface SyncItem {
     id: string;
-    action: 'SAVE' | 'DELETE';
+    action: 'SAVE' | 'DELETE' | 'TRANSFER';
     store: string;
     payload: any;
     timestamp: number;
@@ -22,7 +22,7 @@ class SyncService {
         this.syncListeners.forEach(cb => cb(status));
     }
 
-    async enqueue(action: 'SAVE' | 'DELETE', store: string, payload: any) {
+    async enqueue(action: 'SAVE' | 'DELETE' | 'TRANSFER', store: string, payload: any) {
         const syncItem: SyncItem = {
             id: payload.id || crypto.randomUUID(),
             action,
@@ -34,10 +34,14 @@ class SyncService {
         this.triggerSync();
     }
 
-    /**
-     * Mapeia a loja local para o endpoint especializado no backend.
-     */
-    private getEndpoint(store: string): string {
+    private getEndpoint(item: SyncItem): string {
+        const store = item.store;
+        
+        // Regra especial para transferências
+        if (item.action === 'TRANSFER' && store === 'stockTransfers') {
+            return '/api/catalog/transfer';
+        }
+
         const map: Record<string, string> = {
             'transactions': '/api/transactions/sync',
             'contacts': '/api/contacts/sync',
@@ -46,9 +50,8 @@ class SyncService {
             'commercialOrders': '/api/orders/sync',
             'goals': '/api/goals/sync',
             'branches': '/api/branches/sync',
-            // Itens menores ainda usam o fallback até serem refatorados
+            'serviceItems': '/api/catalog/sync',
             'categories': '/api/sync/process',
-            'serviceItems': '/api/sync/process',
             'serviceOrders': '/api/sync/process',
             'salespeople': '/api/sync/process',
             'laboratories': '/api/sync/process',
@@ -79,14 +82,14 @@ class SyncService {
 
                 for (const item of sortedQueue) {
                     try {
-                        const url = this.getEndpoint(item.store);
+                        const url = this.getEndpoint(item);
                         const response = await fetch(url, {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
                             },
-                            body: JSON.stringify(item)
+                            body: JSON.stringify(item.payload)
                         });
 
                         if (response.ok) {
@@ -128,7 +131,8 @@ class SyncService {
                 'serviceItems', 'serviceAppointments', 'goals', 'categories', 
                 'branches', 'costCenters', 'departments', 'projects', 
                 'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
-                'opticalRxs', 'companyProfile', 'salespeople', 'laboratories', 'salespersonSchedules'
+                'opticalRxs', 'companyProfile', 'salespeople', 'laboratories', 
+                'salespersonSchedules', 'stockTransfers'
             ];
 
             await Promise.all(storesToClear.map(async (storeName) => {

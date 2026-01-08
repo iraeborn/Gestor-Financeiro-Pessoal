@@ -15,7 +15,7 @@ const numericFields = [
     'sphere_od_perto', 'cyl_od_perto', 'sphere_oe_perto', 'cyl_oe_perto',
     'prisma_od_longe', 'prisma_oe_longe',
     'addition', 'dnp_od', 'dnp_oe', 'height_od', 'height_oe', 'axis_od_longe', 'axis_oe_longe', 'axis_od_perto', 'axis_oe_perto',
-    'years_of_use', 'default_payment_term'
+    'years_of_use', 'default_payment_term', 'stock_quantity', 'quantity'
 ];
 
 const mapToFrontend = (row) => {
@@ -63,7 +63,8 @@ export default function(logAudit) {
                 opticalRxs: ['SELECT rx.*, c.name as contact_name FROM optical_rxs rx LEFT JOIN contacts c ON rx.contact_id = c.id WHERE rx.family_id = $1 AND rx.deleted_at IS NULL ORDER BY rx.rx_date DESC', [familyId]],
                 laboratories: ['SELECT *, family_id FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL ORDER BY name ASC', [familyId]],
                 goals: ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                serviceClients: ['SELECT *, family_id FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]]
+                serviceClients: ['SELECT *, family_id FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
+                stockTransfers: ['SELECT *, family_id FROM stock_transfers WHERE family_id = $1 ORDER BY date DESC', [familyId]]
             };
 
             const results = {};
@@ -98,7 +99,6 @@ export default function(logAudit) {
             if (action === 'DELETE') {
                 await pool.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else {
-                // CORREÇÃO: Filtrar campos de ID e campos de sistema para evitar duplicidade na query gerada
                 const fields = Object.keys(payload).filter(k => 
                     !k.startsWith('_') && 
                     !['id', 'familyId', 'family_id', 'userId', 'user_id'].includes(k)

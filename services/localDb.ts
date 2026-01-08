@@ -2,7 +2,7 @@
 import { AppState } from '../types';
 
 const DB_NAME = 'FinManagerDB';
-const DB_VERSION = 10; // Incrementado para garantir a criação da store faltante
+const DB_VERSION = 11; // Incrementado para versão 11 para adicionar stockTransfers
 
 export class LocalDB {
   private db: IDBDatabase | null = null;
@@ -20,7 +20,7 @@ export class LocalDB {
             'branches', 'costCenters', 'departments', 'projects', 
             'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
             'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 
-            'salespersonSchedules', 'laboratories'
+            'salespersonSchedules', 'laboratories', 'stockTransfers'
           ];
 
           stores.forEach(store => {
@@ -53,7 +53,7 @@ export class LocalDB {
         'branches', 'costCenters', 'departments', 'projects', 
         'serviceOrders', 'commercialOrders', 'contracts', 'invoices', 
         'opticalRxs', 'sync_queue', 'companyProfile', 'salespeople', 
-        'salespersonSchedules', 'laboratories'
+        'salespersonSchedules', 'laboratories', 'stockTransfers'
     ];
     await Promise.all(stores.map(s => this.clearStore(s)));
   }
