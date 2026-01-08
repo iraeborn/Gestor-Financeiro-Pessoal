@@ -47,7 +47,7 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), family_id TEXT, deleted_at TIMESTAMP)`
     ];
 
-    // 2. Migrações de Colunas - Ordem garantida
+    // 2. Migrações de Colunas
     const migrationQueries = [
         `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS contact_id TEXT`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS external_id TEXT`,
@@ -63,7 +63,14 @@ export const initDb = async () => {
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS rx_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS branch_id TEXT`,
         `ALTER TABLE commercial_orders ADD COLUMN IF NOT EXISTS module_tag TEXT`,
-        // Migrações para Receitas Óticas (optical_rxs)
+        // Migrações para Branches
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS user_id TEXT`,
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`,
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS city TEXT`,
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS address TEXT`,
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone TEXT`,
+        `ALTER TABLE branches ADD COLUMN IF NOT EXISTS color TEXT`,
+        // Migrações para Receitas Óticas
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING'`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS rx_number TEXT`,
         `ALTER TABLE optical_rxs ADD COLUMN IF NOT EXISTS professional_name TEXT`,

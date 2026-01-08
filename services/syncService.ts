@@ -45,9 +45,9 @@ class SyncService {
             'opticalRxs': '/api/optical-rxs/sync',
             'commercialOrders': '/api/orders/sync',
             'goals': '/api/goals/sync',
+            'branches': '/api/branches/sync',
             // Itens menores ainda usam o fallback até serem refatorados
             'categories': '/api/sync/process',
-            'branches': '/api/sync/process',
             'serviceItems': '/api/sync/process',
             'serviceOrders': '/api/sync/process',
             'salespeople': '/api/sync/process',

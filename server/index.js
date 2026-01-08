@@ -20,7 +20,8 @@ import contactRoutes from './routes/contacts.js';
 import accountRoutes from './routes/accounts.js';
 import opticalRoutes from './routes/optical.js';
 import orderRoutes from './routes/orders.js';
-import goalRoutes from './routes/goals.js'; // Nova rota
+import goalRoutes from './routes/goals.js';
+import branchRoutes from './routes/branches.js'; // Nova rota
 import crmRoutes from './routes/crm.js';
 import systemRoutes from './routes/system.js';
 import servicesRoutes from './routes/services.js';
@@ -108,7 +109,8 @@ app.use('/api/contacts', contactRoutes(logAudit));
 app.use('/api/accounts', accountRoutes(logAudit));
 app.use('/api/optical-rxs', opticalRoutes(logAudit));
 app.use('/api/orders', orderRoutes(logAudit));
-app.use('/api/goals', goalRoutes(logAudit)); // Nova rota registrada
+app.use('/api/goals', goalRoutes(logAudit));
+app.use('/api/branches', branchRoutes(logAudit)); // Nova rota registrada
 app.use('/api', crmRoutes(logAudit));
 app.use('/api', systemRoutes(logAudit));
 app.use('/api', servicesRoutes(logAudit));

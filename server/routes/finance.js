@@ -98,8 +98,12 @@ export default function(logAudit) {
             if (action === 'DELETE') {
                 await pool.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else {
-                // Lógica de INSERT genérica simplificada (ON CONFLICT)
-                const fields = Object.keys(payload).filter(k => !k.startsWith('_') && !['id', 'familyId', 'family_id'].includes(k));
+                // CORREÇÃO: Filtrar campos de ID e campos de sistema para evitar duplicidade na query gerada
+                const fields = Object.keys(payload).filter(k => 
+                    !k.startsWith('_') && 
+                    !['id', 'familyId', 'family_id', 'userId', 'user_id'].includes(k)
+                );
+                
                 const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
                 const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
                 const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
