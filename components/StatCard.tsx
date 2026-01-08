@@ -12,8 +12,8 @@ interface StatCardProps {
 
 const StatCard: React.FC<StatCardProps> = ({ title, amount, type, subtitle, icon }) => {
   const formatCurrency = (val: number) => {
-    // Fallback para NaN ou valores nulos
-    const safeValue = isNaN(val) || val === null || val === undefined ? 0 : val;
+    // Fallback para NaN ou valores nulos de forma definitiva
+    const safeValue = (typeof val === 'number' && !isNaN(val)) ? val : 0;
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeValue);
   };
 
@@ -31,7 +31,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, amount, type, subtitle, icon
       break;
     case 'info':
       colorClass = 'text-blue-600 bg-blue-50';
-      IconComp = ArrowUpRight; // Generic
+      IconComp = ArrowUpRight;
       break;
     default:
       colorClass = 'text-gray-600 bg-gray-50';

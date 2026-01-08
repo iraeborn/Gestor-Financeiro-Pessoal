@@ -9,17 +9,22 @@ interface ChartsProps {
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-const ACC_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6']; // Bank, Wallet, Card, Inv
+const ACC_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6']; 
+
+const formatCurrency = (val: number) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
+const formatCompact = (val: number) => 
+  new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short' }).format(val || 0);
 
 export const CashFlowChart: React.FC<ChartsProps> = ({ transactions = [] }) => {
   const dataMap = new Map<string, { income: number; expense: number }>();
   
-  // Sort by date and take last 7-10 entries
-  const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sorted = [...transactions]
+    .filter(t => t && t.date)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
-  // Simple grouping by day (MM-DD)
   sorted.forEach(t => {
-    // Ignore Transfers for Cash Flow (Net 0)
     if (t.type === TransactionType.TRANSFER) return;
 
     const date = t.date.substring(5); // MM-DD
@@ -27,18 +32,17 @@ export const CashFlowChart: React.FC<ChartsProps> = ({ transactions = [] }) => {
       dataMap.set(date, { income: 0, expense: 0 });
     }
     const curr = dataMap.get(date)!;
-    if (t.type === TransactionType.INCOME) curr.income += t.amount;
-    else if (t.type === TransactionType.EXPENSE) curr.expense += t.amount;
+    if (t.type === TransactionType.INCOME) curr.income += Number(t.amount) || 0;
+    else if (t.type === TransactionType.EXPENSE) curr.expense += Number(t.amount) || 0;
   });
 
-  // Take only last 7 days of activity for cleaner dashboard view
   const data = Array.from(dataMap.entries()).map(([date, vals]) => ({
     name: date,
     ...vals
   })).slice(-7);
 
   if (data.length === 0) {
-      return <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados recentes</div>;
+      return <div className="h-64 flex items-center justify-center text-gray-400 text-sm font-medium italic">Sem dados de movimentação recente</div>;
   }
 
   return (
@@ -46,14 +50,21 @@ export const CashFlowChart: React.FC<ChartsProps> = ({ transactions = [] }) => {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} barGap={4}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-          <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} />
+          <YAxis 
+            axisLine={false} 
+            tickLine={false} 
+            tick={{fill: '#94a3b8', fontSize: 11}} 
+            tickFormatter={(value) => `R$ ${formatCompact(value)}`}
+          />
           <Tooltip 
             cursor={{fill: '#f8fafc'}}
-            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+            formatter={(value: number) => [formatCurrency(value), ""]}
+            labelStyle={{ fontWeight: 'bold', color: '#1e293b', marginBottom: '4px' }}
+            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
           />
-          <Bar dataKey="income" name="Receitas" fill="#10b981" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="expense" name="Despesas" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="income" name="Entradas" fill="#10b981" radius={[6, 6, 0, 0]} />
+          <Bar dataKey="expense" name="Saídas" fill="#f43f5e" radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -61,21 +72,21 @@ export const CashFlowChart: React.FC<ChartsProps> = ({ transactions = [] }) => {
 };
 
 export const ExpensesByCategory: React.FC<ChartsProps> = ({ transactions = [] }) => {
-  const expenses = transactions.filter(t => t.type === TransactionType.EXPENSE);
+  const expenses = transactions.filter(t => t && t.type === TransactionType.EXPENSE);
   const dataMap = new Map<string, number>();
 
   expenses.forEach(t => {
     const current = dataMap.get(t.category) || 0;
-    dataMap.set(t.category, current + t.amount);
+    dataMap.set(t.category, current + (Number(t.amount) || 0));
   });
 
   const data = Array.from(dataMap.entries())
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 5); // Top 5 categories
+    .slice(0, 5);
 
   if (data.length === 0) {
-      return <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem despesas registradas</div>;
+      return <div className="h-64 flex items-center justify-center text-gray-400 text-sm font-medium italic">Sem despesas registradas</div>;
   }
 
   return (
@@ -88,18 +99,18 @@ export const ExpensesByCategory: React.FC<ChartsProps> = ({ transactions = [] })
             cy="50%"
             innerRadius={60}
             outerRadius={80}
-            paddingAngle={5}
+            paddingAngle={8}
             dataKey="value"
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
             ))}
           </Pie>
           <Tooltip 
-            formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
-            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+            formatter={(value: number) => [formatCurrency(value), "Total"]}
+            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }} 
           />
-          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px'}} />
+          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', fontWeight: 600, color: '#64748b'}} />
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -107,18 +118,16 @@ export const ExpensesByCategory: React.FC<ChartsProps> = ({ transactions = [] })
 };
 
 export const BalanceDistributionChart: React.FC<ChartsProps> = ({ accounts = [] }) => {
-    // Filter out negative balances (credit cards) for distribution chart usually, or treat them separately.
-    // Let's show positive assets distribution.
     const data = accounts
-        .filter(a => a.balance > 0)
+        .filter(a => a && a.balance > 0)
         .map(a => ({
             name: a.name,
-            value: a.balance,
+            value: Number(a.balance) || 0,
             type: a.type
         }));
 
     if (data.length === 0) {
-        return <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem saldo positivo</div>;
+        return <div className="h-64 flex items-center justify-center text-gray-400 text-sm font-medium italic">Nenhum saldo positivo</div>;
     }
 
     return (
@@ -135,14 +144,14 @@ export const BalanceDistributionChart: React.FC<ChartsProps> = ({ accounts = [] 
                 dataKey="value"
             >
                 {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={ACC_COLORS[index % ACC_COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={ACC_COLORS[index % ACC_COLORS.length]} stroke="none" />
                 ))}
             </Pie>
             <Tooltip 
-                formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                formatter={(value: number) => [formatCurrency(value), "Saldo"]}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} 
             />
-            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px'}} />
+            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', fontWeight: 600}} />
             </PieChart>
         </ResponsiveContainer>
         </div>
@@ -151,42 +160,34 @@ export const BalanceDistributionChart: React.FC<ChartsProps> = ({ accounts = [] 
 
 export const BalanceHistoryChart: React.FC<ChartsProps> = ({ accounts = [], transactions = [] }) => {
     const data = useMemo(() => {
+        if (!accounts || accounts.length === 0) return [];
         const historyData = [];
-        // 1. Get current total balance
-        let currentBalance = accounts.reduce((acc, a) => acc + a.balance, 0);
+        let currentBalance = accounts.reduce((acc, a) => acc + (Number(a.balance) || 0), 0);
         
-        // 2. Map transactions by date to calculate daily change
         const transMap = new Map<string, number>();
-        transactions.forEach(t => {
-            if (t.status === TransactionStatus.PAID) {
+        (transactions || []).forEach(t => {
+            if (t && t.status === TransactionStatus.PAID) {
                 const date = t.date.split('T')[0];
                 let amount = 0;
-                if (t.type === TransactionType.INCOME) amount = t.amount;
-                else if (t.type === TransactionType.EXPENSE) amount = -t.amount;
-                // Transfers net to 0 generally if internal, but simplistic view:
-                // If it's a transfer, unless we filter accounts, the net sum of total assets is 0. 
-                // We assume internal transfers cancel out in the global sum.
+                if (t.type === TransactionType.INCOME) amount = Number(t.amount) || 0;
+                else if (t.type === TransactionType.EXPENSE) amount = -(Number(t.amount) || 0);
                 
                 transMap.set(date, (transMap.get(date) || 0) + amount);
             }
         });
 
-        // 3. Loop backwards 30 days
         for (let i = 0; i < 30; i++) {
             const d = new Date();
             d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().split('T')[0];
             const displayDate = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-            // Push current state for this day
             historyData.push({
                 name: displayDate,
                 balance: currentBalance,
                 rawDate: d
             });
 
-            // Calculate opening balance for this day (which is closing for previous day in reverse)
-            // CurrentBalance is end-of-day. To get start-of-day (or prev end-of-day), subtract today's net change.
             const change = transMap.get(dateStr) || 0;
             currentBalance -= change; 
         }
@@ -194,8 +195,8 @@ export const BalanceHistoryChart: React.FC<ChartsProps> = ({ accounts = [], tran
         return historyData.reverse();
     }, [accounts, transactions]);
 
-    if (accounts.length === 0) {
-        return <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem contas cadastradas</div>;
+    if (data.length === 0) {
+        return <div className="h-64 flex items-center justify-center text-gray-400 text-sm font-medium italic">Dados insuficientes para histórico</div>;
     }
 
     return (
@@ -213,23 +214,20 @@ export const BalanceHistoryChart: React.FC<ChartsProps> = ({ accounts = [], tran
                         dataKey="name" 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{fill: '#94a3b8', fontSize: 11}} 
+                        tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 600}} 
                         interval={4}
                     />
-                    <YAxis 
-                        hide 
-                        domain={['auto', 'auto']}
-                    />
+                    <YAxis hide domain={['auto', 'auto']} />
                     <Tooltip 
-                        formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '4px' }}
+                        formatter={(value: number) => [formatCurrency(value), "Saldo Total"]}
+                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        labelStyle={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}
                     />
                     <Area 
                         type="monotone" 
                         dataKey="balance" 
                         stroke="#6366f1" 
-                        strokeWidth={2}
+                        strokeWidth={3}
                         fillOpacity={1} 
                         fill="url(#colorBalance)" 
                         name="Saldo Acumulado"

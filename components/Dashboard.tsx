@@ -58,18 +58,18 @@ const Dashboard: React.FC<DashboardProps> = ({
     const now = new Date();
     const firstDay = now.toISOString().split('T')[0].substring(0, 8) + '01';
     
-    const transactions = state.transactions || [];
-    const accounts = state.accounts || [];
+    const transactions = (state.transactions || []).filter(Boolean);
+    const accounts = (state.accounts || []).filter(Boolean);
 
-    const saldoReal = isSalesperson ? 0 : accounts.reduce((acc, a) => acc + a.balance, 0);
+    const saldoReal = isSalesperson ? 0 : accounts.reduce((acc, a) => acc + (Number(a.balance) || 0), 0);
     const entradasMes = transactions
         .filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PAID && t.date >= firstDay)
-        .reduce((acc, t) => acc + t.amount, 0);
+        .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
     
     const opticalStats = {
-        labPendentes: state.serviceOrders?.filter(o => o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
-        rxNovas: state.opticalRxs?.filter(rx => rx.rxDate >= firstDay).length || 0,
-        labProntos: state.opticalRxs?.filter(rx => rx.labStatus === 'LAB_PRONTO').length || 0
+        labPendentes: (state.serviceOrders || []).filter(o => o && o.moduleTag === 'optical' && ['ABERTA', 'EM_EXECUCAO'].includes(o.status)).length || 0,
+        rxNovas: (state.opticalRxs || []).filter(rx => rx && rx.rxDate >= firstDay).length || 0,
+        labProntos: (state.opticalRxs || []).filter(rx => rx && rx.labStatus === 'LAB_PRONTO').length || 0
     };
 
     return { saldoReal, entradasMes, opticalStats, currentTransactions: transactions };
@@ -80,6 +80,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 10);
   }, [metrics.currentTransactions]);
+
+  const formatBRL = (val: number) => 
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
   if (!state) return null;
 
@@ -127,7 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <TrendingUp className="w-5 h-5 text-emerald-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
-                      {metrics.entradasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatBRL(metrics.entradasMes)}
                   </h3>
                   <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Acumulado no mês</p>
               </div>
@@ -157,7 +160,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <Landmark className="w-5 h-5 text-indigo-500" />
                   </div>
                   <h3 className="text-2xl font-black text-gray-900">
-                      {metrics.saldoReal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {formatBRL(metrics.saldoReal)}
                   </h3>
                   <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Soma de todas as contas</p>
               </div>

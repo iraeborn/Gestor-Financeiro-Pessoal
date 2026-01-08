@@ -13,14 +13,13 @@ interface GoalsViewProps {
   onAddTransaction: (t: Omit<Transaction, 'id'>) => void;
 }
 
-const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, onSaveGoal, onDeleteGoal, onAddTransaction }) => {
+const GoalsView: React.FC<GoalsViewProps> = ({ goals = [], accounts = [], transactions = [], onSaveGoal, onDeleteGoal, onAddTransaction }) => {
   const { showAlert } = useAlert();
   const { showConfirm } = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isContribModalOpen, setIsContribModalOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<FinancialGoal | null>(null);
   
-  // Estado do formulário de criação/edição
   const [formData, setFormData] = useState({ 
     id: '', 
     name: '', 
@@ -29,18 +28,21 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
     deadline: '' 
   });
 
-  // Estado do aporte (investimento na meta)
   const [contribData, setContribData] = useState({ 
     amount: '', 
     accountId: '', 
     date: new Date().toISOString().split('T')[0] 
   });
 
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+
   const getGoalRealProgress = (goal: FinancialGoal) => {
-      const contributions = transactions
-          .filter(t => t.goalId === goal.id && t.status === TransactionStatus.PAID)
-          .reduce((acc, t) => acc + t.amount, 0);
-      return (Number(goal.currentAmount) || 0) + contributions;
+      if (!goal) return 0;
+      const contributions = (transactions || [])
+          .filter(t => t && t.goalId === goal.id && t.status === TransactionStatus.PAID)
+          .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      return (Number(goal.currentAmount || goal.current_amount) || 0) + contributions;
   };
 
   const handleSaveGoal = (e: React.FormEvent) => {
@@ -81,8 +83,6 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
       showAlert("Investimento realizado com sucesso!", "success");
   };
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-
   return (
     <div className="space-y-8 animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -102,9 +102,9 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {goals.map(goal => {
+          {goals.filter(Boolean).map(goal => {
               const realAmount = getGoalRealProgress(goal);
-              const percent = Math.min(100, Math.round((realAmount / goal.targetAmount) * 100));
+              const percent = Math.min(100, Math.round((realAmount / (Number(goal.targetAmount) || 1)) * 100));
               const isCompleted = percent >= 100;
 
               return (
@@ -117,7 +117,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
                                 <h3 className="font-black text-gray-900 text-xl truncate pr-4">{goal.name}</h3>
                                 <div className="flex items-center gap-2 mt-1 text-gray-400 font-bold uppercase text-[10px] tracking-widest">
                                     <Calendar className="w-3.5 h-3.5" />
-                                    Vence em {new Date(goal.deadline).toLocaleDateString('pt-BR')}
+                                    Vence em {goal.deadline ? new Date(goal.deadline).toLocaleDateString('pt-BR') : '--/--'}
                                 </div>
                             </div>
                             <div className={`w-14 h-14 rounded-2xl border-4 flex items-center justify-center font-black text-sm transition-colors ${isCompleted ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-indigo-50 text-indigo-600'}`}>
@@ -137,8 +137,8 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
                                 ></div>
                             </div>
                             <div className="flex justify-between text-[10px] text-gray-400 uppercase font-black tracking-widest pt-1">
-                                <span>Alvo: {formatCurrency(goal.targetAmount)}</span>
-                                <span>Faltam: {formatCurrency(Math.max(0, goal.targetAmount - realAmount))}</span>
+                                <span>Alvo: {formatCurrency(Number(goal.targetAmount))}</span>
+                                <span>Faltam: {formatCurrency(Math.max(0, Number(goal.targetAmount) - realAmount))}</span>
                             </div>
                         </div>
                       </div>
@@ -247,7 +247,7 @@ const GoalsView: React.FC<GoalsViewProps> = ({ goals, accounts, transactions, on
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">De qual conta sai o dinheiro?</label>
                         <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm" value={contribData.accountId} onChange={e => setContribData({...contribData, accountId:e.target.value})} required>
-                            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} (Saldo: {formatCurrency(a.balance)})</option>)}
+                            {accounts.map(a => <option key={a.id} value={a.id}>{a.name} (Saldo: {formatCurrency(Number(a.balance))})</option>)}
                         </select>
                       </div>
 

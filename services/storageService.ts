@@ -36,7 +36,6 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
-    // Limpamos o banco local para garantir que a carga inicial puxe dados frescos
     await localDb.clearAllStores();
     return data;
 };
@@ -258,20 +257,33 @@ export const loadInitialData = async (): Promise<AppState> => {
     for (const store of stores) {
         const rawData = await localDb.getAll(store) || [];
         results[store] = rawData.filter((item: any) => {
+            if (!item) return false;
             const itemFamilyId = String(item.familyId || item.family_id || '');
-            if (!currentFamilyId) return true; // Se sem ID (falha decoding), traz tudo p/ não quebrar
+            // Se não tivermos familyId no token, deixamos passar para não travar a UI
+            if (!currentFamilyId || currentFamilyId === "undefined" || currentFamilyId === "") return true; 
             return itemFamilyId === currentFamilyId;
         });
     }
     
-    // Processamento do Company Profile (Objeto único)
     const companyProfiles = await localDb.getAll('companyProfile');
     results.companyProfile = companyProfiles.find((p: any) => {
+        if (!p) return false;
         const pFamilyId = String(p.familyId || p.family_id || '');
         return !currentFamilyId || pFamilyId === currentFamilyId;
     }) || null;
 
-    return results as AppState;
+    // Garante que todas as chaves obrigatórias de AppState existam como arrays
+    const finalState = {
+        accounts: [], transactions: [], contacts: [], goals: [], categories: [],
+        branches: [], costCenters: [], departments: [], projects: [],
+        serviceClients: [], serviceItems: [], serviceAppointments: [],
+        serviceOrders: [], commercialOrders: [], contracts: [], invoices: [],
+        opticalRxs: [], salespeople: [], salespersonSchedules: [], laboratories: [],
+        stockTransfers: [], companyProfile: null,
+        ...results
+    };
+
+    return finalState as AppState;
 };
 
 export interface ApiClient {
@@ -313,16 +325,8 @@ export const api: ApiClient = {
     saveLocallyAndQueue: async (store: string, data: any) => {
         const id = data.id || crypto.randomUUID();
         const familyId = getActiveUserFamilyId();
-        
         if (!familyId) throw new Error("Sessão inválida: familyId ausente.");
-
-        const payload = { 
-            ...data, 
-            id, 
-            familyId, 
-            family_id: familyId
-        };
-        
+        const payload = { ...data, id, familyId, family_id: familyId };
         await localDb.put(store, payload);
         await syncService.enqueue('SAVE', store, payload);
         return { success: true, id };
@@ -337,10 +341,8 @@ export const api: ApiClient = {
     saveTransaction: async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
         const transId = t.id || crypto.randomUUID();
         const transactionWithId = { ...t, id: transId };
-
         if (newContact) await api.saveContact(newContact);
         if (newCategory) await api.saveCategory(newCategory);
-        
         return api.saveLocallyAndQueue('transactions', transactionWithId);
     },
 
@@ -351,16 +353,14 @@ export const api: ApiClient = {
     deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
     saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
     saveBulkContacts: async (contacts: Contact[]) => {
-        for (const c of contacts) {
-            await api.saveLocallyAndQueue('contacts', c);
-        }
+        for (const c of contacts) { if (c) await api.saveLocallyAndQueue('contacts', c); }
         return { success: true };
     },
     deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),
     saveCategory: async (c: Category) => api.saveLocallyAndQueue('categories', c),
     deleteCategory: async (id: string) => api.deleteLocallyAndQueue('categories', id),
     saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
-    deleteOpticalRx: async (id: string) => api.deleteOpticalRx(id),
+    deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
     deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
@@ -380,14 +380,12 @@ export const api: ApiClient = {
         const id = t.id || crypto.randomUUID();
         const familyId = getActiveUserFamilyId();
         const payload = { ...t, id, familyId };
-        
         const items = await localDb.getAll<ServiceItem>('serviceItems');
-        const targetItem = items.find(i => i.id === t.serviceItemId);
+        const targetItem = items.find(i => i && i.id === t.serviceItemId);
         if (targetItem) {
             const updatedItem = { ...targetItem, stockQuantity: (targetItem.stockQuantity || 0) - (t.quantity || 0) };
             await localDb.put('serviceItems', updatedItem);
         }
-
         await localDb.put('stockTransfers', payload);
         await syncService.enqueue('TRANSFER', 'stockTransfers', payload);
         return { success: true, id };
@@ -397,12 +395,10 @@ export const api: ApiClient = {
         const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };
         const store = storeMap[type];
         if (store) return api.saveLocallyAndQueue(store, payload);
-        
         const familyId = getActiveUserFamilyId();
         const profile = { ...payload, familyId, family_id: familyId };
         await localDb.put('companyProfile', profile);
-        // Sincronização explícita para o perfil da empresa
-        await syncService.enqueue('SAVE', 'categories', profile); // Fallback process
+        await syncService.enqueue('SAVE', 'categories', profile); 
         return { success: true };
     },
     deletePJEntity: async (type: string, id: string) => {
