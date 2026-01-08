@@ -32,6 +32,7 @@ const mapToFrontend = (row) => {
         }
         newRow[camelKey] = value;
     }
+    // Garante que o familyId esteja sempre presente para o filtro do front
     if (row.family_id && !newRow.familyId) {
         newRow.familyId = row.family_id;
     }
@@ -72,11 +73,19 @@ export default function(logAudit) {
                 const resDb = await pool.query(queryDefs[key][0], queryDefs[key][1]);
                 results[key] = resDb.rows.map(r => mapToFrontend(r));
             }
+            
+            // Busca perfil da empresa separadamente para não vir como array se for único
+            const profileRes = await pool.query('SELECT * FROM company_profiles WHERE family_id = $1 LIMIT 1', [familyId]);
+            results.companyProfile = profileRes.rows[0] ? mapToFrontend(profileRes.rows[0]) : null;
+
             res.json(results);
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            console.error("Initial Data Error:", err);
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
-    // Rota legada de fallback para stores ainda não migradas para controllers próprios
+    // Rota legada de fallback para sincronização de itens simples
     router.post('/sync/process', authenticateToken, async (req, res) => {
         const { action, store, payload } = req.body;
         const userId = req.user.id;
@@ -94,14 +103,14 @@ export default function(logAudit) {
             };
 
             const tableName = tableMap[store];
-            if (!tableName) throw new Error(`Loja ${store} não mapeada ou já migrada.`);
+            if (!tableName) throw new Error(`Loja ${store} não mapeada ou já migrada para controller próprio.`);
 
             if (action === 'DELETE') {
                 await pool.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
             } else {
                 const fields = Object.keys(payload).filter(k => 
                     !k.startsWith('_') && 
-                    !['id', 'familyId', 'family_id', 'userId', 'user_id'].includes(k)
+                    !['id', 'familyId', 'family_id', 'userId', 'user_id', 'contactName', 'assigneeName', 'branchName'].includes(k)
                 );
                 
                 const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
@@ -116,7 +125,10 @@ export default function(logAudit) {
                 await pool.query(query, values);
             }
             res.json({ success: true });
-        } catch (err) { res.status(500).json({ error: err.message }); }
+        } catch (err) { 
+            console.error("Sync Process Error:", err);
+            res.status(500).json({ error: err.message }); 
+        }
     });
 
     return router;

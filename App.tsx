@@ -409,18 +409,23 @@ const App: React.FC = () => {
             return;
         }
         try {
+            // 1. Identifica o usuário
             const { user } = await refreshUser();
             setCurrentUser(user);
+            // 2. Com o usuário identificado (e o token ativo no storage), puxa os dados
             await refreshData();
         } catch (e) {
+            console.error("Auth check failed", e);
             localStorage.removeItem('token');
         } finally {
+            // 3. Só agora liberamos a tela principal
             setDataLoaded(true);
         }
     };
 
     const refreshData = async () => {
         try {
+            // pullFromServer acontece dentro de loadInitialData se houver internet
             const initialData = await loadInitialData();
             setState(initialData);
             const familyMembers = await getFamilyMembers();
@@ -457,7 +462,12 @@ const App: React.FC = () => {
     }
 
     if (!currentUser) {
-        return <Auth onLoginSuccess={(user) => { setCurrentUser(user); refreshData(); }} />;
+        return <Auth onLoginSuccess={(user) => { 
+            setCurrentUser(user); 
+            // Após login, garantimos a carga de dados antes de sumir o Loading
+            setDataLoaded(false);
+            refreshData().finally(() => setDataLoaded(true));
+        }} />;
     }
 
     return (

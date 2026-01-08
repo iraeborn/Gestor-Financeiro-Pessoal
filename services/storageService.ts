@@ -13,15 +13,18 @@ const getActiveUserFamilyId = (): string | null => {
     const token = localStorage.getItem('token');
     if (!token) return null;
     try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return String(payload.familyId || payload.id);
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        const payload = JSON.parse(jsonPayload);
+        return String(payload.familyId || payload.id || '');
     } catch (e) {
+        console.error("Token decoding error:", e);
         return null;
     }
 };
 
 export const login = async (email: string, password: string): Promise<AuthResponse> => {
-    await localDb.clearAllStores();
     const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -33,6 +36,7 @@ export const login = async (email: string, password: string): Promise<AuthRespon
     }
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    // Limpamos o banco local para garantir que a carga inicial puxe dados frescos
     await localDb.clearAllStores();
     return data;
 };
@@ -51,7 +55,6 @@ export const refreshUser = async (): Promise<{ user: User }> => {
 };
 
 export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, pjPayload?: any): Promise<AuthResponse> => {
-    await localDb.clearAllStores();
     const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,7 +71,6 @@ export const register = async (name: string, email: string, password: string, en
 };
 
 export const loginWithGoogle = async (credential: string, entityType?: EntityType, pjPayload?: any): Promise<AuthResponse> => {
-    await localDb.clearAllStores();
     const res = await fetch(`${API_URL}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,7 +241,7 @@ export const loadInitialData = async (): Promise<AppState> => {
         try {
             await syncService.pullFromServer();
         } catch (e) {
-            console.error("Sync pull failed:", e);
+            console.error("Sync pull failed during loadInitialData:", e);
         }
     }
 
@@ -257,15 +259,16 @@ export const loadInitialData = async (): Promise<AppState> => {
         const rawData = await localDb.getAll(store) || [];
         results[store] = rawData.filter((item: any) => {
             const itemFamilyId = String(item.familyId || item.family_id || '');
-            if (!currentFamilyId) return true;
+            if (!currentFamilyId) return true; // Se sem ID (falha decoding), traz tudo p/ não quebrar
             return itemFamilyId === currentFamilyId;
         });
     }
     
+    // Processamento do Company Profile (Objeto único)
     const companyProfiles = await localDb.getAll('companyProfile');
     results.companyProfile = companyProfiles.find((p: any) => {
         const pFamilyId = String(p.familyId || p.family_id || '');
-        return pFamilyId === currentFamilyId;
+        return !currentFamilyId || pFamilyId === currentFamilyId;
     }) || null;
 
     return results as AppState;
@@ -357,7 +360,7 @@ export const api: ApiClient = {
     saveCategory: async (c: Category) => api.saveLocallyAndQueue('categories', c),
     deleteCategory: async (id: string) => api.deleteLocallyAndQueue('categories', id),
     saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
-    deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
+    deleteOpticalRx: async (id: string) => api.deleteOpticalRx(id),
     saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
     deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
     saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
@@ -378,11 +381,9 @@ export const api: ApiClient = {
         const familyId = getActiveUserFamilyId();
         const payload = { ...t, id, familyId };
         
-        // Atualiza localmente o item (estoque)
         const items = await localDb.getAll<ServiceItem>('serviceItems');
         const targetItem = items.find(i => i.id === t.serviceItemId);
         if (targetItem) {
-            // Se for transferência, removemos da origem localmente para feedback visual rápido
             const updatedItem = { ...targetItem, stockQuantity: (targetItem.stockQuantity || 0) - (t.quantity || 0) };
             await localDb.put('serviceItems', updatedItem);
         }
@@ -400,6 +401,8 @@ export const api: ApiClient = {
         const familyId = getActiveUserFamilyId();
         const profile = { ...payload, familyId, family_id: familyId };
         await localDb.put('companyProfile', profile);
+        // Sincronização explícita para o perfil da empresa
+        await syncService.enqueue('SAVE', 'categories', profile); // Fallback process
         return { success: true };
     },
     deletePJEntity: async (type: string, id: string) => {
