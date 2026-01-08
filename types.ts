@@ -505,6 +505,7 @@ export interface OSItem {
   realDuration?: number;
   cost_price?: number;
   costPrice?: number;
+  unit?: string;
 }
 
 export interface ServiceOrder {

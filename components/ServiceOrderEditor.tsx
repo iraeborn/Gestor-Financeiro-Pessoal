@@ -73,7 +73,9 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
             quantity: 1,
             unitPrice: price,
             totalPrice: price,
-            isBillable: true
+            isBillable: true,
+            // Added unit from source item to fix property missing error and ensure consistency
+            unit: catalogItem?.unit
         };
         setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
     };
@@ -154,7 +156,7 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
                                             value={contactSearch}
                                             onFocus={() => setShowContactDropdown(true)}
                                             onChange={e => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
-                                            className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
+                                            className="w-full pl-11 pr-4 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold outline-none"
                                             placeholder="Buscar..."
                                         />
                                     </div>
@@ -278,7 +280,7 @@ const ServiceOrderEditor: React.FC<ServiceOrderEditorProps> = ({ initialData, co
                                 <select 
                                     value={formData.branchId || ''} 
                                     onChange={e => setFormData({...formData, branchId: e.target.value})}
-                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none"
+                                    className="w-full pl-11 py-4 bg-slate-900 text-white rounded-xl text-sm font-black uppercase tracking-widest outline-none border-none cursor-pointer appearance-none disabled:bg-slate-700"
                                     required
                                 >
                                     <option value="">Selecionar Unidade...</option>

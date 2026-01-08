@@ -131,7 +131,9 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
             quantity: 1,
             unitPrice: item.defaultPrice,
             totalPrice: item.defaultPrice,
-            isBillable: true
+            isBillable: true,
+            // Added unit from source item to fix property missing error and ensure consistency
+            unit: item.unit
         };
         
         setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
@@ -440,7 +442,7 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                                 </tr>
                                             )})}
                                             {(formData.items || []).length === 0 && (
-                                                <tr><td colSpan={6} className="p-10 text-center text-gray-300 italic text-sm">Carrinho vazio. Adicione itens acima usando o slider.</td></tr>
+                                                <tr><td colSpan={6} className="p-10 text-center text-gray-300 italic text-sm">Carrinho vazio. Adicione itens acima usando the slider.</td></tr>
                                             )}
                                         </tbody>
                                     </table>
