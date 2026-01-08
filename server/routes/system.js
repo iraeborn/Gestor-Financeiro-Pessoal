@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -20,6 +21,48 @@ export default function(logAudit) {
             res.json({ success: true });
         } catch (err) {
             res.status(500).json({ error: 'Erro ao salvar configurações: ' + err.message });
+        }
+    });
+
+    // Rota de histórico de chat
+    router.get('/chat/history', authenticateToken, async (req, res) => {
+        const { familyId } = req.query;
+        if (!familyId) return res.status(400).json({ error: 'familyId é obrigatório' });
+        
+        try {
+            // Verifica se o usuário pertence à família solicitada
+            const membership = await pool.query(
+                'SELECT 1 FROM memberships WHERE user_id = $1 AND family_id = $2',
+                [req.user.id, familyId]
+            );
+            
+            if (membership.rows.length === 0) {
+                return res.status(403).json({ error: 'Acesso negado ao histórico desta equipe.' });
+            }
+
+            const history = await pool.query(
+                `SELECT * FROM chat_messages 
+                 WHERE family_id = $1 
+                 ORDER BY created_at ASC LIMIT 100`,
+                [familyId]
+            );
+
+            // Mapeia para camelCase esperado pelo frontend
+            const mappedHistory = history.rows.map(r => ({
+                id: r.id,
+                senderId: r.sender_id,
+                senderName: r.sender_name,
+                receiverId: r.receiver_id,
+                familyId: r.family_id,
+                content: r.content,
+                type: r.type,
+                attachmentUrl: r.attachment_url,
+                createdAt: r.created_at
+            }));
+
+            res.json(mappedHistory);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
         }
     });
 

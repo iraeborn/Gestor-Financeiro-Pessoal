@@ -45,7 +45,8 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS optical_rxs (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), rx_date DATE NOT NULL, family_id TEXT, deleted_at TIMESTAMP, status TEXT DEFAULT 'PENDING')`,
         `CREATE TABLE IF NOT EXISTS laboratories (id TEXT PRIMARY KEY, name TEXT NOT NULL, family_id TEXT, deleted_at TIMESTAMP)`,
         `CREATE TABLE IF NOT EXISTS service_clients (id TEXT PRIMARY KEY, contact_id TEXT REFERENCES contacts(id), family_id TEXT, deleted_at TIMESTAMP)`,
-        `CREATE TABLE IF NOT EXISTS stock_transfers (id TEXT PRIMARY KEY, service_item_id TEXT, from_branch_id TEXT, to_branch_id TEXT, quantity DECIMAL(15,2), date DATE, notes TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW())`
+        `CREATE TABLE IF NOT EXISTS stock_transfers (id TEXT PRIMARY KEY, service_item_id TEXT, from_branch_id TEXT, to_branch_id TEXT, quantity DECIMAL(15,2), date DATE, notes TEXT, user_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, sender_id TEXT, sender_name TEXT, receiver_id TEXT, family_id TEXT, content TEXT, type TEXT, attachment_url TEXT, created_at TIMESTAMP DEFAULT NOW())`
     ];
 
     // 2. Migrações de Colunas
