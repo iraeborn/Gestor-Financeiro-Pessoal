@@ -24,9 +24,9 @@ export default function(logAudit) {
                         id, user_id, family_id, name, code, type, category, branch_id, stock_quantity,
                         warranty_enabled, warranty_days, is_free_allowed, auto_generate_os,
                         unit, brand, description, image_url, default_price, cost_price, module_tag,
-                        is_composite, items
+                        is_composite, items, variation_attributes, skus
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                     ON CONFLICT (id) DO UPDATE SET 
                         name=EXCLUDED.name, code=EXCLUDED.code, type=EXCLUDED.type, category=EXCLUDED.category,
                         branch_id=EXCLUDED.branch_id, stock_quantity=EXCLUDED.stock_quantity,
@@ -34,7 +34,8 @@ export default function(logAudit) {
                         is_free_allowed=EXCLUDED.is_free_allowed, auto_generate_os=EXCLUDED.auto_generate_os,
                         unit=EXCLUDED.unit, brand=EXCLUDED.brand, description=EXCLUDED.description,
                         image_url=EXCLUDED.image_url, default_price=EXCLUDED.default_price, 
-                        cost_price=EXCLUDED.cost_price, deleted_at=NULL`;
+                        cost_price=EXCLUDED.cost_price, deleted_at=NULL,
+                        variation_attributes=EXCLUDED.variation_attributes, skus=EXCLUDED.skus`;
                 
                 await pool.query(query, [
                     payload.id, userId, familyId, payload.name, sanitizeValue(payload.code), payload.type, 
@@ -43,7 +44,8 @@ export default function(logAudit) {
                     payload.isFreeAllowed ?? false, payload.autoGenerateOS ?? false,
                     sanitizeValue(payload.unit), sanitizeValue(payload.brand), sanitizeValue(payload.description),
                     sanitizeValue(payload.imageUrl), Number(payload.defaultPrice) || 0, Number(payload.costPrice) || 0,
-                    sanitizeValue(payload.moduleTag), payload.isComposite ?? false, JSON.stringify(payload.items || [])
+                    sanitizeValue(payload.moduleTag), payload.isComposite ?? false, JSON.stringify(payload.items || []),
+                    JSON.stringify(payload.variationAttributes || []), JSON.stringify(payload.skus || [])
                 ]);
                 await logAudit(pool, userId, 'SAVE', 'catalog_item', payload.id, payload.name);
             }
@@ -62,7 +64,6 @@ export default function(logAudit) {
 
             await client.query('BEGIN');
 
-            // 1. Busca o item original para garantir saldo
             const itemRes = await client.query(
                 'SELECT stock_quantity, name FROM service_items WHERE id = $1 AND family_id = $2',
                 [serviceItemId, familyId]
@@ -74,17 +75,11 @@ export default function(logAudit) {
                 throw new Error(`Saldo insuficiente na origem. Disponível: ${item.stock_quantity}`);
             }
 
-            // 2. Deduz da origem
             await client.query(
                 `UPDATE service_items SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND family_id = $3`,
                 [quantity, serviceItemId, familyId]
             );
 
-            // 3. Incrementa no destino (Busca se existe o item lá ou simplesmente registra na tabela de transferências)
-            // Em um ERP multi-filial real, cada filial teria um registro de saldo. 
-            // Para este MVP, vamos registrar o log e o saldo consolidado vive no registro do item (ou o item é duplicado p/ filial).
-            // Aqui vamos assumir que o registro do item que estamos vendo representa o estoque da filial "branch_id" dele.
-            
             await client.query(
                 `INSERT INTO stock_transfers (id, service_item_id, from_branch_id, to_branch_id, quantity, date, notes, user_id, family_id)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,

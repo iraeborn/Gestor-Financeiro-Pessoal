@@ -67,6 +67,151 @@ export type ViewMode =
   | 'DIAG_HUB' | 'DIAG_HEALTH' | 'DIAG_RISK' | 'DIAG_INVEST'
   | 'SYS_CONTACTS' | 'SYS_ACCESS' | 'SYS_LOGS' | 'SYS_SETTINGS' | 'SYS_BRANCHES' | 'SYS_CHAT' | 'SYS_SALESPEOPLE' | 'SYS_HELP' | 'SYS_SALES_SCHEDULE';
 
+// --- Missing Types Fix ---
+
+export interface ToothState {
+  tooth: number;
+  condition: 'CAVITY' | 'FILLING' | 'MISSING' | 'CROWN' | 'ENDO' | 'IMPLANT';
+}
+
+export interface Anamnesis {
+  heartProblem: boolean;
+  hypertension: boolean;
+  diabetes: boolean;
+  allergy: boolean;
+  anestheticAllergy: boolean;
+  bleedingProblem: boolean;
+  isPregnant: boolean;
+  bisphosphonates: boolean;
+  medications?: string;
+  notes?: string;
+}
+
+export interface Prescription {
+  id: string;
+  date: string;
+  medications: string;
+}
+
+export interface TreatmentProcedure {
+  id: string;
+  planId: string;
+  serviceId: string;
+  serviceName: string;
+  value: number;
+  discount: number;
+  netValue: number;
+  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  teeth: number[];
+  category?: string;
+}
+
+export interface TreatmentPlan {
+  id: string;
+  clientId: string;
+  title: string;
+  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  procedures: TreatmentProcedure[];
+}
+
+export interface TreatmentItem {
+  id: string;
+  serviceId: string;
+  serviceName?: string;
+  teeth: number[];
+  value: number;
+}
+
+export interface ServiceClient {
+  id: string;
+  contactId: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  birthDate?: string;
+  insurance?: string;
+  notes?: string;
+  allergies?: string;
+  medications?: string;
+  moduleTag: string;
+  odontogram: ToothState[];
+  anamnesis: Anamnesis;
+  prescriptions: Prescription[];
+  attachments: string[];
+  treatmentPlans: TreatmentPlan[];
+  birth_date?: string; // for db mapping
+  contact_name?: string; // for db mapping
+  contact_email?: string; // for db mapping
+  contact_phone?: string; // for db mapping
+}
+
+export interface OpticalRx {
+  id: string;
+  rxNumber: string;
+  contactId: string;
+  contactName?: string;
+  branchId?: string;
+  rxDate: string;
+  expirationDate?: string;
+  professionalName?: string;
+  professionalReg?: string;
+  sphereOdLonge?: number;
+  cylOdLonge?: number;
+  axisOdLonge?: number;
+  prismaOdLonge?: number;
+  baseOdLonge?: string;
+  sphereOeLonge?: number;
+  cylOeLonge?: number;
+  axisOeLonge?: number;
+  prismaOeLonge?: number;
+  baseOeLonge?: string;
+  addition?: number;
+  dnpOd?: number;
+  dnpOe?: number;
+  heightOd?: number;
+  heightOe?: number;
+  lensType?: LensType;
+  lensMaterial?: string;
+  lensTreatments?: string;
+  usageInstructions?: string;
+  laboratoryId?: string;
+  observations?: string;
+  status: 'PENDING' | 'APPROVED' | 'SOLD' | 'CANCELLED';
+  labStatus?: OpticalDeliveryStatus;
+}
+
+export const ROLE_DEFINITIONS = [
+  { 
+    id: 'ADMIN', 
+    label: 'Administrador', 
+    description: 'Acesso total a todas as funcionalidades e configurações.',
+    defaultPermissions: [] 
+  },
+  { 
+    id: 'MEMBER', 
+    label: 'Membro Padrão', 
+    description: 'Acesso básico ao financeiro e operacional.',
+    defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'SRV_CATALOG', 'SRV_SALES', 'FIN_CONTACTS', 'SYS_CHAT', 'SYS_HELP'] 
+  },
+  { 
+    id: 'SALES_OPTICAL', 
+    label: 'Vendedor Ótica', 
+    description: 'Focado em Receitas RX e Vendas Óticas.',
+    requiredModule: 'optical',
+    defaultPermissions: ['FIN_DASHBOARD', 'OPTICAL_RX', 'SRV_SALES', 'FIN_CONTACTS', 'SYS_CHAT', 'SYS_HELP']
+  },
+  { 
+    id: 'CLINICAL_ODONTO', 
+    label: 'Dentista / Clínico', 
+    description: 'Acesso a prontuários e agenda clínica.',
+    requiredModule: 'odonto',
+    defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'SRV_CATALOG', 'SYS_CHAT', 'SYS_HELP']
+  }
+];
+
+// --- End of Missing Types Fix ---
+
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
   maxDiscountPct?: number; 
@@ -306,164 +451,18 @@ export interface StockTransfer {
     familyId: string;
 }
 
-export interface RoleDefinition {
-  id: string;
-  label: string;
-  description: string;
-  defaultPermissions: string[];
-  requiredModule?: 'odonto' | 'services' | 'intelligence' | 'optical';
+export interface VariationAttribute {
+    name: string; // ex: "Cor"
+    values: string[]; // ex: ["Azul", "Preto"]
 }
 
-export const ROLE_DEFINITIONS: RoleDefinition[] = [
-  {
-      id: 'ADMIN',
-      label: 'Administrador Proprietário',
-      description: 'Acesso irrestrito a todos os módulos, configurações financeiras e gestão de equipe.',
-      defaultPermissions: []
-  },
-  {
-      id: 'FIN_MANAGER',
-      label: 'Gerente Administrativo',
-      description: 'Foco total em gestão financeira, contas bancárias, relatórios e auditoria.',
-      defaultPermissions: ['FIN_DASHBOARD', 'FIN_TRANSACTIONS', 'FIN_ACCOUNTS', 'FIN_CARDS', 'FIN_REPORTS', 'FIN_GOALS', 'FIN_CATEGORIES', 'FIN_CONTACTS', 'SYS_LOGS', 'SYS_CHAT']
-  },
-  {
-      id: 'SALES_OPTICAL',
-      label: 'Vendedor de Ótica',
-      description: 'Acesso a vendas, receitas RX, catálogo de produtos e agenda de exames.',
-      requiredModule: 'optical',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_SALES', 'OPTICAL_RX', 'SRV_CATALOG', 'FIN_CONTACTS', 'SRV_BRANCH_SCHEDULE', 'SYS_CHAT', 'OPTICAL_LABS_MGMT']
-  },
-  {
-      id: 'LAB_TECHNICIAN',
-      label: 'Técnico de Laboratório',
-      description: 'Acesso restrito a Ordens de Serviço (Laboratório) e Receitas RX.',
-      requiredModule: 'services',
-      defaultPermissions: ['FIN_DASHBOARD', 'SRV_OS', 'OPTICAL_RX', 'SYS_CHAT', 'OPTICAL_LABS_MGMT']
-  },
-  {
-      id: 'DENTIST',
-      label: 'Dentista / Clínico',
-      description: 'Acesso a agenda clínica e prontuários odontológicos.',
-      requiredModule: 'odonto',
-      defaultPermissions: ['FIN_DASHBOARD', 'ODONTO_AGENDA', 'ODONTO_PATIENTS', 'FIN_CONTACTS', 'SYS_CHAT']
-  }
-];
-
-export interface OpticalRx {
-  id: string;
-  rxNumber?: string;
-  contactId: string;
-  contactName?: string;
-  professionalName?: string;
-  professionalReg?: string;
-  rxDate: string;
-  expirationDate?: string;
-  status: 'PENDING' | 'APPROVED' | 'SOLD';
-  sphereOdLonge?: number;
-  cylOdLonge?: number;
-  axisOdLonge?: number;
-  prismaOdLonge?: number;
-  baseOdLonge?: string;
-  sphereOeLonge?: number;
-  cylOeLonge?: number;
-  axisOeLonge?: number;
-  prismaOeLonge?: number;
-  baseOeLonge?: string;
-  sphereOdPerto?: number;
-  cylOdPerto?: number;
-  axisOdPerto?: number;
-  sphereOePerto?: number;
-  cylOePerto?: number;
-  axisOePerto?: number;
-  addition?: number;
-  dnpOd?: number;
-  dnpOe?: number;
-  heightOd?: number;
-  heightOe?: number;
-  lensType?: LensType;
-  lensMaterial?: string;
-  lensTreatments?: string;
-  usageInstructions?: string;
-  imageUrl?: string;
-  observations?: string;
-  branchId?: string;
-  laboratoryId?: string;
-  labStatus?: OpticalDeliveryStatus;
-  labSentDate?: string;
-  labReturnDate?: string;
-}
-
-export interface ToothState {
-  tooth: number;
-  condition: 'HEALTHY' | 'CAVITY' | 'FILLING' | 'MISSING' | 'CROWN' | 'ENDO' | 'IMPLANT';
-  notes?: string;
-}
-
-export interface Anamnesis {
-  heartProblem?: boolean;
-  hypertension?: boolean;
-  diabetes?: boolean;
-  allergy?: boolean;
-  anestheticAllergy?: boolean;
-  bleedingProblem?: boolean;
-  isPregnant?: boolean;
-  bisphosphonates?: boolean;
-  medications?: string;
-  notes?: string;
-}
-
-export interface Prescription {
-  id: string;
-  date: string;
-  medications: string;
-}
-
-export interface TreatmentItem {
-  id: string;
-  serviceId: string;
-  serviceName?: string;
-  teeth?: number[];
-  value: number;
-}
-
-export interface TreatmentProcedure {
-  id: string;
-  planId: string;
-  serviceId: string;
-  serviceName: string;
-  value: number;
-  discount: number;
-  netValue: number;
-  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  teeth: number[];
-  category?: string;
-}
-
-export interface TreatmentPlan {
-  id: string;
-  clientId: string;
-  title: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  createdAt: string;
-  procedures: TreatmentProcedure[];
-}
-
-export interface ServiceClient {
-  id: string;
-  contactId?: string;
-  contactName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  notes?: string;
-  birthDate?: string;
-  insurance?: string;
-  moduleTag: string;
-  odontogram?: ToothState[];
-  anamnesis?: Anamnesis;
-  prescriptions?: Prescription[];
-  attachments?: string[];
-  treatmentPlans?: TreatmentPlan[];
+export interface ProductSKU {
+    id: string;
+    sku: string;
+    attributes: Record<string, string>; // { "Cor": "Azul" }
+    price?: number;
+    costPrice?: number;
+    stockQuantity: number;
 }
 
 export interface ServiceItem {
@@ -482,13 +481,14 @@ export interface ServiceItem {
   description?: string;
   imageUrl?: string;
   unit?: string;
-  // Campos de Estoque e Garantia
   branchId?: string;
   stockQuantity?: number;
   warrantyEnabled?: boolean;
   warrantyDays?: number;
   isFreeAllowed?: boolean;
   autoGenerateOS?: boolean;
+  variationAttributes?: VariationAttribute[];
+  skus?: ProductSKU[];
 }
 
 export interface OSItem {

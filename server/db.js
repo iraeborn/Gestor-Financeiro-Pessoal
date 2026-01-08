@@ -23,7 +23,6 @@ if (process.env.INSTANCE_CONNECTION_NAME) {
 const pool = new Pool(poolConfig);
 
 export const initDb = async () => {
-    // 1. Criação das tabelas base
     const createQueries = [
         `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, password_hash TEXT, google_id TEXT, family_id TEXT, created_at TIMESTAMP DEFAULT NOW(), settings JSONB, role TEXT, entity_type TEXT, plan TEXT, status TEXT, trial_ends_at TIMESTAMP, stripe_customer_id TEXT, stripe_subscription_id TEXT)`,
         `CREATE TABLE IF NOT EXISTS memberships (user_id TEXT REFERENCES users(id), family_id TEXT, role TEXT DEFAULT 'MEMBER', permissions TEXT, contact_id TEXT, PRIMARY KEY (user_id, family_id))`,
@@ -49,7 +48,6 @@ export const initDb = async () => {
         `CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, sender_id TEXT, sender_name TEXT, receiver_id TEXT, family_id TEXT, content TEXT, type TEXT, attachment_url TEXT, created_at TIMESTAMP DEFAULT NOW())`
     ];
 
-    // 2. Migrações de Colunas
     const migrationQueries = [
         `ALTER TABLE memberships ADD COLUMN IF NOT EXISTS contact_id TEXT`,
         `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS external_id TEXT`,
@@ -60,7 +58,6 @@ export const initDb = async () => {
         `ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`,
         `ALTER TABLE branches ADD COLUMN IF NOT EXISTS city TEXT`,
         `ALTER TABLE branches ADD COLUMN IF NOT EXISTS color TEXT`,
-        // Migrações para Catálogo (Service Items)
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS category TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS branch_id TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS stock_quantity DECIMAL(15,2) DEFAULT 0`,
@@ -76,7 +73,9 @@ export const initDb = async () => {
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS cost_price DECIMAL(15,2) DEFAULT 0`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS module_tag TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS is_composite BOOLEAN DEFAULT FALSE`,
-        `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`
+        `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`,
+        `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS variation_attributes JSONB DEFAULT '[]'`,
+        `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS skus JSONB DEFAULT '[]'`
     ];
     
     try {
