@@ -59,6 +59,7 @@ export const initDb = async () => {
         `ALTER TABLE branches ADD COLUMN IF NOT EXISTS city TEXT`,
         `ALTER TABLE branches ADD COLUMN IF NOT EXISTS color TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS category TEXT`,
+        `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT '[]'`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS branch_id TEXT`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS stock_quantity DECIMAL(15,2) DEFAULT 0`,
         `ALTER TABLE service_items ADD COLUMN IF NOT EXISTS warranty_enabled BOOLEAN DEFAULT FALSE`,

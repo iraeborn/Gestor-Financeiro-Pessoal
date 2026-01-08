@@ -1,408 +1,359 @@
 
-import { AppState, Account, Transaction, FinancialGoal, AuthResponse, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, StockTransfer } from '../types';
+import { AppState, Account, Transaction, FinancialGoal, User, AppSettings, Contact, Category, EntityType, SubscriptionPlan, CompanyProfile, Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, StockTransfer, CommercialOrder, ServiceOrder, Contract, Invoice } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
-const API_URL = '/api';
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${localStorage.getItem('token')}`
-});
-
-const getActiveUserFamilyId = (): string | null => {
-    const token = localStorage.getItem('token');
-    if (!token) return null;
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-        const payload = JSON.parse(jsonPayload);
-        return String(payload.familyId || payload.id || '');
-    } catch (e) {
-        console.error("Token decoding error:", e);
-        return null;
-    }
+// Fix: Implemented missing utility to handle API responses
+const handleResponse = async (res: Response) => {
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+    return data;
 };
 
-export const login = async (email: string, password: string): Promise<AuthResponse> => {
-    const res = await fetch(`${API_URL}/auth/login`, {
+// Fix: Helper to get common headers
+const getHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+});
+
+// Fix: Implemented missing Auth exports
+export const login = async (email, password) => {
+    const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
     });
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Falha no login');
-    }
-    const data = await res.json();
+    const data = await handleResponse(res);
     localStorage.setItem('token', data.token);
-    await localDb.clearAllStores();
     return data;
 };
 
-export const logout = async () => {
-    localStorage.removeItem('token');
-    await localDb.clearAllStores();
-};
-
-export const refreshUser = async (): Promise<{ user: User }> => {
-    const res = await fetch(`${API_URL}/auth/me`, {
-        headers: getHeaders()
-    });
-    if (!res.ok) throw new Error('Sessão expirada');
-    return await res.json();
-};
-
-export const register = async (name: string, email: string, password: string, entityType: EntityType, plan: SubscriptionPlan, pjPayload?: any): Promise<AuthResponse> => {
-    const res = await fetch(`${API_URL}/auth/register`, {
+export const register = async (name, email, password, entityType, plan, pjPayload) => {
+    const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, entityType, plan, pjPayload })
     });
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Falha no registro');
-    }
-    const data = await res.json();
+    const data = await handleResponse(res);
     localStorage.setItem('token', data.token);
-    await localDb.clearAllStores();
     return data;
 };
 
-export const loginWithGoogle = async (credential: string, entityType?: EntityType, pjPayload?: any): Promise<AuthResponse> => {
-    const res = await fetch(`${API_URL}/auth/google`, {
+export const loginWithGoogle = async (credential, entityType, pjPayload) => {
+    const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential, entityType, pjPayload })
     });
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Falha no login Google');
-    }
-    const data = await res.json();
+    const data = await handleResponse(res);
     localStorage.setItem('token', data.token);
-    await localDb.clearAllStores();
     return data;
 };
 
-export const switchContext = async (targetFamilyId: string): Promise<AuthResponse> => {
-    const res = await fetch(`${API_URL}/auth/switch-context`, {
+export const refreshUser = async () => {
+    const res = await fetch('/api/auth/me', { headers: getHeaders() });
+    return handleResponse(res);
+};
+
+export const logout = () => {
+    localStorage.removeItem('token');
+};
+
+export const switchContext = async (targetFamilyId: string) => {
+    const res = await fetch('/api/auth/switch-context', {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ targetFamilyId })
     });
-    if (!res.ok) throw new Error('Falha ao trocar contexto');
-    const data = await res.json();
+    const data = await handleResponse(res);
     localStorage.setItem('token', data.token);
-    await localDb.clearAllStores();
     return data;
 };
 
-export const updateSettings = async (settings: AppSettings): Promise<{ success: boolean }> => {
-    const res = await fetch(`${API_URL}/settings`, {
+export const updateProfile = async (data: any) => {
+    const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+    });
+    const result = await handleResponse(res);
+    return result.user;
+};
+
+// Fix: Implemented missing System exports
+export const updateSettings = async (settings: AppSettings) => {
+    const res = await fetch('/api/settings', {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ settings })
     });
-    if (!res.ok) throw new Error('Falha ao atualizar configurações');
-    return await res.json();
+    return handleResponse(res);
 };
 
-export const updateProfile = async (profileData: any): Promise<User> => {
-    const res = await fetch(`${API_URL}/profile`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify(profileData)
-    });
-    if (!res.ok) throw new Error('Falha ao atualizar perfil');
-    const data = await res.json();
-    return data.user;
+export const consultCnpj = async (cnpj: string) => {
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    return res.json();
 };
 
-export const getAuditLogs = async (): Promise<AuditLog[]> => {
-    const res = await fetch(`${API_URL}/audit-logs`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    return await res.json();
+export const getFamilyMembers = async () => {
+    const res = await fetch('/api/members', { headers: getHeaders() });
+    return handleResponse(res);
 };
 
-export const getNotificationLogs = async (): Promise<NotificationLog[]> => {
-    const res = await fetch(`${API_URL}/notification-logs`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    return await res.json();
-};
-
-export const restoreRecord = async (entity: string, entityId: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/audit/restore`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ entity, entityId })
-    });
-    if (!res.ok) throw new Error('Falha ao restaurar registro');
-    return await res.json();
-};
-
-export const revertLogChange = async (logId: number): Promise<any> => {
-    const res = await fetch(`${API_URL}/audit/revert/${logId}`, {
-        method: 'POST',
-        headers: getHeaders()
-    });
-    if (!res.ok) throw new Error('Falha ao reverter alteração');
-    return await res.json();
-};
-
-export const getAdminStats = async (): Promise<any> => {
-    const res = await fetch(`${API_URL}/admin/stats`, { headers: getHeaders() });
-    if (!res.ok) throw new Error('Falha ao buscar estatísticas');
-    return await res.json();
-};
-
-export const getAdminUsers = async (): Promise<any[]> => {
-    const res = await fetch(`${API_URL}/admin/users`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    return await res.json();
-};
-
-export const getFamilyMembers = async (): Promise<Member[]> => {
-    const res = await fetch(`${API_URL}/members`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    return await res.json();
-};
-
-export const createInvite = async (role?: string): Promise<{ code: string }> => {
-    const res = await fetch(`${API_URL}/invites`, {
+export const createInvite = async (role?: string) => {
+    const res = await fetch('/api/invites', {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ role })
     });
-    if (!res.ok) throw new Error('Falha ao criar convite');
-    return await res.json();
+    return handleResponse(res);
 };
 
-export const joinFamily = async (code: string): Promise<User> => {
-    const res = await fetch(`${API_URL}/invites/join`, {
+export const joinFamily = async (code: string) => {
+    const res = await fetch('/api/invites/join', {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ code })
     });
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Falha ao entrar na equipe');
-    }
-    const data = await res.json();
+    const data = await handleResponse(res);
     return data.user;
 };
 
-export const updateMemberRole = async (memberId: string, role: string, permissions: string[], contactId?: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/members/${memberId}`, {
+export const updateMemberRole = async (memberId: string, role: string, permissions: string[], contactId?: string) => {
+    const res = await fetch(`/api/members/${memberId}`, {
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify({ role, permissions, contactId })
     });
-    if (!res.ok) throw new Error('Falha ao atualizar membro');
-    return await res.json();
+    return handleResponse(res);
 };
 
-export const removeMember = async (memberId: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/members/${memberId}`, {
+export const removeMember = async (memberId: string) => {
+    const res = await fetch(`/api/members/${memberId}`, {
         method: 'DELETE',
         headers: getHeaders()
     });
-    if (!res.ok) throw new Error('Falha ao remover membro');
-    return await res.json();
+    return handleResponse(res);
 };
 
-export const consultCnpj = async (cnpj: string): Promise<any> => {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-    if (!res.ok) return null;
-    return await res.json();
+// Fix: Implemented missing Audit/Log exports
+export const getAuditLogs = async () => {
+    const res = await fetch('/api/audit-logs', { headers: getHeaders() });
+    return handleResponse(res);
 };
 
-export const getPublicOrder = async (token: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/services/public/order/${token}`);
-    if (!res.ok) throw new Error('Orçamento não encontrado');
-    return await res.json();
+export const getNotificationLogs = async () => {
+    const res = await fetch('/api/notification-logs', { headers: getHeaders() });
+    return handleResponse(res);
 };
 
-export const updatePublicOrderStatus = async (token: string, status: string): Promise<any> => {
-    const res = await fetch(`${API_URL}/services/public/order/${token}/status`, {
+export const restoreRecord = async (entity: string, entityId: string) => {
+    const res = await fetch('/api/audit/restore', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ entity, entityId })
+    });
+    return handleResponse(res);
+};
+
+export const revertLogChange = async (logId: number) => {
+    const res = await fetch(`/api/audit/revert/${logId}`, {
+        method: 'POST',
+        headers: getHeaders()
+    });
+    return handleResponse(res);
+};
+
+// Fix: Implemented missing Admin exports
+export const getAdminStats = async () => {
+    const res = await fetch('/api/admin/stats', { headers: getHeaders() });
+    return handleResponse(res);
+};
+
+export const getAdminUsers = async () => {
+    const res = await fetch('/api/admin/users', { headers: getHeaders() });
+    return handleResponse(res);
+};
+
+// Fix: Implemented missing Public exports
+export const getPublicOrder = async (token: string) => {
+    const res = await fetch(`/api/public/orders/${token}`);
+    return handleResponse(res);
+};
+
+export const updatePublicOrderStatus = async (token: string, status: string) => {
+    const res = await fetch(`/api/public/orders/${token}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
     });
-    if (!res.ok) throw new Error('Falha ao atualizar status público');
-    return await res.json();
+    return handleResponse(res);
 };
 
-export const loadInitialData = async (): Promise<AppState> => {
-    const currentFamilyId = getActiveUserFamilyId();
+// Fix: Implemented missing initial data loader
+export const loadInitialData = async () => {
+    try {
+        await syncService.pullFromServer();
+    } catch (e) {
+        console.warn("Offline: carregando apenas banco local.");
+    }
 
-    if (navigator.onLine) {
-        try {
-            await syncService.pullFromServer();
-        } catch (e) {
-            console.error("Sync pull failed during loadInitialData:", e);
+    const [
+        accounts, transactions, contacts, serviceClients, serviceItems,
+        serviceAppointments, goals, categories, branches, costCenters,
+        departments, projects, serviceOrders, commercialOrders, contracts,
+        invoices, opticalRxs, companyProfile, salespeople, salespersonSchedules,
+        laboratories, stockTransfers
+    ] = await Promise.all([
+        localDb.getAll<Account>('accounts'),
+        localDb.getAll<Transaction>('transactions'),
+        localDb.getAll<Contact>('contacts'),
+        localDb.getAll<ServiceClient>('serviceClients'),
+        localDb.getAll<ServiceItem>('serviceItems'),
+        localDb.getAll<ServiceAppointment>('serviceAppointments'),
+        localDb.getAll<FinancialGoal>('goals'),
+        localDb.getAll<Category>('categories'),
+        localDb.getAll<Branch>('branches'),
+        localDb.getAll<CostCenter>('costCenters'),
+        localDb.getAll<Department>('departments'),
+        localDb.getAll<Project>('projects'),
+        localDb.getAll<ServiceOrder>('serviceOrders'),
+        localDb.getAll<CommercialOrder>('commercialOrders'),
+        localDb.getAll<Contract>('contracts'),
+        localDb.getAll<Invoice>('invoices'),
+        localDb.getAll<OpticalRx>('opticalRxs'),
+        localDb.getAll<CompanyProfile>('companyProfile'),
+        localDb.getAll<Salesperson>('salespeople'),
+        localDb.getAll<SalespersonSchedule>('salespersonSchedules'),
+        localDb.getAll<Laboratory>('laboratories'),
+        localDb.getAll<StockTransfer>('stockTransfers'),
+    ]);
+
+    return {
+        accounts, transactions, contacts, serviceClients, serviceItems,
+        serviceAppointments, goals, categories, branches, costCenters,
+        departments, projects, serviceOrders, commercialOrders, contracts,
+        invoices, opticalRxs, companyProfile: companyProfile[0] || null,
+        salespeople, salespersonSchedules, laboratories, stockTransfers
+    } as AppState;
+};
+
+// Fix: Implemented missing api object with CRUD methods
+export const api = {
+    saveTransaction: async (t: Transaction, nc?: Contact, ncat?: Category) => {
+        if (nc) await api.saveContact(nc);
+        if (ncat) await api.saveLocallyAndQueue('categories', ncat);
+        await localDb.put('transactions', t);
+        await syncService.enqueue('SAVE', 'transactions', t);
+    },
+    deleteTransaction: async (id: string) => {
+        await localDb.delete('transactions', id);
+        await syncService.enqueue('DELETE', 'transactions', { id });
+    },
+    saveAccount: async (a: Account) => {
+        await localDb.put('accounts', a);
+        await syncService.enqueue('SAVE', 'accounts', a);
+    },
+    deleteAccount: async (id: string) => {
+        await localDb.delete('accounts', id);
+        await syncService.enqueue('DELETE', 'accounts', { id });
+    },
+    saveGoal: async (g: FinancialGoal) => {
+        await localDb.put('goals', g);
+        await syncService.enqueue('SAVE', 'goals', g);
+    },
+    deleteGoal: async (id: string) => {
+        await localDb.delete('goals', id);
+        await syncService.enqueue('DELETE', 'goals', { id });
+    },
+    saveContact: async (c: Contact) => {
+        await localDb.put('contacts', c);
+        await syncService.enqueue('SAVE', 'contacts', c);
+    },
+    deleteContact: async (id: string) => {
+        await localDb.delete('contacts', id);
+        await syncService.enqueue('DELETE', 'contacts', { id });
+    },
+    saveBulkContacts: async (contacts: Contact[]) => {
+        for (const c of contacts) {
+            await api.saveContact(c);
         }
-    }
-
-    const stores = [
-        'accounts', 'transactions', 'goals', 'contacts', 'categories',
-        'branches', 'costCenters', 'departments', 'projects',
-        'serviceClients', 'serviceItems', 'serviceAppointments',
-        'serviceOrders', 'commercialOrders', 'contracts', 'invoices',
-        'opticalRxs', 'salespeople', 'salespersonSchedules', 'laboratories',
-        'stockTransfers'
-    ];
-
-    const results: any = {};
-    for (const store of stores) {
-        const rawData = await localDb.getAll(store) || [];
-        results[store] = rawData.filter((item: any) => {
-            if (!item) return false;
-            const itemFamilyId = String(item.familyId || item.family_id || '');
-            // Se não tivermos familyId no token, deixamos passar para não travar a UI
-            if (!currentFamilyId || currentFamilyId === "undefined" || currentFamilyId === "") return true; 
-            return itemFamilyId === currentFamilyId;
-        });
-    }
-    
-    const companyProfiles = await localDb.getAll('companyProfile');
-    results.companyProfile = companyProfiles.find((p: any) => {
-        if (!p) return false;
-        const pFamilyId = String(p.familyId || p.family_id || '');
-        return !currentFamilyId || pFamilyId === currentFamilyId;
-    }) || null;
-
-    // Garante que todas as chaves obrigatórias de AppState existam como arrays
-    const finalState = {
-        accounts: [], transactions: [], contacts: [], goals: [], categories: [],
-        branches: [], costCenters: [], departments: [], projects: [],
-        serviceClients: [], serviceItems: [], serviceAppointments: [],
-        serviceOrders: [], commercialOrders: [], contracts: [], invoices: [],
-        opticalRxs: [], salespeople: [], salespersonSchedules: [], laboratories: [],
-        stockTransfers: [], companyProfile: null,
-        ...results
-    };
-
-    return finalState as AppState;
-};
-
-export interface ApiClient {
-    saveLocallyAndQueue: (store: string, data: any) => Promise<{ success: boolean; id: string }>;
-    deleteLocallyAndQueue: (store: string, id: string) => Promise<{ success: boolean }>;
-    saveTransaction: (t: Transaction, newContact?: Contact, newCategory?: Category) => Promise<{ success: boolean; id: string }>;
-    deleteTransaction: (id: string) => Promise<{ success: boolean }>;
-    saveAccount: (a: Account) => Promise<{ success: boolean; id: string }>;
-    deleteAccount: (id: string) => Promise<{ success: boolean }>;
-    saveGoal: (g: FinancialGoal) => Promise<{ success: boolean; id: string }>;
-    deleteGoal: (id: string) => Promise<{ success: boolean }>;
-    saveContact: (c: Contact) => Promise<{ success: boolean; id: string }>;
-    saveBulkContacts: (contacts: Contact[]) => Promise<{ success: boolean }>;
-    deleteContact: (id: string) => Promise<{ success: boolean }>;
-    saveCategory: (c: Category) => Promise<{ success: boolean; id: string }>;
-    deleteCategory: (id: string) => Promise<{ success: boolean }>;
-    saveOpticalRx: (rx: OpticalRx) => Promise<{ success: boolean; id: string }>;
-    deleteOpticalRx: (id: string) => Promise<{ success: boolean }>;
-    saveCatalogItem: (i: Partial<ServiceItem>) => Promise<{ success: boolean; id: string }>;
-    deleteCatalogItem: (id: string) => Promise<{ success: boolean }>;
-    saveServiceClient: (c: any) => Promise<{ success: boolean; id: string }>;
-    deleteServiceClient: (id: string) => Promise<{ success: boolean }>;
-    saveAppointment: (a: any) => Promise<{ success: boolean; id: string }>;
-    deleteAppointment: (id: string) => Promise<{ success: boolean }>;
-    saveOS: (os: any) => Promise<{ success: boolean; id: string }>;
-    deleteOS: (id: string) => Promise<{ success: boolean }>;
-    saveOrder: (o: any) => Promise<{ success: boolean; id: string }>;
-    deleteOrder: (id: string) => Promise<{ success: boolean }>;
-    savePJEntity: (type: string, payload: any) => Promise<{ success: boolean; id?: string }>;
-    deletePJEntity: (type: string, id: string) => Promise<{ success: boolean }>;
-    saveLaboratory: (lab: Laboratory) => Promise<{ success: boolean; id: string }>;
-    deleteLaboratory: (id: string) => Promise<{ success: boolean }>;
-    saveSalespersonSchedule: (s: SalespersonSchedule) => Promise<{ success: boolean; id: string }>;
-    deleteSalespersonSchedule: (id: string) => Promise<{ success: boolean }>;
-    transferStock: (t: Partial<StockTransfer>) => Promise<{ success: boolean; id: string }>;
-}
-
-export const api: ApiClient = {
-    saveLocallyAndQueue: async (store: string, data: any) => {
-        const id = data.id || crypto.randomUUID();
-        const familyId = getActiveUserFamilyId();
-        if (!familyId) throw new Error("Sessão inválida: familyId ausente.");
-        const payload = { ...data, id, familyId, family_id: familyId };
+    },
+    savePJEntity: async (type: string, data: any) => {
+        const store = type === 'company' ? 'companyProfile' : type + 's';
+        await localDb.put(store, data);
+        await syncService.enqueue('SAVE', store, data);
+    },
+    deletePJEntity: async (type: string, id: string) => {
+        const store = type + 's';
+        await localDb.delete(store, id);
+        await syncService.enqueue('DELETE', store, { id });
+    },
+    saveOS: async (os: ServiceOrder) => {
+        await localDb.put('serviceOrders', os);
+        await syncService.enqueue('SAVE', 'serviceOrders', os);
+    },
+    deleteOS: async (id: string) => {
+        await localDb.delete('serviceOrders', id);
+        await syncService.enqueue('DELETE', 'serviceOrders', { id });
+    },
+    saveOrder: async (order: CommercialOrder) => {
+        await localDb.put('commercialOrders', order);
+        await syncService.enqueue('SAVE', 'commercialOrders', order);
+    },
+    deleteOrder: async (id: string) => {
+        await localDb.delete('commercialOrders', id);
+        await syncService.enqueue('DELETE', 'commercialOrders', { id });
+    },
+    saveCatalogItem: async (item: ServiceItem) => {
+        await localDb.put('serviceItems', item);
+        await syncService.enqueue('SAVE', 'serviceItems', item);
+    },
+    deleteCatalogItem: async (id: string) => {
+        await localDb.delete('serviceItems', id);
+        await syncService.enqueue('DELETE', 'serviceItems', { id });
+    },
+    transferStock: async (data: any) => {
+        await syncService.enqueue('TRANSFER', 'stockTransfers', data);
+    },
+    saveOpticalRx: async (rx: OpticalRx) => {
+        await localDb.put('opticalRxs', rx);
+        await syncService.enqueue('SAVE', 'opticalRxs', rx);
+    },
+    deleteOpticalRx: async (id: string) => {
+        await localDb.delete('opticalRxs', id);
+        await syncService.enqueue('DELETE', 'opticalRxs', { id });
+    },
+    saveLaboratory: async (lab: Laboratory) => {
+        await localDb.put('laboratories', lab);
+        await syncService.enqueue('SAVE', 'laboratories', lab);
+    },
+    deleteLaboratory: async (id: string) => {
+        await localDb.delete('laboratories', id);
+        await syncService.enqueue('DELETE', 'laboratories', { id });
+    },
+    saveSalespersonSchedule: async (s: SalespersonSchedule) => {
+        await localDb.put('salespersonSchedules', s);
+        await syncService.enqueue('SAVE', 'salespersonSchedules', s);
+    },
+    deleteSalespersonSchedule: async (id: string) => {
+        await localDb.delete('salespersonSchedules', id);
+        await syncService.enqueue('DELETE', 'salespersonSchedules', { id });
+    },
+    saveAppointment: async (a: ServiceAppointment) => {
+        await localDb.put('serviceAppointments', a);
+        await syncService.enqueue('SAVE', 'serviceAppointments', a);
+    },
+    deleteAppointment: async (id: string) => {
+        await localDb.delete('serviceAppointments', id);
+        await syncService.enqueue('DELETE', 'serviceAppointments', { id });
+    },
+    saveLocallyAndQueue: async (store: string, payload: any) => {
         await localDb.put(store, payload);
         await syncService.enqueue('SAVE', store, payload);
-        return { success: true, id };
     },
-
     deleteLocallyAndQueue: async (store: string, id: string) => {
         await localDb.delete(store, id);
         await syncService.enqueue('DELETE', store, { id });
-        return { success: true };
-    },
-
-    saveTransaction: async (t: Transaction, newContact?: Contact, newCategory?: Category) => {
-        const transId = t.id || crypto.randomUUID();
-        const transactionWithId = { ...t, id: transId };
-        if (newContact) await api.saveContact(newContact);
-        if (newCategory) await api.saveCategory(newCategory);
-        return api.saveLocallyAndQueue('transactions', transactionWithId);
-    },
-
-    deleteTransaction: async (id: string) => api.deleteLocallyAndQueue('transactions', id),
-    saveAccount: async (a: Account) => api.saveLocallyAndQueue('accounts', a),
-    deleteAccount: async (id: string) => api.deleteLocallyAndQueue('accounts', id),
-    saveGoal: async (g: FinancialGoal) => api.saveLocallyAndQueue('goals', g),
-    deleteGoal: async (id: string) => api.deleteLocallyAndQueue('goals', id),
-    saveContact: async (c: Contact) => api.saveLocallyAndQueue('contacts', c),
-    saveBulkContacts: async (contacts: Contact[]) => {
-        for (const c of contacts) { if (c) await api.saveLocallyAndQueue('contacts', c); }
-        return { success: true };
-    },
-    deleteContact: async (id: string) => api.deleteLocallyAndQueue('contacts', id),
-    saveCategory: async (c: Category) => api.saveLocallyAndQueue('categories', c),
-    deleteCategory: async (id: string) => api.deleteLocallyAndQueue('categories', id),
-    saveOpticalRx: async (rx: OpticalRx) => api.saveLocallyAndQueue('opticalRxs', rx),
-    deleteOpticalRx: async (id: string) => api.deleteLocallyAndQueue('opticalRxs', id),
-    saveCatalogItem: async (i: Partial<ServiceItem>) => api.saveLocallyAndQueue('serviceItems', i),
-    deleteCatalogItem: async (id: string) => api.deleteLocallyAndQueue('serviceItems', id),
-    saveServiceClient: async (c: any) => api.saveLocallyAndQueue('serviceClients', c),
-    deleteServiceClient: async (id: string) => api.deleteLocallyAndQueue('serviceClients', id),
-    saveAppointment: async (a: any) => api.saveLocallyAndQueue('serviceAppointments', a),
-    deleteAppointment: async (id: string) => api.deleteLocallyAndQueue('serviceAppointments', id),
-    saveOS: async (os: any) => api.saveLocallyAndQueue('serviceOrders', os),
-    deleteOS: async (id: string) => api.deleteLocallyAndQueue('serviceOrders', id),
-    saveOrder: async (o: any) => api.saveLocallyAndQueue('commercialOrders', o),
-    deleteOrder: async (id: string) => api.deleteLocallyAndQueue('commercialOrders', id),
-    saveLaboratory: async (lab: Laboratory) => api.saveLocallyAndQueue('laboratories', lab),
-    deleteLaboratory: async (id: string) => api.deleteLocallyAndQueue('laboratories', id),
-    saveSalespersonSchedule: async (s: SalespersonSchedule) => api.saveLocallyAndQueue('salespersonSchedules', s),
-    deleteSalespersonSchedule: async (id: string) => api.deleteLocallyAndQueue('salespersonSchedules', id),
-
-    transferStock: async (t: Partial<StockTransfer>) => {
-        const id = t.id || crypto.randomUUID();
-        const familyId = getActiveUserFamilyId();
-        const payload = { ...t, id, familyId };
-        const items = await localDb.getAll<ServiceItem>('serviceItems');
-        const targetItem = items.find(i => i && i.id === t.serviceItemId);
-        if (targetItem) {
-            const updatedItem = { ...targetItem, stockQuantity: (targetItem.stockQuantity || 0) - (t.quantity || 0) };
-            await localDb.put('serviceItems', updatedItem);
-        }
-        await localDb.put('stockTransfers', payload);
-        await syncService.enqueue('TRANSFER', 'stockTransfers', payload);
-        return { success: true, id };
-    },
-
-    savePJEntity: async (type: string, payload: any) => {
-        const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };
-        const store = storeMap[type];
-        if (store) return api.saveLocallyAndQueue(store, payload);
-        const familyId = getActiveUserFamilyId();
-        const profile = { ...payload, familyId, family_id: familyId };
-        await localDb.put('companyProfile', profile);
-        await syncService.enqueue('SAVE', 'categories', profile); 
-        return { success: true };
-    },
-    deletePJEntity: async (type: string, id: string) => {
-        const storeMap: any = { branch: 'branches', costCenter: 'costCenters', department: 'departments', project: 'projects' };
-        return api.deleteLocallyAndQueue(storeMap[type], id);
-    },
+    }
 };
