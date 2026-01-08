@@ -36,6 +36,7 @@ import LabsView from './components/LabsView';
 import ServicesView from './components/ServicesView';
 import ServiceOrderEditor from './components/ServiceOrderEditor';
 import SaleEditor from './components/SaleEditor';
+import CatalogItemEditor from './components/CatalogItemEditor';
 import Auth from './components/Auth';
 import LoadingOverlay from './components/LoadingOverlay';
 import ChatView from './components/ChatView';
@@ -70,6 +71,7 @@ const AppContent: React.FC<{
     const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [editingCatalogItem, setEditingCatalogItem] = useState<ServiceItem | null>(null);
 
     useEffect(() => {
         if (!socket || !currentUser) return;
@@ -351,7 +353,19 @@ const AppContent: React.FC<{
                     serviceItems={state.serviceItems} 
                     onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
                     onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}}
-                    onSaveCatalogItem={(i) => api.saveCatalogItem(i).then(refreshData)} onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                    onAddCatalogItem={() => { setEditingCatalogItem(null); setCurrentView('SRV_CATALOG_ITEM_EDITOR'); }}
+                    onEditCatalogItem={(item) => { setEditingCatalogItem(item); setCurrentView('SRV_CATALOG_ITEM_EDITOR'); }}
+                    onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                />;
+            case 'SRV_CATALOG_ITEM_EDITOR':
+                return <CatalogItemEditor 
+                    initialData={editingCatalogItem} branches={state.branches} serviceItems={state.serviceItems}
+                    onSave={async (item) => {
+                        await api.saveCatalogItem(item);
+                        refreshData();
+                        setCurrentView('SRV_CATALOG');
+                    }}
+                    onCancel={() => setCurrentView('SRV_CATALOG')}
                 />;
             default: return <Dashboard {...dashboardProps} />;
         }

@@ -48,13 +48,15 @@ interface ServicesViewProps {
     onDeleteOS: (id: string) => void;
     onSaveOrder: (o: CommercialOrder) => void;
     onDeleteOrder: (id: string) => void;
-    onSaveCatalogItem?: (i: ServiceItem) => void;
+    onAddCatalogItem?: () => void;
+    onEditCatalogItem?: (i: ServiceItem) => void;
     onDeleteCatalogItem?: (id: string) => void;
 }
 
 const ServicesView: React.FC<ServicesViewProps> = ({ 
     currentView, serviceOrders, commercialOrders, contacts, accounts, branches, serviceItems = [], 
-    onAddOS, onEditOS, onAddSale, onEditSale, onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, onSaveCatalogItem, onDeleteCatalogItem
+    onAddOS, onEditOS, onAddSale, onEditSale, onSaveOS, onDeleteOS, onSaveOrder, onDeleteOrder, 
+    onAddCatalogItem, onEditCatalogItem, onDeleteCatalogItem
 }) => {
     const isCatalog = currentView === 'SRV_CATALOG';
     const isOS = currentView === 'SRV_OS' || currentView === 'OPTICAL_LAB';
@@ -62,52 +64,23 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
-    const [isModalOpen, setIsModalOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
     const [viewType, setViewType] = useState<'GRID' | 'KANBAN'>((isOS || isSales) ? 'KANBAN' : 'GRID');
     
-    const [formData, setFormData] = useState<Partial<ServiceItem>>({
-        type: 'PRODUCT', defaultPrice: 0, costPrice: 0, category: '', branchId: branches[0]?.id || '',
-        stockQuantity: 0, warrantyEnabled: false, warrantyDays: 0, isFreeAllowed: false, autoGenerateOS: false
-    });
-
     const [transferData, setTransferData] = useState<Partial<StockTransfer>>({
         date: new Date().toISOString().split('T')[0], quantity: 0
     });
 
-    const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const existingCategories = useMemo(() => {
-        return Array.from(new Set(serviceItems.map(i => i.category).filter(Boolean))).sort();
-    }, [serviceItems]);
-
     const handleOpenAction = (item?: any) => {
         if (isCatalog) {
-            if (item) setFormData({ ...item });
-            else setFormData({ 
-                type: 'PRODUCT', defaultPrice: 0, costPrice: 0, category: '', 
-                branchId: branches[0]?.id || '', stockQuantity: 0, 
-                warrantyEnabled: false, warrantyDays: 0, 
-                isFreeAllowed: false, autoGenerateOS: false 
-            });
-            setIsModalOpen(true);
+            if (item && onEditCatalogItem) onEditCatalogItem(item);
+            else if (onAddCatalogItem) onAddCatalogItem();
         } else if (isOS) {
             item ? onEditOS(item) : onAddOS();
         } else if (isSales) {
             item ? onEditSale(item) : onAddSale();
-        }
-    };
-
-    const handleSaveCatalog = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!formData.name) return showAlert("O nome é obrigatório", "warning");
-        if (onSaveCatalogItem) {
-            onSaveCatalogItem({ ...formData, id: formData.id || crypto.randomUUID() } as ServiceItem);
-            setIsModalOpen(false);
-            showAlert("Item de catálogo salvo!", "success");
         }
     };
 
@@ -124,26 +97,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             await api.transferStock(transferData);
             showAlert("Transferência registrada e agendada para sincronização!", "success");
             setIsTransferModalOpen(false);
-            // Recarregamos para atualizar o estoque visual
             setTimeout(() => window.location.reload(), 800);
         } catch (e) { showAlert("Erro ao registrar transferência.", "error"); }
-    };
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return;
-        setIsUploading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const uploadData = new FormData();
-            uploadData.append('files', e.target.files[0]);
-            const res = await fetch('/api/upload', {
-                method: 'POST', headers: { 'Authorization': token ? `Bearer ${token}` : '' }, body: uploadData
-            });
-            if (!res.ok) throw new Error("Falha no upload");
-            const { urls } = await res.json();
-            setFormData(prev => ({ ...prev, imageUrl: urls[0] }));
-            showAlert("Imagem enviada!", "success");
-        } catch (err) { showAlert("Erro ao subir imagem.", "error"); } finally { setIsUploading(false); }
     };
 
     const formatCurrency = (val: number | undefined | null) => 
@@ -261,127 +216,8 @@ const ServicesView: React.FC<ServicesViewProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto">{renderGridContent()}</div>
-            
-            {/* Modal de Cadastro Avançado (Catálogo) */}
-            {isModalOpen && isCatalog && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl p-10 animate-scale-up border border-slate-100 overflow-y-auto max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-3"><Box className="w-6 h-6 text-indigo-600" /> Registro de Catálogo</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-6 h-6"/></button>
-                        </div>
-                        <form onSubmit={handleSaveCatalog} className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                <div className="md:col-span-1">
-                                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-3 ml-1 tracking-widest">Foto de Exibição</label>
-                                    <div onClick={() => fileInputRef.current?.click()} className={`aspect-square rounded-[2rem] border-2 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group ${formData.imageUrl ? 'border-indigo-500' : 'border-gray-200 hover:border-indigo-400 bg-gray-50'}`}>
-                                        {formData.imageUrl ? (
-                                            <>
-                                                <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-indigo-600/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><UploadCloud className="w-8 h-8 text-white" /></div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /> : <ImageIcon className="w-8 h-8 text-gray-300" />}
-                                                <span className="text-[10px] font-black uppercase text-gray-400 mt-2">Clique para Upload</span>
-                                            </>
-                                        )}
-                                        <input ref={fileInputRef} type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
-                                    </div>
-                                </div>
 
-                                <div className="md:col-span-2 space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="md:col-span-2">
-                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Nome do Item / Referência</label>
-                                            <input type="text" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="Ex: Armação Ray-Ban Aviador Black" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Categoria (Busca ou Nova)</label>
-                                            <div className="relative">
-                                                <Tag className="w-4 h-4 text-gray-400 absolute left-4 top-4" />
-                                                <input list="cat-list" className="w-full pl-11 bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none" value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ex: Armação, Lente..." />
-                                                <datalist id="cat-list">{existingCategories.map(c => <option key={c} value={c} />)}</datalist>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Tipo</label>
-                                            <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none appearance-none" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})}>
-                                                <option value="PRODUCT">📦 Produto em Estoque</option>
-                                                <option value="SERVICE">🛠️ Serviço / Mão de Obra</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {formData.type === 'PRODUCT' && (
-                                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                                            <div>
-                                                <label className="block text-[10px] font-black uppercase text-indigo-600 mb-2 ml-1">Estoque Inicial (Qtd)</label>
-                                                <input type="number" className="w-full bg-white rounded-2xl p-4 text-lg font-black text-indigo-700 outline-none shadow-sm" value={formData.stockQuantity} onChange={e => setFormData({...formData, stockQuantity: Number(e.target.value)})} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-black uppercase text-indigo-600 mb-2 ml-1">Unidade / Filial</label>
-                                                <select className="w-full bg-white rounded-2xl p-4 text-sm font-bold shadow-sm outline-none" value={formData.branchId || ''} onChange={e => setFormData({...formData, branchId: e.target.value})}>
-                                                    <option value="">Selecione a unidade...</option>
-                                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="md:col-span-2 pt-4 border-t border-slate-100">
-                                                <div className="flex items-center justify-between">
-                                                    <label className="flex items-center gap-3 cursor-pointer">
-                                                        <input type="checkbox" checked={formData.warrantyEnabled} onChange={e => setFormData({...formData, warrantyEnabled: e.target.checked})} className="w-5 h-5 rounded-lg text-amber-500" />
-                                                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Permite Garantia</span>
-                                                    </label>
-                                                    {formData.warrantyEnabled && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Tempo Máx (Dias):</span>
-                                                            <input type="number" className="w-20 bg-white rounded-lg p-2 text-xs font-black text-center border border-slate-100" value={formData.warrantyDays} onChange={e => setFormData({...formData, warrantyDays: Number(e.target.value)})} />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {formData.type === 'SERVICE' && (
-                                        <div className="bg-sky-50 p-6 rounded-[2rem] border border-sky-100 space-y-4 animate-fade-in">
-                                            <h4 className="text-[10px] font-black text-sky-600 uppercase tracking-widest flex items-center gap-2"><Settings className="w-4 h-4"/> Regras de Automação do Serviço</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <label className="flex items-center gap-3 bg-white p-4 rounded-2xl shadow-sm cursor-pointer hover:bg-sky-100 transition-colors">
-                                                    <input type="checkbox" checked={formData.isFreeAllowed} onChange={e => setFormData({...formData, isFreeAllowed: e.target.checked})} className="w-5 h-5 rounded-lg text-sky-600" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-black text-slate-700 uppercase">Cortesia / Grátis</span>
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Pode ser vendido sem valor</span>
-                                                    </div>
-                                                </label>
-                                                <label className="flex items-center gap-3 bg-white p-4 rounded-2xl shadow-sm cursor-pointer hover:bg-sky-100 transition-colors">
-                                                    <input type="checkbox" checked={formData.autoGenerateOS} onChange={e => setFormData({...formData, autoGenerateOS: e.target.checked})} className="w-5 h-5 rounded-lg text-indigo-600" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-black text-slate-700 uppercase">Gerar O.S. Automática</span>
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Gera OS ao confirmar venda</span>
-                                                    </div>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-indigo-50/50 p-8 rounded-[2rem] border border-indigo-100">
-                                <div><label className="block text-[10px] font-black uppercase text-indigo-400 mb-2">Preço de Venda Sugerido (R$)</label><div className="relative"><DollarSign className="absolute left-4 top-4 w-4 h-4 text-indigo-400" /><input type="number" step="0.01" className="w-full pl-11 py-4 bg-white rounded-2xl text-xl font-black text-indigo-700 outline-none shadow-sm focus:ring-2 focus:ring-indigo-500" value={formData.defaultPrice} onChange={e => setFormData({...formData, defaultPrice: Number(e.target.value)})} /></div></div>
-                                <div><label className="block text-[10px] font-black uppercase text-rose-400 mb-2">Custo Médio / Base (R$)</label><div className="relative"><DollarSign className="absolute left-4 top-4 w-4 h-4 text-rose-400" /><input type="number" step="0.01" className="w-full pl-11 py-4 bg-white rounded-2xl text-xl font-black text-rose-700 outline-none shadow-sm focus:ring-2 focus:ring-rose-500" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} /></div></div>
-                            </div>
-
-                            <div className="flex gap-4 pt-6 border-t border-gray-100">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-gray-600 transition-colors">Descartar</button>
-                                <button type="submit" className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-indigo-700"><Save className="w-4 h-4" /> Salvar no Catálogo</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal de Transferência de Estoque Multi-Filial */}
+            {/* Modal de Transferência de Estoque Multi-Filial (Mantido como modal pois é uma ação rápida de ajuste) */}
             {isTransferModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-10 animate-scale-up border border-slate-100 relative">
