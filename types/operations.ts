@@ -1,4 +1,3 @@
-
 import { OSPriority, OSStatus, OSType, OSOrigin } from './enums_legacy';
 
 export type { OSStatus, OSType, OSOrigin, OSPriority };
@@ -43,6 +42,8 @@ export interface SalespersonSchedule {
     familyId: string;
 }
 
+export type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
+
 export interface StockTransfer {
     id: string;
     serviceItemId: string;
@@ -55,6 +56,9 @@ export interface StockTransfer {
     date: string;
     notes?: string;
     familyId: string;
+    status: TransferStatus;
+    invoiceRef?: string; // Referência para futura NF de transferência
+    userId?: string;
 }
 
 export interface VariationAttribute {
@@ -105,8 +109,8 @@ export interface ServiceItem {
   description?: string;
   imageUrl?: string;
   unit?: string;
-  branchId?: string;
-  stockQuantity?: number;
+  branchId?: string; // Filial onde o item "mora" originalmente (Matriz na compra)
+  stockQuantity: number;
   warrantyEnabled?: boolean;
   warrantyDays?: number;
   isFreeAllowed?: boolean;
@@ -162,52 +166,55 @@ export interface CommercialOrder {
   installments?: number;
 }
 
+// Fix: Added missing Contract interface
 export interface Contract {
-  id: string;
-  title: string;
-  contactId?: string;
-  contactName?: string;
-  value: number;
-  startDate: string;
-  status: string;
-  endDate?: string;
-  billingDay?: number;
+    id: string;
+    contactId: string;
+    contactName?: string;
+    title: string;
+    content: string;
+    status: 'DRAFT' | 'SIGNED' | 'EXPIRED' | 'CANCELLED';
+    startDate: string;
+    endDate?: string;
+    value: number;
+    familyId: string;
+    deleted_at?: string;
 }
 
+// Fix: Added missing Invoice interface
 export interface Invoice {
-  id: string;
-  number: string;
-  amount: number;
-  issueDate: string;
-  status: string;
-  contactName?: string;
-  series?: string;
-  type?: string;
-  contactId?: string;
-  description?: string;
-  items?: OSItem[];
-  fileUrl?: string;
-  orderId?: string;
-  serviceOrderId?: string;
-  issue_date?: string;
+    id: string;
+    orderId: string;
+    contactId: string;
+    contactName?: string;
+    number: string;
+    series: string;
+    type: 'ISS' | 'ICMS';
+    amount: number;
+    date: string;
+    xmlUrl?: string;
+    pdfUrl?: string;
+    status: 'ISSUED' | 'CANCELLED';
+    familyId: string;
+    deleted_at?: string;
+}
+
+// Fix: Added missing Kanban types
+export interface KanbanColumnConfig {
+    id: string;
+    label: string;
+    color: string;
+    borderColor?: string;
 }
 
 export interface KanbanItem {
-  id: string;
-  title: string;
-  subtitle?: string;
-  status: string;
-  priority?: OSPriority;
-  amount?: number;
-  date?: string;
-  tags?: string[];
-  assigneeName?: string;
-  raw?: any;
-}
-
-export interface KanbanColumnConfig {
-  id: string;
-  label: string;
-  color: string;
-  borderColor: string;
+    id: string;
+    title: string;
+    subtitle?: string;
+    status: string;
+    amount?: number;
+    date?: string;
+    priority?: OSPriority;
+    assigneeName?: string;
+    raw?: any;
 }
