@@ -30,7 +30,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     const fetchDiag = async () => {
-      // FIX: Se a IA for desativada, limpa o diagnóstico e não faz a requisição
       if (!isAIEnabled) {
           setDiagnostic('');
           return;
@@ -137,18 +136,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
       </div>
 
-      {/* Consultor IA e Gráficos */}
+      {/* Consultor IA e Lista de Transações */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className={`${isAIEnabled ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-8`}>
-            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
-                <h3 className="text-lg font-black text-slate-800 mb-8 flex items-center gap-3 uppercase tracking-tighter">
-                    <TrendingUp className="w-6 h-6 text-indigo-600" />
-                    Histórico de Evolução Patrimonial
-                </h3>
-                <BalanceHistoryChart accounts={state.accounts} transactions={state.transactions} />
-            </div>
-
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden h-full">
                 <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
                     <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter">Movimentações Recentes</h3>
                     <button onClick={() => onChangeView('FIN_TRANSACTIONS')} className="text-indigo-600 hover:text-indigo-800 text-[10px] font-black flex items-center gap-2 uppercase tracking-widest transition-all">Ver Extrato <ArrowRight className="w-4 h-4" /></button>
@@ -220,6 +211,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
             </div>
         )}
+      </div>
+
+      {/* Histórico de Evolução Patrimonial - Agora por último */}
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 animate-fade-in">
+          <h3 className="text-lg font-black text-slate-800 mb-8 flex items-center gap-3 uppercase tracking-tighter">
+              <TrendingUp className="w-6 h-6 text-indigo-600" />
+              Histórico de Evolução Patrimonial
+          </h3>
+          <BalanceHistoryChart accounts={state.accounts} transactions={state.transactions} />
       </div>
     </div>
   );
