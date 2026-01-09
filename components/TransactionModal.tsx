@@ -9,7 +9,7 @@ import AttachmentModal from './AttachmentModal';
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => void;
+  onSave: (transaction: Omit<Transaction, 'id'> & { id: string }, newContact?: Contact, newCategory?: Category) => void;
   accounts: Account[];
   contacts: Contact[];
   categories?: Category[];
@@ -217,9 +217,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
 
-    // Validação de Negócio
     if (!formData.description.trim()) return showAlert("A descrição é obrigatória.", "warning");
-    if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
+    const amt = parseFloat(formData.amount);
+    if (!formData.amount || isNaN(amt) || amt <= 0) {
         return showAlert("Insira um valor válido maior que zero.", "warning");
     }
     if (!formData.accountId) return showAlert("Selecione uma conta válida.", "warning");
@@ -228,14 +228,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         return showAlert("A conta de destino deve ser diferente da conta de origem.", "warning");
     }
 
-    // TRAVA: Validação de Categoria (Obrigatória para Receita e Despesa)
     if (formData.type !== TransactionType.TRANSFER && (!categorySearch || !categorySearch.trim())) {
         return showAlert("Por favor, informe uma categoria para o lançamento.", "warning");
     }
 
     setIsSubmitting(true);
 
-    // Process Category
     let finalCategory = categorySearch?.trim() || '';
     let newCategoryObj: Category | undefined;
     if (formData.type !== TransactionType.TRANSFER) {
@@ -247,7 +245,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
         finalCategory = 'Transferência';
     }
 
-    // Process Contact
     let finalContactId = formData.contactId;
     let newContactObj: Contact | undefined;
     if (contactSearch.trim()) {
@@ -263,7 +260,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     try {
         await onSave({
             ...formData,
-            amount: parseFloat(formData.amount),
+            id: (initialData as any)?.id || crypto.randomUUID(),
+            amount: amt,
             category: finalCategory,
             contactId: finalContactId || undefined,
             destinationAccountId: (formData.type === TransactionType.TRANSFER) ? formData.destinationAccountId : undefined,
@@ -406,9 +404,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                                   <Plus className="w-3 h-3" /> Criar novo: "{contactSearch}"
                               </button>
                           )}
-                          {contacts.length === 0 && !contactSearch && (
-                              <div className="px-4 py-4 text-center text-xs text-slate-400 font-medium">Nenhum contato cadastrado</div>
-                          )}
                       </div>
                   )}
               </div>
@@ -467,166 +462,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
                                       {c.name}
                                   </button>
                               ))}
-                              {categorySearch && !categories.some(c => c.name.toLowerCase() === categorySearch.toLowerCase() && c.type === formData.type) && (
-                                  <button type="button" onClick={() => setShowCategoryDropdown(false)} className="w-full text-left px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-2 mt-1 transition-all hover:bg-indigo-100">
-                                      <Plus className="w-3 h-3" /> Criar nova: "{categorySearch}"
-                                  </button>
-                              )}
                           </div>
                       )}
                   </div>
               )}
-          </div>
-
-          {userEntity === EntityType.BUSINESS && (
-              <div className="pt-6 border-t border-slate-100 space-y-4 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-2">
-                      <Briefcase className="w-4 h-4 text-indigo-500" />
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Informações PJ</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Filial</label>
-                          <select 
-                            disabled={isSubmitting}
-                            value={formData.branchId} 
-                            onChange={e => setFormData({...formData, branchId: e.target.value})}
-                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                          >
-                              <option value="">Selecione...</option>
-                              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Centro de Custo</label>
-                          <select 
-                            disabled={isSubmitting}
-                            value={formData.costCenterId} 
-                            onChange={e => setFormData({...formData, costCenterId: e.target.value})}
-                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                          >
-                              <option value="">Selecione...</option>
-                              {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Departamento</label>
-                          <select 
-                            disabled={isSubmitting}
-                            value={formData.departmentId} 
-                            onChange={e => setFormData({...formData, departmentId: e.target.value})}
-                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                          >
-                              <option value="">Selecione...</option>
-                              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Projeto</label>
-                          <select 
-                            disabled={isSubmitting}
-                            value={formData.projectId} 
-                            onChange={e => setFormData({...formData, projectId: e.target.value})}
-                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                          >
-                              <option value="">Selecione...</option>
-                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          <div className="pt-6 border-t border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                      <Repeat className="w-4 h-4 text-indigo-500" />
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Repetir Lançamento</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" disabled={isSubmitting} className="sr-only peer" checked={formData.isRecurring} onChange={e => setFormData({...formData, isRecurring: e.target.checked})} />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                  </label>
-              </div>
-
-              {formData.isRecurring && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Frequência</label>
-                          <select 
-                            disabled={isSubmitting}
-                            value={formData.recurrenceFrequency} 
-                            onChange={e => setFormData({...formData, recurrenceFrequency: e.target.value as any})}
-                            className="w-full p-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                          >
-                              <option value="WEEKLY">Semanal</option>
-                              <option value="MONTHLY">Mensal</option>
-                              <option value="YEARLY">Anual</option>
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Término (Opcional)</label>
-                          <div className="relative">
-                            <CalendarDays className="w-4 h-4 text-slate-300 absolute left-3 top-2" />
-                            <input 
-                                type="date" 
-                                disabled={isSubmitting}
-                                value={formData.recurrenceEndDate} 
-                                onChange={e => setFormData({...formData, recurrenceEndDate: e.target.value})}
-                                className="w-full pl-9 py-2 border border-slate-100 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 outline-none"
-                            />
-                          </div>
-                      </div>
-                  </div>
-              )}
-          </div>
-
-          <div className="pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Situação</label>
-                  <div className="flex gap-1.5 mt-1">
-                      {[
-                          { id: TransactionStatus.PAID, label: 'Pago', icon: Check, color: 'bg-emerald-50 text-emerald-700' },
-                          { id: TransactionStatus.PENDING, label: 'Pendente', icon: Clock, color: 'bg-amber-50 text-amber-700' },
-                          { id: TransactionStatus.OVERDUE, label: 'Atrasado', icon: AlertCircle, color: 'bg-rose-50 text-rose-700' }
-                      ].map(opt => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => setFormData({...formData, status: opt.id})}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[10px] font-black transition-all ${
-                                formData.status === opt.id ? opt.color : 'bg-slate-50 text-slate-400 grayscale'
-                            } disabled:opacity-50`}
-                          >
-                            <opt.icon className="w-3 h-3" /> {opt.label}
-                          </button>
-                      ))}
-                  </div>
-              </div>
-
-              <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Documentos Digitais</label>
-                  <div className="mt-1">
-                      <button 
-                        type="button" 
-                        disabled={isProcessingFiles || isSubmitting}
-                        onClick={() => setShowAttachments(true)}
-                        className={`w-full flex items-center justify-between gap-2 py-2.5 px-4 rounded-xl text-[10px] font-black transition-all border ${
-                            formData.receiptUrls.length > 0 
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                            : 'bg-slate-50 border-slate-100 border-dashed text-slate-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
-                        } disabled:opacity-50`}
-                      >
-                        <div className="flex items-center gap-2">
-                            {isProcessingFiles ? <Loader2 className="w-4 h-4 animate-spin" /> : (formData.receiptUrls.length > 0 ? <FileCheck className="w-4 h-4" /> : <FilePlus className="w-4 h-4" />)}
-                            <span>{formData.receiptUrls.length > 0 ? `${formData.receiptUrls.length} Arquivos` : 'Anexar Comprovantes'}</span>
-                        </div>
-                        <Plus className="w-3 h-3" />
-                      </button>
-                  </div>
-              </div>
           </div>
 
           <div className="pt-6 flex items-center justify-end gap-4 border-t border-slate-50">

@@ -26,7 +26,7 @@ interface TransactionEditorProps {
     departments: Department[];
     projects: Project[];
     userEntity: EntityType;
-    onSave: (transaction: Omit<Transaction, 'id'>, newContact?: Contact, newCategory?: Category) => Promise<void>;
+    onSave: (transaction: Omit<Transaction, 'id'> & { id: string }, newContact?: Contact, newCategory?: Category) => Promise<void>;
     onCancel: () => void;
     settings?: any;
 }
@@ -39,7 +39,6 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
     const { showAlert } = useAlert();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Estado principal do formulário
     const [formData, setFormData] = useState<Partial<Transaction>>({
         type: TransactionType.EXPENSE,
         status: TransactionStatus.PAID,
@@ -52,13 +51,11 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
         branchId: ''
     });
 
-    // Estados de busca/seleção
     const [categorySearch, setCategorySearch] = useState('');
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
 
-    // Estados de Parcelamento
     const [isParcelado, setIsParcelado] = useState(false);
     const [hasDownPayment, setHasDownPayment] = useState(false);
     const [numInstallments, setNumInstallments] = useState(1);
@@ -68,7 +65,6 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
     const categoryDropdownRef = useRef<HTMLDivElement>(null);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
 
-    // Efeito para carregar dados iniciais
     useEffect(() => {
         if (initialData) {
             setFormData(initialData);
@@ -86,72 +82,45 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
         }
     }, [initialData, accounts, contacts, branches]);
 
-    // Lógica de Descrição Automática
     useEffect(() => {
         if (initialData) return; 
-
         const typeLabel = formData.type === TransactionType.INCOME ? 'Recebimento' : 'Pagamento';
         const catLabel = categorySearch || '[Categoria]';
         const contactLabel = contactSearch || '';
-        
         let suggestion = `${typeLabel} de ${catLabel}`;
         if (contactLabel) suggestion += ` - ${contactLabel}`;
-
         setFormData(prev => ({ ...prev, description: suggestion }));
     }, [formData.type, categorySearch, contactSearch, initialData]);
 
-    // Cálculos de Parcelamento com Juros das Configurações
     const installmentData = useMemo(() => {
         const baseAmount = formData.amount || 0;
         if (!isParcelado || baseAmount <= 0) return { items: [], totalWithInterest: baseAmount, interestAmount: 0 };
-        
         const remainder = hasDownPayment ? Math.max(0, baseAmount - downPayment) : baseAmount;
         if (remainder <= 0) return { items: [], totalWithInterest: baseAmount, interestAmount: 0 };
-
-        // Busca regras dos ajustes
-        const rules = settings?.installmentRules || { 
-            creditCard: { interestRate: 0 }, 
-            boleto: { maxInstallments: 12 } 
-        };
-        
-        // Aplica taxa apenas se for cartão
+        const rules = settings?.installmentRules || { creditCard: { interestRate: 0 } };
         const ratePct = installmentMethod === 'CREDIT_CARD' ? (rules.creditCard.interestRate || 0) : 0;
         const interestAmount = remainder * (ratePct / 100);
         const amountToSplit = remainder + interestAmount;
         const installmentValue = amountToSplit / numInstallments;
-        
         const items = [];
         const baseDate = new Date(formData.date!);
-
         for (let i = 1; i <= numInstallments; i++) {
             const date = new Date(baseDate);
             date.setMonth(baseDate.getMonth() + i);
-            items.push({
-                idx: i,
-                date: date.toISOString().split('T')[0],
-                value: installmentValue
-            });
+            items.push({ idx: i, date: date.toISOString().split('T')[0], value: installmentValue });
         }
-        
-        return { 
-            items, 
-            totalWithInterest: (hasDownPayment ? downPayment : 0) + amountToSplit,
-            interestAmount,
-            installmentValue
-        };
+        return { items, totalWithInterest: (hasDownPayment ? downPayment : 0) + amountToSplit, interestAmount, installmentValue };
     }, [isParcelado, formData.amount, hasDownPayment, downPayment, numInstallments, installmentMethod, formData.date, settings]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isSubmitting) return;
-
         if (!formData.description?.trim()) return showAlert("A descrição é obrigatória.", "warning");
         if (!formData.amount || formData.amount <= 0) return showAlert("Insira um valor maior que zero.", "warning");
         if (!categorySearch.trim()) return showAlert("Selecione uma categoria.", "warning");
 
         setIsSubmitting(true);
 
-        // Processamento de Contato/Categoria
         let newContactObj: Contact | undefined;
         let finalContactId = formData.contactId;
         if (contactSearch.trim() && !contacts.some(c => c.id === formData.contactId)) {
@@ -167,10 +136,10 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
 
         try {
             if (isParcelado) {
-                // Lógica de Venda/Compra Parcelada
                 if (hasDownPayment && downPayment > 0) {
                     await onSave({
                         ...formData,
+                        id: crypto.randomUUID(),
                         amount: downPayment,
                         category: finalCategory,
                         contactId: finalContactId,
@@ -181,10 +150,10 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                     newContactObj = undefined;
                     newCategoryObj = undefined;
                 }
-
                 for (const inst of installmentData.items) {
                     await onSave({
                         ...formData,
+                        id: crypto.randomUUID(),
                         amount: inst.value,
                         category: finalCategory,
                         contactId: finalContactId,
@@ -199,6 +168,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
             } else {
                 await onSave({
                     ...formData,
+                    id: formData.id || crypto.randomUUID(),
                     category: finalCategory,
                     contactId: finalContactId
                 } as Transaction, newContactObj, newCategoryObj);
@@ -247,7 +217,6 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 <div className="lg:col-span-2 space-y-8">
-                    
                     <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8">
                         <div className="space-y-4">
                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Valor Total</label>
@@ -373,10 +342,8 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                         </div>
                     </div>
 
-                    {/* Bloco 3: Opções de Repetição (Parcelamento vs Recorrência) */}
                     {!initialData && formData.type !== TransactionType.TRANSFER && (
                         <div className="space-y-8 animate-slide-in-bottom">
-                            {/* OPÇÃO 1: PARCELAMENTO */}
                             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -497,7 +464,6 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                                 )}
                             </div>
 
-                            {/* OPÇÃO 2: RECORRÊNCIA FIXA */}
                             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10 space-y-8">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -595,7 +561,7 @@ const TransactionEditor: React.FC<TransactionEditorProps> = ({
                                     <button
                                         key={opt.id}
                                         type="button"
-                                        disabled={isParcelado} // Trava status se parcelado
+                                        disabled={isParcelado} 
                                         onClick={() => setFormData({...formData, status: opt.id as TransactionStatus})}
                                         className={`flex items-center gap-4 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${isParcelado ? 'opacity-50 cursor-not-allowed' : ''} ${
                                             formData.status === opt.id 

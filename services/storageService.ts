@@ -10,20 +10,17 @@ import {
 import { localDb } from './localDb';
 import { syncService } from './syncService';
 
-// Fix: Implemented missing utility to handle API responses
 const handleResponse = async (res: Response) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Server error');
     return data;
 };
 
-// Fix: Helper to get common headers
 const getHeaders = () => ({
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${localStorage.getItem('token')}`
 });
 
-// Fix: Implemented missing Auth exports
 export const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -94,7 +91,6 @@ export const updateProfile = async (data: any) => {
     return result.user;
 };
 
-// Fix: Implemented missing System exports
 export const updateSettings = async (settings: AppSettings) => {
     const res = await fetch('/api/settings', {
         method: 'POST',
@@ -150,7 +146,6 @@ export const removeMember = async (memberId: string) => {
     return handleResponse(res);
 };
 
-// Fix: Implemented missing Audit/Log exports
 export const getAuditLogs = async () => {
     const res = await fetch('/api/audit-logs', { headers: getHeaders() });
     return handleResponse(res);
@@ -178,7 +173,6 @@ export const revertLogChange = async (logId: number) => {
     return handleResponse(res);
 };
 
-// Fix: Implemented missing Admin exports
 export const getAdminStats = async () => {
     const res = await fetch('/api/admin/stats', { headers: getHeaders() });
     return handleResponse(res);
@@ -189,7 +183,6 @@ export const getAdminUsers = async () => {
     return handleResponse(res);
 };
 
-// Fix: Implemented missing Public exports
 export const getPublicOrder = async (token: string) => {
     const res = await fetch(`/api/public/orders/${token}`);
     return handleResponse(res);
@@ -204,7 +197,6 @@ export const updatePublicOrderStatus = async (token: string, status: string) => 
     return handleResponse(res);
 };
 
-// Fix: Implemented missing initial data loader
 export const loadInitialData = async () => {
     try {
         await syncService.pullFromServer();
@@ -237,7 +229,6 @@ export const loadInitialData = async () => {
         localDb.getAll<Invoice>('invoices'),
         localDb.getAll<OpticalRx>('opticalRxs'),
         localDb.getAll<CompanyProfile>('companyProfile'),
-        // Fix: Changed Salespeople to Salesperson as Salespeople was not defined
         localDb.getAll<Salesperson>('salespeople'),
         localDb.getAll<SalespersonSchedule>('salespersonSchedules'),
         localDb.getAll<Laboratory>('laboratories'),
@@ -254,13 +245,16 @@ export const loadInitialData = async () => {
     } as AppState;
 };
 
-// Fix: Implemented missing api object with CRUD methods
 export const api = {
     saveTransaction: async (t: Transaction, nc?: Contact, ncat?: Category) => {
+        // Garante que a transação tenha um ID antes de processar
+        const payload = { ...t, id: t.id || crypto.randomUUID() };
+        
         if (nc) await api.saveContact(nc);
         if (ncat) await api.saveLocallyAndQueue('categories', ncat);
-        await localDb.put('transactions', t);
-        await syncService.enqueue('SAVE', 'transactions', t);
+        
+        await localDb.put('transactions', payload);
+        await syncService.enqueue('SAVE', 'transactions', payload);
     },
     deleteTransaction: async (id: string) => {
         await localDb.delete('transactions', id);
@@ -297,17 +291,13 @@ export const api = {
     },
     savePJEntity: async (type: string, data: any) => {
         let store = type === 'company' ? 'companyProfile' : type + 's';
-        // Correção de pluralização para 'branch' -> 'branches'
         if (type === 'branch') store = 'branches';
-        
         await localDb.put(store, data);
         await syncService.enqueue('SAVE', store, data);
     },
     deletePJEntity: async (type: string, id: string) => {
         let store = type + 's';
-        // Correção de pluralização para 'branch' -> 'branches'
         if (type === 'branch') store = 'branches';
-        
         await localDb.delete(store, id);
         await syncService.enqueue('DELETE', store, { id });
     },
