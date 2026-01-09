@@ -5,7 +5,7 @@ import {
   LayoutDashboard, List, CreditCard, Users, MessageSquare, 
   Settings, LogOut, Briefcase, Eye, Activity, ChevronLeft, ChevronRight,
   Menu, X, Share2, HelpCircle, Bell, Package, Wrench, ShoppingBag, 
-  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor, Target, ScrollText
+  Store, BadgeDollarSign, Sparkles, BrainCircuit, PanelLeftClose, PanelLeftOpen, Microscope, BookOpen, ChevronUp, Check, UserCircle, ShieldCheck, Monitor, Target, ScrollText, CalendarRange
 } from 'lucide-react';
 import { logout, switchContext } from '../services/storageService';
 import { useHelp } from './GuidedHelp';
@@ -100,6 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         { id: 'SRV_CATALOG', label: 'Produtos e Serviços', icon: Package },
         { id: 'SRV_SALES', label: 'Vendas / PDV', icon: ShoppingBag },
         { id: 'FIN_CONTACTS', label: 'Contatos / Clientes', icon: Users },
+        { id: 'SYS_GLOBAL_SCHEDULE', label: 'Escala Global', icon: CalendarRange },
         { id: 'SYS_SALESPEOPLE', label: 'Colaboradores', icon: BadgeDollarSign, enabled: isAdmin },
         { id: 'SYS_BRANCHES', label: 'Filiais', icon: Store },
     ]},
