@@ -48,18 +48,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   });
   const [loadingCnpj, setLoadingCnpj] = useState(false);
 
-  const handleUpdateSettingField = async (field: keyof AppSettings, value: any) => {
+  // FIX: Simplificado para delegar a responsabilidade para o componente pai (App.tsx) 
+  // que já faz o updateSettings e o refreshUser (checkAuth)
+  const handleUpdateSettingField = (field: keyof AppSettings, value: any) => {
       const newSettings = { ...settings, [field]: value };
-      try {
-          await updateSettings(newSettings);
-          onUpdateSettings(newSettings);
-          showAlert("Configuração atualizada!", "success");
-      } catch (e) {
-          showAlert("Erro ao salvar configuração.", "error");
-      }
+      onUpdateSettings(newSettings);
+      // Feedback imediato visual
+      showAlert("Sincronizando configuração...", "info");
   };
 
-  const handleUpdateInstallmentRules = async (method: 'creditCard' | 'boleto', field: string, value: any) => {
+  const handleUpdateInstallmentRules = (method: 'creditCard' | 'boleto', field: string, value: any) => {
     const newRules = { 
         ...settings.installmentRules, 
         [method]: { 
@@ -169,9 +167,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <p className="text-sm font-bold text-slate-700">Sugestões e Monitoramento IA</p>
-                            <Sparkles className="w-4 h-4 text-amber-500" />
+                            <Sparkles className="w-4 h-4 text-amber-50" />
                         </div>
-                        <p className="text-xs text-slate-400 leading-relaxed font-medium max-w-md">Ao ativar, o sistema utilizará o Gemini Pro 3.0 para sugerir títulos de vendas, gerar diagnósticos de saúde do caixa e riscos patrimoniais.</p>
+                        <p className="text-xs text-slate-400 leading-relaxed font-medium max-w-md">Ao ativar, o sistema utilizará o Gemini Pro para sugerir títulos de vendas, gerar diagnósticos de saúde do caixa e riscos patrimoniais.</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input 

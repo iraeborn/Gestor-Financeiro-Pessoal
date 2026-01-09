@@ -16,8 +16,24 @@ export default function(logAudit) {
         const { settings } = req.body;
         const userId = req.user.id;
         try {
-            await pool.query('UPDATE users SET settings = $1 WHERE id = $2', [JSON.stringify(settings), userId]);
-            await logAudit(pool, userId, 'UPDATE', 'settings', userId, 'Configurações de sistema atualizadas');
+            // Busca o family_id (dono do workspace) para garantir que a config seja global para o negócio
+            const userRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = userRes.rows[0]?.family_id || userId;
+
+            // Verifica se o usuário tem permissão de ADMIN no workspace ativo
+            const adminCheck = await pool.query(
+                'SELECT role FROM memberships WHERE user_id = $1 AND family_id = $2',
+                [userId, familyId]
+            );
+
+            if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== 'ADMIN') {
+                return res.status(403).json({ error: 'Apenas administradores podem alterar configurações globais do negócio.' });
+            }
+
+            // Atualiza as configurações no registro do dono (que é quem dita as regras do workspace)
+            await pool.query('UPDATE users SET settings = $1 WHERE id = $2', [JSON.stringify(settings), familyId]);
+            
+            await logAudit(pool, userId, 'UPDATE', 'settings', familyId, 'Configurações globais de sistema atualizadas');
             res.json({ success: true });
         } catch (err) {
             res.status(500).json({ error: 'Erro ao salvar configurações: ' + err.message });

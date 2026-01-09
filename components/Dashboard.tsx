@@ -30,12 +30,21 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     const fetchDiag = async () => {
-      if (isAIEnabled && state?.transactions?.length > 0) {
+      // FIX: Se a IA for desativada, limpa o diagnóstico e não faz a requisição
+      if (!isAIEnabled) {
+          setDiagnostic('');
+          return;
+      }
+
+      if (state?.transactions?.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
           setDiagnostic(res);
-        } catch (e) { console.error("IA Error:", e); }
+        } catch (e) { 
+            console.error("IA Error:", e);
+            setDiagnostic("Houve um problema ao processar seu diagnóstico de elite. Tente novamente em instantes.");
+        }
         setLoadingDiag(false);
       }
     };
@@ -163,7 +172,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg"><Sparkles className="w-7 h-7 text-white" /></div>
                         <div>
                             <h4 className="text-xl font-black">Advisor de Elite</h4>
-                            <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Análise via Gemini 3.0 Pro</p>
+                            <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Análise via Gemini Pro</p>
                         </div>
                     </div>
                     
@@ -174,7 +183,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 <span className="text-xs font-black uppercase tracking-widest">Processando Ativos...</span>
                             </div>
                         ) : (
-                            <ReactMarkdown>{diagnostic || "Aguardando sincronização de dados para diagnóstico..."}</ReactMarkdown>
+                            <ReactMarkdown>{diagnostic || "Aguardando novos lançamentos para um diagnóstico preciso de patrimônio."}</ReactMarkdown>
                         )}
                     </div>
 
@@ -182,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         onClick={() => onChangeView('FIN_ADVISOR')}
                         className="mt-8 w-full bg-white text-indigo-700 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 shadow-xl"
                     >
-                        Conversar com Gestor <ArrowRight className="w-4 h-4" />
+                        Conversar com Gestor <ArrowRight className="w-3 h-3" />
                     </button>
                 </div>
 
