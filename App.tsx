@@ -1,4 +1,178 @@
 
+import React, { useState, useEffect } from 'react';
+import { 
+  User, AppState, ViewMode, Transaction, Account, 
+  Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder,
+  TransactionType, TransactionStatus, ServiceItem, ServiceAppointment, Laboratory
+} from './types';
+import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers } from './services/storageService';
+import { syncService } from './services/syncService';
+import { useAlert } from './components/AlertSystem';
+import { Wifi, WifiOff, RefreshCw, Menu as MenuIcon, HelpCircle } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
+
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import TransactionsView from './components/TransactionsView';
+import TransactionEditor from './components/TransactionEditor';
+import AccountsView from './components/AccountsView';
+import CreditCardsView from './components/CreditCardsView';
+import GoalsView from './components/GoalsView';
+import Reports from './components/Reports';
+import SmartAdvisor from './components/SmartAdvisor';
+import DiagnosticView from './components/DiagnosticView';
+import ContactsView from './components/ContactsView';
+import ContactEditor from './components/ContactEditor';
+import AccessView from './components/AccessView';
+import LogsView from './components/LogsView';
+import SalespeopleView from './components/SalespeopleView';
+import SettingsView from './components/SettingsView';
+import BranchesView from './components/BranchesView';
+import BranchScheduleView from './components/BranchScheduleView';
+import SalespersonScheduleView from './components/SalespersonScheduleView';
+import BranchDetailsView from './components/BranchDetailsView';
+import GlobalScheduleView from './components/GlobalScheduleView';
+import OpticalModule from './components/OpticalModule';
+import OpticalRxEditor from './components/OpticalRxEditor';
+import LabsView from './components/LabsView';
+import LabDetailsView from './components/LabDetailsView';
+import ServicesView from './components/ServicesView';
+import ServiceOrderEditor from './components/ServiceOrderEditor';
+import SaleEditor from './components/SaleEditor';
+import CatalogItemEditor from './components/CatalogItemEditor';
+import Auth from './components/Auth';
+import LoadingOverlay from './components/LoadingOverlay';
+import ChatView from './components/ChatView';
+import ChatFloating from './components/ChatFloating';
+import HelpCenter from './components/HelpCenter';
+import { HelpProvider, useHelp } from './components/GuidedHelp';
+
+const AppContent: React.FC<{
+    currentUser: User;
+    state: AppState | null;
+    setState: React.Dispatch<React.SetStateAction<AppState | null>>;
+    dataLoaded: boolean;
+    syncStatus: string;
+    currentView: ViewMode;
+    setCurrentView: (v: ViewMode) => void;
+    isMobileMenuOpen: boolean;
+    setIsMobileOpen: (v: boolean) => void;
+    refreshData: () => void;
+    checkAuth: () => void;
+    members: Member[];
+    socket: Socket | null;
+}> = ({ 
+    currentUser, state, setState, dataLoaded, syncStatus, currentView, setCurrentView, 
+    isMobileMenuOpen, setIsMobileOpen, refreshData, checkAuth, members, socket 
+}) => {
+    const { isTrackerVisible, setIsTrackerVisible } = useHelp();
+    const { showAlert } = useAlert();
+    
+    const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
+    const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+    const [editingLab, setEditingLab] = useState<Laboratory | null>(null);
+    const [editingOS, setEditingOS] = useState<ServiceOrder | null>(null);
+    const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
+    const [editingContact, setEditingContact] = useState<Contact | null>(null);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [editingCatalogItem, setEditingCatalogItem] = useState<ServiceItem | null>(null);
+
+    const handleUpdateTransactionStatus = async (t: Transaction) => {
+        if (!t) return;
+        const newStatus = t.status === TransactionStatus.PAID ? TransactionStatus.PENDING : TransactionStatus.PAID;
+        const updatedT = { ...t, status: newStatus };
+        
+        try {
+            await api.saveTransaction(updatedT);
+            showAlert("Status atualizado.", "success");
+            refreshData();
+        } catch (e: any) {
+            showAlert("Erro ao atualizar.", "error");
+        }
+    };
+
+    const handleAddTransaction = async (t: any, nc?: Contact, ncat?: Category) => {
+        if (!t) return;
+        try {
+            await api.saveTransaction(t, nc, ncat);
+            refreshData();
+            return t;
+        } catch (e) {
+            showAlert("Erro ao salvar lançamento.", "error");
+        }
+    };
+
+    const handleStartSaleFromRx = (rx: OpticalRx) => {
+        if (!rx) return;
+        setEditingSale({
+            id: crypto.randomUUID(),
+            type: 'SALE',
+            description: `Venda p/ ${rx.contactName} (Via RX #${rx.rxNumber})`,
+            contactId: rx.contactId,
+            contactName: rx.contactName,
+            rxId: rx.id,
+            branchId: rx.branchId,
+            items: [], 
+            amount: 0,
+            date: new Date().toISOString().split('T')[0],
+            status: 'DRAFT',
+            moduleTag: 'optical'
+        });
+        setCurrentView('SRV_SALE_EDITOR');
+    };
+
+    const renderContent = () => {
+        if (!dataLoaded || !state) return <LoadingOverlay isVisible={true} />;
+        
+        const commonFinanceProps = {
+            state, settings: currentUser.settings, currentUser,
+            onAddTransaction: handleAddTransaction,
+            onDeleteTransaction: async (id: string) => {
+                await api.deleteTransaction(id);
+                refreshData();
+            },
+            onEditTransaction: async (t: any, nc?: Contact, ncat?: Category) => {
+                await api.saveTransaction(t, nc, ncat);
+                refreshData();
+            },
+            onUpdateStatus: handleUpdateTransactionStatus,
+            onChangeView: setCurrentView
+        };
+
+        const dashboardProps = {
+            ...commonFinanceProps,
+            onNewTransaction: () => { setEditingTransaction(null); setCurrentView('FIN_TRANSACTION_EDITOR'); },
+            onEditTransaction: (t: Transaction) => { setEditingTransaction(t); setCurrentView('FIN_TRANSACTION_EDITOR'); }
+        };
+
+        switch (currentView) {
+            case 'FIN_DASHBOARD': return <Dashboard {...dashboardProps} />;
+            case 'FIN_TRANSACTIONS': return <TransactionsView 
+                {...commonFinanceProps} 
+                onDelete={commonFinanceProps.onDeleteTransaction}
+                onToggleStatus={commonFinanceProps.onUpdateStatus}
+                transactions={state.transactions || []} accounts={state.accounts || []} contacts={state.contacts || []} categories={state.categories || []} 
+                branches={state.branches || []} costCenters={state.costCenters || []} departments={state.departments || []} projects={state.projects || []} 
+                onAdd={() => { setEditingTransaction(null); setCurrentView('FIN_TRANSACTION_EDITOR'); }} 
+                onEdit={(t) => { setEditingTransaction(t); setCurrentView('FIN_TRANSACTION_EDITOR'); }} 
+            />;
+            case 'FIN_TRANSACTION_EDITOR': 
+                return <TransactionEditor 
+                    initialData={editingTransaction} accounts={state.accounts || []} contacts={state.contacts || []} categories={state.categories || []} 
+                    branches={state.branches || []} costCenters={state.costCenters || []} departments={state.departments || []} projects={state.projects || []}
+                    userEntity={currentUser.entityType} settings={currentUser.settings}
+                    onSave={handleAddTransaction} onCancel={() => setCurrentView('FIN_TRANSACTIONS')} 
+                />;
+            case 'FIN_ACCOUNTS': return <AccountsView accounts={state.accounts || []} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} />;
+            case 'FIN_CARDS': return <CreditCardsView accounts={state.accounts || []} transactions={state.transactions || []} contacts={state.contacts || []} categories={state.categories || []} onSaveAccount={(a) => api.saveAccount(a).then(refreshData)} onDeleteAccount={(id) => api.deleteAccount(id).then(refreshData)} onAddTransaction={handleAddTransaction} />;
+            case 'FIN_GOALS': return <GoalsView goals={state.goals || []} accounts={state.accounts || []} transactions={state.transactions || []} onSaveGoal={(g) => api.saveGoal(g).then(refreshData)} onDeleteGoal={(id) => api.deleteGoal(id).then(refreshData)} onAddTransaction={handleAddTransaction} />;
+            case 'FIN_REPORTS': return <Reports transactions={state.transactions || []} />;
+            case 'FIN_ADVISOR': return <SmartAdvisor data={state} />;
+            case 'DIAG_HUB': return <DiagnosticView state={state} />;
+            case 'FIN_CONTACTS': return <ContactsView contacts={state.contacts || []} onAddContact={() => { setEditingContact(null); setCurrentView('FIN_CONTACT_EDITOR'); }} onEditContact={(c) => { setEditingContact(c); setCurrentView('FIN_CONTACT_EDITOR'); }} onDeleteContact={(id) => api.deleteContact(id).then(refreshData)} />;
+            case 'FIN_CONTACT_EDITOR': return <ContactEditor initialData={editingContact} settings={currentUser.settings} onSave={(c) => api.saveContact(c).then(() => { refreshData(); setCurrentView('FIN_CONTACTS'); })} onCancel={() => setCurrentView('FIN_CONTACTS')} />;
+            case 'SYS_CHAT': return <ChatView currentUser={currentUser} socket={socket} />;
+            case 'SYS_ACCESS': return <AccessView currentUser={currentUser} />;
             case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
             case 'SYS_BRANCHES': return <BranchesView branches={state.branches || []} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} onManageSalesSchedule={(b) => { setEditingBranch(b); setCurrentView('SYS_SALES_SCHEDULE'); }} onViewDetails={(b) => { setEditingBranch(b); setCurrentView('SYS_BRANCH_DETAILS'); }} />;
             case 'SYS_BRANCH_DETAILS': return editingBranch ? <BranchDetailsView branch={editingBranch} state={state} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
@@ -12,3 +186,169 @@
             case 'SYS_SALESPEOPLE': return <SalespeopleView salespeople={state.salespeople || []} branches={state.branches || []} members={members || []} commercialOrders={state.commercialOrders || []} onSaveSalesperson={(s) => api.saveLocallyAndQueue('salespeople', s).then(refreshData)} onDeleteSalesperson={(id) => api.deleteLocallyAndQueue('salespeople', id).then(refreshData)} />;
             case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches || [], costCenters: state.costCenters || [], departments: state.departments || [], projects: state.projects || [], accounts: state.accounts || [] }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
             case 'SYS_HELP': return <HelpCenter activeModules={currentUser.settings?.activeModules} />;
+            case 'SRV_OS':
+                return <ServicesView 
+                    currentView={currentView} serviceOrders={state.serviceOrders || []} commercialOrders={state.commercialOrders || []}
+                    contacts={state.contacts || []} accounts={state.accounts || []}
+                    branches={state.branches || []}
+                    serviceItems={state.serviceItems || []}
+                    onAddOS={() => { setEditingOS(null); setCurrentView('SRV_OS_EDITOR'); }}
+                    onEditOS={(os) => { setEditingOS(os); setCurrentView('SRV_OS_EDITOR'); }}
+                    onSaveOS={async (os) => {
+                        await api.saveOS(os);
+                        refreshData();
+                    }} 
+                    onDeleteOS={async (id) => {
+                        await api.deleteOS(id);
+                        refreshData();
+                    }}
+                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}} 
+                />;
+            case 'SRV_OS_EDITOR':
+                return <ServiceOrderEditor 
+                    initialData={editingOS} contacts={state.contacts || []} serviceItems={state.serviceItems || []} opticalRxs={state.opticalRxs || []}
+                    branches={state.branches || []} settings={currentUser.settings}
+                    onSave={async (os) => {
+                        await api.saveOS(os);
+                        refreshData();
+                        setCurrentView('SRV_OS');
+                    }}
+                    onCancel={() => setCurrentView('SRV_OS')}
+                />;
+            case 'SRV_SALES':
+                return <ServicesView 
+                    currentView={currentView} serviceOrders={state.serviceOrders || []} commercialOrders={state.commercialOrders || []}
+                    contacts={state.contacts || []} accounts={state.accounts || []}
+                    branches={state.branches || []}
+                    serviceItems={state.serviceItems || []} 
+                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
+                    onAddSale={() => { setEditingSale(null); setCurrentView('SRV_SALE_EDITOR'); }}
+                    onEditSale={(sale) => { setEditingSale(sale); setCurrentView('SRV_SALE_EDITOR'); }}
+                    onSaveOrder={async (order) => {
+                         await api.saveOrder(order);
+                         refreshData();
+                    }} 
+                    onDeleteOrder={async (id) => {
+                        await api.deleteOrder(id);
+                        refreshData();
+                    }}
+                />;
+            case 'SRV_SALE_EDITOR':
+                return <SaleEditor 
+                    initialData={editingSale} contacts={state.contacts || []} serviceItems={state.serviceItems || []} opticalRxs={state.opticalRxs || []}
+                    branches={state.branches || []} salespeople={state.salespeople || []} accounts={state.accounts || []} currentUser={currentUser} settings={currentUser.settings}
+                    onSave={async (order) => {
+                        await api.saveOrder(order);
+                        refreshData();
+                        setCurrentView('SRV_SALES');
+                    }} 
+                    onCancel={() => setCurrentView('SRV_SALES')}
+                />;
+            case 'SRV_CATALOG':
+                return <ServicesView 
+                    currentView={currentView} serviceOrders={state.serviceOrders || []} commercialOrders={state.commercialOrders || []}
+                    contacts={state.contacts || []} accounts={state.accounts || []}
+                    branches={state.branches || []}
+                    serviceItems={state.serviceItems || []} 
+                    onAddOS={() => {}} onEditOS={() => {}} onSaveOS={() => {}} onDeleteOS={() => {}}
+                    onAddSale={() => {}} onEditSale={() => {}} onSaveOrder={() => {}} onDeleteOrder={() => {}}
+                    onAddCatalogItem={() => { setEditingCatalogItem(null); setCurrentView('SRV_CATALOG_ITEM_EDITOR'); }}
+                    onEditCatalogItem={(item) => { setEditingCatalogItem(item); setCurrentView('SRV_CATALOG_ITEM_EDITOR'); }}
+                    onDeleteCatalogItem={(id) => api.deleteCatalogItem(id).then(refreshData)}
+                />;
+            case 'SRV_CATALOG_ITEM_EDITOR':
+                return <CatalogItemEditor 
+                    initialData={editingCatalogItem} branches={state.branches || []} serviceItems={state.serviceItems || []}
+                    onSave={async (item) => {
+                        await api.saveCatalogItem(item);
+                        refreshData();
+                        setCurrentView('SRV_CATALOG');
+                    }}
+                    onCancel={() => setCurrentView('SRV_CATALOG')}
+                />;
+            default: return <Dashboard {...dashboardProps} />;
+        }
+    };
+
+    return (
+        <div className="flex h-screen bg-gray-50 font-inter text-gray-900 overflow-hidden relative">
+            <Sidebar currentView={currentView} onChangeView={setCurrentView} currentUser={currentUser} onUserUpdate={() => {}} isMobileOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen} />
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+                <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-40 shrink-0">
+                    <button onClick={() => setIsMobileOpen(true)} className="p-2 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors"><MenuIcon className="w-6 h-6" /></button>
+                    <div className="flex items-center gap-1.5"><div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shadow-lg text-xs">F</div><span className="font-black text-sm text-gray-800 tracking-tighter">FinManager</span></div>
+                    <div className="flex items-center gap-1"><button onClick={() => setIsTrackerVisible(!isTrackerVisible)} className={`p-2 rounded-lg transition-all ${isTrackerVisible ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-indigo-600'}`}><HelpCircle className="w-5 h-5"/></button></div>
+                </div>
+                <div className={`text-[9px] font-black uppercase tracking-widest px-4 py-1 flex items-center justify-center gap-2 transition-all shrink-0 ${syncStatus === 'offline' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                    {syncStatus === 'offline' ? <><WifiOff className="w-3 h-3" /> Offline</> : <><RefreshCw className="w-2.5 h-2.5" /> Sincronizado</>}
+                </div>
+                <div className="flex-1 overflow-y-auto relative scroll-smooth bg-gray-50">
+                    <div className="p-3 md:p-8 max-w-[1600px] mx-auto pb-32 md:pb-8">{renderContent()}</div>
+                </div>
+            </main>
+            <ChatFloating currentUser={currentUser} socket={socket} />
+        </div>
+    );
+};
+
+export const App: React.FC = () => {
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [state, setState] = useState<AppState | null>(null);
+    const [dataLoaded, setDataLoaded] = useState(false);
+    const [syncStatus, setSyncStatus] = useState<string>('online');
+    const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
+    const [isMobileMenuOpen, setIsMobileOpen] = useState(false);
+    const [members, setMembers] = useState<Member[]>([]);
+    const [socket, setSocket] = useState<Socket | null>(null);
+
+    const checkAuth = async () => {
+        try {
+            const data = await refreshUser();
+            setCurrentUser(data.user);
+        } catch (e) {
+            setCurrentUser(null);
+        }
+    };
+
+    const refreshData = async () => {
+        try {
+            const data = await loadInitialData();
+            setState(data);
+            setDataLoaded(true);
+            const m = await getFamilyMembers();
+            setMembers(m);
+        } catch (e) {
+            console.error("Erro ao carregar dados", e);
+        }
+    };
+
+    useEffect(() => { checkAuth(); }, []);
+
+    useEffect(() => {
+        if (currentUser) {
+            refreshData();
+            const s = io({ transports: ['websocket', 'polling'], reconnection: true }) as any;
+            setSocket(s);
+            s.on('connect', () => s.emit('join_family', { familyId: currentUser.familyId, userId: currentUser.id }));
+            syncService.onStatusChange(setSyncStatus);
+            return () => { s.disconnect(); };
+        }
+    }, [currentUser?.id]);
+
+    if (!currentUser) return <Auth onLoginSuccess={setCurrentUser} />;
+
+    return (
+        <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
+            <AppContent 
+                currentUser={currentUser} state={state} setState={setState}
+                dataLoaded={dataLoaded} syncStatus={syncStatus}
+                currentView={currentView} setCurrentView={setCurrentView}
+                isMobileMenuOpen={isMobileMenuOpen} setIsMobileOpen={setIsMobileOpen}
+                refreshData={refreshData} checkAuth={checkAuth}
+                members={members} socket={socket}
+            />
+        </HelpProvider>
+    );
+};
+
+export default App;
