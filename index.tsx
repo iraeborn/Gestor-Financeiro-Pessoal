@@ -1,7 +1,8 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+// Fix: Using named import for App as the module does not have a default export
+import { App } from './App';
 import { AlertProvider } from './components/AlertSystem';
 import { localDb } from './services/localDb';
 
