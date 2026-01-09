@@ -77,11 +77,30 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [selectedItemId, setSelectedItemId] = useState('');
     const [selectedQty, setSelectedQty] = useState(1);
 
+    // Filtra os itens do catálogo que pertencem à filial de origem selecionada
+    const availableItemsForTransfer = useMemo(() => {
+        if (!transferHeader.fromBranchId) return [];
+        return serviceItems.filter(i => i.type === 'PRODUCT' && i.branchId === transferHeader.fromBranchId);
+    }, [serviceItems, transferHeader.fromBranchId]);
+
     const handleAddItemToTransfer = () => {
         if (!selectedItemId) return;
+        
+        const catalogItem = serviceItems.find(i => i.id === selectedItemId);
+        if (!catalogItem) return;
+
+        // Validação de saldo local antes de adicionar à lista de lote
+        if (selectedQty > (catalogItem.stockQuantity || 0)) {
+            return showAlert(`Saldo insuficiente na filial. Disponível: ${catalogItem.stockQuantity}`, "warning");
+        }
+
         const exists = transferItems.find(i => i.serviceItemId === selectedItemId);
         if (exists) {
-            setTransferItems(transferItems.map(i => i.serviceItemId === selectedItemId ? { ...i, quantity: i.quantity + selectedQty } : i));
+            const newQty = exists.quantity + selectedQty;
+            if (newQty > (catalogItem.stockQuantity || 0)) {
+                return showAlert(`Soma excede o saldo da filial.`, "warning");
+            }
+            setTransferItems(transferItems.map(i => i.serviceItemId === selectedItemId ? { ...i, quantity: newQty } : i));
         } else {
             setTransferItems([...transferItems, { serviceItemId: selectedItemId, quantity: selectedQty }]);
         }
@@ -274,7 +293,10 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <select 
                                             className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold outline-none shadow-sm"
                                             value={transferHeader.fromBranchId}
-                                            onChange={e => setTransferHeader({...transferHeader, fromBranchId: e.target.value})}
+                                            onChange={e => {
+                                                setTransferHeader({...transferHeader, fromBranchId: e.target.value});
+                                                setTransferItems([]); // Limpa itens ao mudar origem por segurança
+                                            }}
                                         >
                                             <option value="">Selecionar...</option>
                                             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -308,7 +330,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                         <h4 className="text-[10px] font-black uppercase">Regra Logística</h4>
                                     </div>
                                     <p className="text-[10px] text-indigo-800 leading-relaxed font-medium">
-                                        A transferência em lote criará um par de eventos (saída/entrada) para cada produto da lista, garantindo a rastreabilidade fiscal e física.
+                                        Selecione a origem para visualizar apenas os produtos disponíveis naquela unidade física.
                                     </p>
                                 </div>
                             </div>
@@ -316,7 +338,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                             {/* Coluna 2 e 3: Carrinho de Transferência */}
                             <div className="lg:col-span-2 flex flex-col overflow-hidden">
                                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col flex-1 overflow-hidden">
-                                    <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center gap-3">
+                                    <div className={`p-6 border-b border-slate-50 bg-slate-50/30 flex items-center gap-3 ${!transferHeader.fromBranchId ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
                                         <div className="flex-1 relative">
                                             <Package className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                                             <select 
@@ -324,8 +346,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                                 value={selectedItemId}
                                                 onChange={e => setSelectedItemId(e.target.value)}
                                             >
-                                                <option value="">+ Adicionar produto à lista...</option>
-                                                {serviceItems.filter(i => i.type === 'PRODUCT').map(i => <option key={i.id} value={i.id}>{i.name} (Saldo Global: {i.stockQuantity})</option>)}
+                                                <option value="">+ Selecionar produto da filial...</option>
+                                                {availableItemsForTransfer.map(i => (
+                                                    <option key={i.id} value={i.id}>
+                                                        {i.name} (Saldo Local: {i.stockQuantity})
+                                                    </option>
+                                                ))}
                                             </select>
                                         </div>
                                         <div className="w-24 relative">
@@ -347,7 +373,12 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                                     </div>
 
                                     <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin">
-                                        {transferItems.length === 0 ? (
+                                        {!transferHeader.fromBranchId ? (
+                                            <div className="py-20 text-center text-slate-300 flex flex-col items-center gap-3">
+                                                <Store className="w-12 h-12 opacity-10" />
+                                                <span className="text-xs font-bold uppercase tracking-widest">Selecione a Filial de Origem Primeiro</span>
+                                            </div>
+                                        ) : transferItems.length === 0 ? (
                                             <div className="py-20 text-center text-slate-300 italic flex flex-col items-center gap-3">
                                                 <Layers className="w-12 h-12 opacity-10" />
                                                 <span className="text-xs font-bold uppercase tracking-widest">Nenhum item na lista de envio</span>
