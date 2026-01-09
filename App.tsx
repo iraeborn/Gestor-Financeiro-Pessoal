@@ -283,7 +283,7 @@ const AppContent: React.FC<{
             case 'SYS_LOGS': return <LogsView currentUser={currentUser} />;
             case 'SYS_BRANCHES': return <BranchesView branches={state.branches || []} onSaveBranch={(b) => api.savePJEntity('branch', b).then(refreshData)} onDeleteBranch={(id) => api.deletePJEntity('branch', id).then(refreshData)} onManageSchedule={(b) => { setEditingBranch(b); setCurrentView('SRV_BRANCH_SCHEDULE'); }} onManageSalesSchedule={(b) => { setEditingBranch(b); setCurrentView('SYS_SALES_SCHEDULE'); }} onViewDetails={(b) => { setEditingBranch(b); setCurrentView('SYS_BRANCH_DETAILS'); }} />;
             case 'SYS_BRANCH_DETAILS': return editingBranch ? <BranchDetailsView branch={editingBranch} state={state} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
-            case 'SYS_GLOBAL_SCHEDULE': return <GlobalScheduleView state={state} salespeople={state.salespeople} branches={state.branches} schedules={state.salespersonSchedules} />;
+            case 'SYS_GLOBAL_SCHEDULE': return <GlobalScheduleView state={state} salespeople={state.salespeople} branches={state.branches} schedules={state.salespersonSchedules} onRefresh={refreshData} />;
             case 'SRV_BRANCH_SCHEDULE': return editingBranch ? <BranchScheduleView branch={editingBranch} appointments={state.serviceAppointments || []} clients={state.serviceClients || []} onSaveAppointment={(a) => api.saveAppointment(a as ServiceAppointment).then(refreshData)} onDeleteAppointment={(id) => api.deleteAppointment(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'SYS_SALES_SCHEDULE': return editingBranch ? <SalespersonScheduleView branch={editingBranch} schedules={state.salespersonSchedules || []} salespeople={state.salespeople || []} onSaveSchedule={(s) => api.saveSalespersonSchedule(s).then(refreshData)} onDeleteSchedule={(id) => api.deleteSalespersonSchedule(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs || []} contacts={state.contacts || []} laboratories={state.laboratories || []} branches={state.branches || []} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} onStartSaleFromRx={handleStartSaleFromRx} />;
@@ -413,86 +413,71 @@ const AppContent: React.FC<{
     );
 };
 
+// Fix: Implemented missing App component wrapper to handle root state and providers
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [state, setState] = useState<AppState | null>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
-    const [syncStatus, setSyncStatus] = useState<'online' | 'offline' | 'syncing'>('online');
+    const [syncStatus, setSyncStatus] = useState<string>('online');
     const [currentView, setCurrentView] = useState<ViewMode>('FIN_DASHBOARD');
     const [isMobileMenuOpen, setIsMobileOpen] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
 
     const checkAuth = async () => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            setDataLoaded(true);
-            return;
-        }
         try {
-            const { user } = await refreshUser();
-            setCurrentUser(user);
-            await refreshData();
+            const data = await refreshUser();
+            setCurrentUser(data.user);
         } catch (e) {
-            console.error("Auth check failed", e);
-            localStorage.removeItem('token');
-        } finally {
-            setDataLoaded(true);
+            setCurrentUser(null);
         }
     };
 
     const refreshData = async () => {
         try {
-            const initialData = await loadInitialData();
-            setState(initialData);
-            const familyMembers = await getFamilyMembers();
-            setMembers(familyMembers || []);
+            const data = await loadInitialData();
+            setState(data);
+            setDataLoaded(true);
+            const m = await getFamilyMembers();
+            setMembers(m);
         } catch (e) {
-            console.error("Data refresh failed", e);
+            console.error("Data load failed", e);
         }
     };
 
     useEffect(() => {
         checkAuth();
-        syncService.onStatusChange(setSyncStatus);
-        
-        const handleOnline = () => syncService.triggerSync();
-        window.addEventListener('online', handleOnline);
-        return () => window.removeEventListener('online', handleOnline);
     }, []);
 
     useEffect(() => {
-        if (currentUser && !socket) {
-            const newSocket = io({
-                transports: ['websocket'],
-                auth: { token: localStorage.getItem('token') }
+        if (currentUser) {
+            refreshData();
+            
+            const s = io({
+                transports: ['websocket', 'polling'],
+                reconnection: true
+            }) as any;
+            setSocket(s);
+            
+            s.on('connect', () => {
+                s.emit('join_family', { familyId: currentUser.familyId, userId: currentUser.id });
             });
-            newSocket.on('connect', () => {
-                if (currentUser.familyId) {
-                    newSocket.emit('join_family', { familyId: currentUser.familyId, userId: currentUser.id });
-                }
-            });
-            setSocket(newSocket as any);
+
+            syncService.onStatusChange(setSyncStatus);
+
+            return () => {
+                s.disconnect();
+            };
         }
-    }, [currentUser, socket]);
+    }, [currentUser?.id]);
 
-    if (!dataLoaded) {
-        return <LoadingOverlay isVisible={true} message="Iniciando FinManager..." />;
-    }
-
-    if (!currentUser) {
-        return <Auth onLoginSuccess={(user) => { 
-            setCurrentUser(user); 
-            setDataLoaded(false);
-            refreshData().finally(() => setDataLoaded(true));
-        }} />;
-    }
+    if (!currentUser) return <Auth onLoginSuccess={setCurrentUser} />;
 
     return (
         <HelpProvider currentView={currentView} onChangeView={setCurrentView}>
             <AppContent 
-                currentUser={currentUser} 
-                state={state} 
+                currentUser={currentUser}
+                state={state}
                 setState={setState}
                 dataLoaded={dataLoaded}
                 syncStatus={syncStatus}
