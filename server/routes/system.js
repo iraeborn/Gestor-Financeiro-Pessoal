@@ -40,6 +40,75 @@ export default function(logAudit) {
         }
     });
 
+    /**
+     * Endpoint Genérico de Processamento de Sincronização
+     * Lida com SAVE e DELETE para tabelas simples que não requerem lógica complexa de saldo ou estoque.
+     */
+    router.post('/sync/process', authenticateToken, async (req, res) => {
+        const { action, store, payload } = req.body;
+        const userId = req.user.id;
+
+        if (!store || !payload || !payload.id) {
+            return res.status(400).json({ error: "Parâmetros de sincronização incompletos." });
+        }
+
+        const storeToTableMap = {
+            'categories': 'categories',
+            'serviceOrders': 'service_orders',
+            'salespeople': 'salespeople',
+            'laboratories': 'laboratories',
+            'salespersonSchedules': 'salesperson_schedules',
+            'serviceClients': 'service_clients'
+        };
+
+        const tableName = storeToTableMap[store];
+        if (!tableName) {
+            return res.status(400).json({ error: `Store '${store}' não mapeada para sincronização genérica.` });
+        }
+
+        try {
+            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
+            const familyId = familyIdRes.rows[0]?.family_id || userId;
+
+            if (action === 'DELETE') {
+                await pool.query(
+                    `UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`,
+                    [payload.id, familyId]
+                );
+                await logAudit(pool, userId, 'DELETE', tableName, payload.id, `Exclusão genérica via sync`);
+            } else {
+                // Mapeamento dinâmico de chaves camelCase para snake_case
+                // Remove campos de conveniência que não existem fisicamente na tabela (como nomes de filiais/colaboradores que são joins)
+                const forbiddenKeys = ['salespersonName', 'branchName', 'contactName', '_updatedAt', 'id', 'familyId'];
+                
+                const fields = Object.keys(payload).filter(k => !forbiddenKeys.includes(k));
+                const snakeFields = fields.map(f => f.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`));
+                
+                const placeholders = fields.map((_, i) => `$${i + 3}`).join(', ');
+                const updateStr = snakeFields.map((f, i) => `${f} = $${i + 3}`).join(', ');
+
+                const query = `
+                    INSERT INTO ${tableName} (id, family_id, ${snakeFields.join(', ')})
+                    VALUES ($1, $2, ${placeholders})
+                    ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
+
+                const values = [
+                    payload.id,
+                    familyId,
+                    ...fields.map(f => sanitizeValue(payload[f]))
+                ];
+
+                await pool.query(query, values);
+                await logAudit(pool, userId, 'SAVE', tableName, payload.id, `Sincronização de registro: ${store}`);
+            }
+
+            res.json({ success: true });
+        } catch (err) {
+            console.error(`[GENERIC SYNC ERROR - ${store}]`, err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // Rota de histórico de chat
     router.get('/chat/history', authenticateToken, async (req, res) => {
         const { familyId } = req.query;
