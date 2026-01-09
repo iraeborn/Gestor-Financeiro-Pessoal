@@ -16,6 +16,7 @@ export type ViewMode =
 
 export interface AppSettings {
   includeCreditCardsInTotal: boolean;
+  aiMonitoringEnabled?: boolean; // Controle mestre de IA
   maxDiscountPct?: number; 
   defaultAccountId?: string; 
   installmentRules?: {

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { User, AppSettings, EntityType, CompanyProfile, Branch, CostCenter, Department, Project, TaxRegime, Contact, Account } from '../types';
-import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon, FileUp, Loader2, Download, Landmark, ListChecks } from 'lucide-react';
+import { CreditCard, Shield, Plus, Trash2, Building, Briefcase, FolderKanban, MapPin, Calculator, SmilePlus, CheckCircle, MessageSquare, Bell, Smartphone, Send, FileText, Mail, Wrench, BrainCircuit, Glasses, AlertTriangle, Info, Search, Percent, RefreshCw, Phone, ExternalLink, CreditCard as BillingIcon, FileUp, Loader2, Download, Landmark, ListChecks, Sparkles } from 'lucide-react';
 import { updateSettings, consultCnpj, api } from '../services/storageService';
 import { useAlert } from './AlertSystem';
 import * as XLSX from 'xlsx';
@@ -32,6 +32,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   
   const settings = user.settings || { 
     includeCreditCardsInTotal: true, 
+    aiMonitoringEnabled: true,
     activeModules: {},
     installmentRules: {
         creditCard: { defaultInstallments: 1, interestRate: 0 },
@@ -154,6 +155,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       <div className="space-y-6">
+
+        {/* Inteligência Artificial */}
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-50 bg-indigo-50/30">
+                <h2 className="text-lg font-black text-indigo-900 flex items-center gap-3 uppercase tracking-tighter">
+                    <BrainCircuit className="w-5 h-5 text-indigo-600" />
+                    Inteligência Artificial (IA)
+                </h2>
+            </div>
+            <div className="p-8">
+                <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-700">Sugestões e Monitoramento IA</p>
+                            <Sparkles className="w-4 h-4 text-amber-500" />
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed font-medium max-w-md">Ao ativar, o sistema utilizará o Gemini Pro 3.0 para sugerir títulos de vendas, gerar diagnósticos de saúde do caixa e riscos patrimoniais.</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={settings.aiMonitoringEnabled ?? true} 
+                            onChange={e => handleUpdateSettingField('aiMonitoringEnabled', e.target.checked)} 
+                        />
+                        <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
         
         {/* Regras Bancárias e Parcelamento */}
         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">

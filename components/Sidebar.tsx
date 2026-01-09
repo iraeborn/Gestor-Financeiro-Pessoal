@@ -65,6 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const userPermissions = Array.isArray(currentWorkspace?.permissions) ? currentWorkspace?.permissions : [];
   const activeSettings: AppSettings = currentWorkspace?.ownerSettings || currentUser.settings || { includeCreditCardsInTotal: true, activeModules: {} };
   const activeModules = activeSettings.activeModules || {};
+  const isAIEnabled = activeSettings.aiMonitoringEnabled ?? true;
 
   const handleShareCurrentView = () => {
     const url = new URL(window.location.origin);
@@ -104,11 +105,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]},
     { section: 'Comunicação', items: [
         { id: 'SYS_CHAT', label: 'Chat Equipe', icon: MessageSquare },
+        { id: 'FIN_ADVISOR', label: 'Consultor IA', icon: BrainCircuit, enabled: isAIEnabled },
     ]},
     { section: 'Especialidades', enabled: !!activeModules.optical, items: [
         { id: 'OPTICAL_RX', label: 'Receitas RX', icon: Eye },
         { id: 'OPTICAL_LABS_MGMT', label: 'Laboratórios', icon: Microscope },
         { id: 'OPTICAL_LAB', label: 'Montagem (OS)', icon: Monitor },
+    ]},
+    { section: 'Diagnósticos', enabled: isAIEnabled && !!activeModules.intelligence, items: [
+        { id: 'DIAG_HUB', label: 'Hub de Diagnósticos', icon: Microscope },
     ]},
     { section: 'Configuração', items: [
         { id: 'SYS_ACCESS', label: 'Equipe / Acessos', icon: ShieldCheck },

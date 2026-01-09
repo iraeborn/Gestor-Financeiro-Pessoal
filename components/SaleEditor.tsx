@@ -52,6 +52,8 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
     const [catalogFilter, setCatalogFilter] = useState<'ALL' | 'PRODUCT' | 'SERVICE'>('ALL');
 
     const isLocked = initialData?.status === 'CONFIRMED' || formData.status === 'CONFIRMED';
+    const isAIEnabled = settings?.aiMonitoringEnabled ?? true;
+    
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
     const contactDropdownRef = useRef<HTMLDivElement>(null);
@@ -347,20 +349,22 @@ const SaleEditor: React.FC<SaleEditorProps> = ({ initialData, contacts, serviceI
                                 <div className="md:col-span-2">
                                     <div className="flex justify-between items-center mb-2 ml-1">
                                         <label className="text-[10px] font-black uppercase text-gray-400">Título do Pedido</label>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                const itemsCount = formData.items?.length || 0;
-                                                const firstItem = formData.items?.[0]?.description || 'Venda';
-                                                const clientName = contactSearch || 'Cliente';
-                                                let suggestion = `Venda p/ ${clientName} - ${firstItem}`;
-                                                if (itemsCount > 1) suggestion += ` + ${itemsCount - 1} item(s)`;
-                                                setFormData({...formData, description: suggestion});
-                                            }}
-                                            className="text-[9px] font-black text-indigo-600 uppercase flex items-center gap-1 hover:underline"
-                                        >
-                                            <Sparkles className="w-3 h-3" /> Gerar Nova Sugestão
-                                        </button>
+                                        {!isLocked && isAIEnabled && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    const itemsCount = formData.items?.length || 0;
+                                                    const firstItem = formData.items?.[0]?.description || 'Venda';
+                                                    const clientName = contactSearch || 'Cliente';
+                                                    let suggestion = `Venda p/ ${clientName} - ${firstItem}`;
+                                                    if (itemsCount > 1) suggestion += ` + ${itemsCount - 1} item(s)`;
+                                                    setFormData({...formData, description: suggestion});
+                                                }}
+                                                className="text-[9px] font-black text-indigo-600 uppercase flex items-center gap-1 hover:underline"
+                                            >
+                                                <Sparkles className="w-3 h-3" /> Gerar Nova Sugestão
+                                            </button>
+                                        )}
                                     </div>
                                     <input 
                                         type="text" 

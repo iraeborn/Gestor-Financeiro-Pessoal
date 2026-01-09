@@ -25,10 +25,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const [diagnostic, setDiagnostic] = useState<string>('');
   const [loadingDiag, setLoadingDiag] = useState(false);
+  
+  const isAIEnabled = settings?.aiMonitoringEnabled ?? true;
 
   useEffect(() => {
     const fetchDiag = async () => {
-      if (state?.transactions?.length > 0) {
+      if (isAIEnabled && state?.transactions?.length > 0) {
         setLoadingDiag(true);
         try {
           const res = await getManagerDiagnostic(state);
@@ -38,7 +40,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
     };
     fetchDiag();
-  }, [state?.transactions?.length]);
+  }, [state?.transactions?.length, isAIEnabled]);
 
   const metrics = useMemo(() => {
     const accounts = state.accounts || [];
@@ -128,7 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Consultor IA e Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+        <div className={`${isAIEnabled ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-8`}>
             <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
                 <h3 className="text-lg font-black text-slate-800 mb-8 flex items-center gap-3 uppercase tracking-tighter">
                     <TrendingUp className="w-6 h-6 text-indigo-600" />
@@ -153,60 +155,62 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
         </div>
 
-        <div className="space-y-8">
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
-                <div className="absolute top-0 right-0 p-6 opacity-20"><BrainCircuit className="w-24 h-24" /></div>
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg"><Sparkles className="w-7 h-7 text-white" /></div>
-                    <div>
-                        <h4 className="text-xl font-black">Advisor de Elite</h4>
-                        <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Análise via Gemini 3.0 Pro</p>
+        {isAIEnabled && (
+            <div className="space-y-8 animate-fade-in">
+                <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
+                    <div className="absolute top-0 right-0 p-6 opacity-20"><BrainCircuit className="w-24 h-24" /></div>
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg"><Sparkles className="w-7 h-7 text-white" /></div>
+                        <div>
+                            <h4 className="text-xl font-black">Advisor de Elite</h4>
+                            <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Análise via Gemini 3.0 Pro</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 text-sm font-medium leading-relaxed prose prose-invert">
+                        {loadingDiag ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-4 opacity-50 py-10">
+                                <RefreshCw className="w-8 h-8 animate-spin" />
+                                <span className="text-xs font-black uppercase tracking-widest">Processando Ativos...</span>
+                            </div>
+                        ) : (
+                            <ReactMarkdown>{diagnostic || "Aguardando sincronização de dados para diagnóstico..."}</ReactMarkdown>
+                        )}
+                    </div>
+
+                    <button 
+                        onClick={() => onChangeView('FIN_ADVISOR')}
+                        className="mt-8 w-full bg-white text-indigo-700 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 shadow-xl"
+                    >
+                        Conversar com Gestor <ArrowRight className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+                    <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-6">Metas de Curto Prazo</h4>
+                    <div className="space-y-6">
+                        {state.goals.slice(0, 3).map(goal => {
+                            const current = Number(goal.currentAmount || goal.current_amount || 0);
+                            const target = Number(goal.targetAmount || 1);
+                            const pct = Math.min(100, Math.round((current/target)*100));
+                            return (
+                                <div key={goal.id} className="space-y-2">
+                                    <div className="flex justify-between text-[11px] font-bold">
+                                        <span className="text-slate-600">{goal.name}</span>
+                                        <span className="text-indigo-600">{pct}%</span>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }}></div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {state.goals.length === 0 && <p className="text-xs text-slate-400 italic">Nenhuma meta ativa no momento.</p>}
+                        <button onClick={() => onChangeView('FIN_GOALS')} className="w-full text-center py-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:underline mt-2">Gerenciar Metas</button>
                     </div>
                 </div>
-                
-                <div className="flex-1 text-sm font-medium leading-relaxed prose prose-invert">
-                    {loadingDiag ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-4 opacity-50 py-10">
-                            <RefreshCw className="w-8 h-8 animate-spin" />
-                            <span className="text-xs font-black uppercase tracking-widest">Processando Ativos...</span>
-                        </div>
-                    ) : (
-                        <ReactMarkdown>{diagnostic || "Aguardando sincronização de dados para diagnóstico..."}</ReactMarkdown>
-                    )}
-                </div>
-
-                <button 
-                    onClick={() => onChangeView('FIN_ADVISOR')}
-                    className="mt-8 w-full bg-white text-indigo-700 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-3 shadow-xl"
-                >
-                    Conversar com Gestor <ArrowRight className="w-4 h-4" />
-                </button>
             </div>
-
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-                <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-6">Metas de Curto Prazo</h4>
-                <div className="space-y-6">
-                    {state.goals.slice(0, 3).map(goal => {
-                        const current = Number(goal.currentAmount || goal.current_amount || 0);
-                        const target = Number(goal.targetAmount || 1);
-                        const pct = Math.min(100, Math.round((current/target)*100));
-                        return (
-                            <div key={goal.id} className="space-y-2">
-                                <div className="flex justify-between text-[11px] font-bold">
-                                    <span className="text-slate-600">{goal.name}</span>
-                                    <span className="text-indigo-600">{pct}%</span>
-                                </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }}></div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {state.goals.length === 0 && <p className="text-xs text-slate-400 italic">Nenhuma meta ativa no momento.</p>}
-                    <button onClick={() => onChangeView('FIN_GOALS')} className="w-full text-center py-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:underline mt-2">Gerenciar Metas</button>
-                </div>
-            </div>
-        </div>
+        )}
       </div>
     </div>
   );
