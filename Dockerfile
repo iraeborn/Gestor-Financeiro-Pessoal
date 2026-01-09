@@ -1,5 +1,5 @@
 # ============================
-# 1) STAGE DE BUILD
+# 1) STAGE DE BUILD #
 # ============================
 FROM node:18 AS build
 
