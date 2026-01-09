@@ -294,12 +294,18 @@ export const api = {
         }
     },
     savePJEntity: async (type: string, data: any) => {
-        const store = type === 'company' ? 'companyProfile' : type + 's';
+        let store = type === 'company' ? 'companyProfile' : type + 's';
+        // Correção de pluralização para 'branch' -> 'branches'
+        if (type === 'branch') store = 'branches';
+        
         await localDb.put(store, data);
         await syncService.enqueue('SAVE', store, data);
     },
     deletePJEntity: async (type: string, id: string) => {
-        const store = type + 's';
+        let store = type + 's';
+        // Correção de pluralização para 'branch' -> 'branches'
+        if (type === 'branch') store = 'branches';
+        
         await localDb.delete(store, id);
         await syncService.enqueue('DELETE', store, { id });
     },

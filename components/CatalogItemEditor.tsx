@@ -1,11 +1,12 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ServiceItem, Branch, VariationAttribute, ProductSKU, OSItem, InventoryEvent } from '../types';
 import { 
     ArrowLeft, Save, Box, Tag, ImageIcon, UploadCloud, Loader2, 
-    Settings, ShieldCheck, Zap, DollarSign, Store, Info, Trash2, Plus,
-    ChevronDown, X, Layers, Hash, Sparkles, Package, Wrench, ClipboardList,
-    AlertCircle, CheckCircle2, ShoppingCart, RefreshCw, History, ArrowRightLeft,
-    TrendingUp, TrendingDown, Clock, User, Percent, ListChecks, Grid3X3
+    ShieldCheck, Zap, DollarSign, Store, Info, Trash2, Plus,
+    ChevronDown, X, Layers, Hash, Sparkles, Package,
+    AlertCircle, CheckCircle2, RefreshCw, History, ArrowRightLeft,
+    TrendingUp, TrendingDown, Clock, Grid3X3, ListChecks
 } from 'lucide-react';
 import { useAlert, useConfirm } from './AlertSystem';
 
@@ -86,6 +87,18 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
         finally { setIsLoadingHistory(false); }
     };
 
+    // Calcula o saldo específico da filial selecionada no modal de movimento
+    const selectedBranchStock = useMemo(() => {
+        if (!movementData.branchId || !inventoryHistory) return 0;
+        
+        return inventoryHistory
+            .filter(e => e.branchId === movementData.branchId)
+            .reduce((acc, event) => {
+                const multiplier = ['ADJUSTMENT_REMOVE', 'SALE', 'TRANSFER_OUT'].includes(event.type) ? -1 : 1;
+                return acc + (Number(event.quantity) * multiplier);
+            }, 0);
+    }, [movementData.branchId, inventoryHistory]);
+
     const handleRecordMovement = async (e: React.FormEvent) => {
         e.preventDefault();
         const qty = Number(movementData.quantity);
@@ -102,13 +115,13 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                 showAlert("Movimentação registrada!", "success");
                 setIsMovementModalOpen(false);
                 
-                // CRÍTICO: Atualiza o saldo local (Saldo em Prateleira) imediatamente
-                const mult = ['ADJUSTMENT_REMOVE', 'SALE', 'TRANSFER_OUT'].includes(movementData.type) ? -1 : 1;
-                const newStock = (Number(formData.stockQuantity) || 0) + (qty * mult);
+                // Se for a filial principal do item, atualiza o stockQuantity visual do formData
+                if (movementData.branchId === formData.branchId) {
+                    const mult = ['ADJUSTMENT_REMOVE', 'SALE', 'TRANSFER_OUT'].includes(movementData.type) ? -1 : 1;
+                    const newStock = (Number(formData.stockQuantity) || 0) + (qty * mult);
+                    setFormData(prev => ({ ...prev, stockQuantity: newStock }));
+                }
                 
-                setFormData(prev => ({ ...prev, stockQuantity: newStock }));
-                
-                // Limpa o form de movimento e recarrega histórico
                 setMovementData({ type: 'ADJUSTMENT_ADD', quantity: 0, branchId: branches[0]?.id || '', notes: '', costUnitPrice: 0 });
                 loadInventoryHistory(initialData!.id);
             } else {
@@ -221,7 +234,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                             <div className="absolute -right-4 -top-4 opacity-5 rotate-12"><Package className="w-32 h-32" /></div>
                             
                             <div className="relative z-10">
-                                <p className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-2">Saldo em Prateleira</p>
+                                <p className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-2">Saldo Global do Item</p>
                                 <div className="flex items-baseline gap-3">
                                     <h2 className="text-6xl font-black">{formData.stockQuantity}</h2>
                                     <span className="text-indigo-400 font-bold uppercase text-sm">{formData.unit}</span>
@@ -237,7 +250,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                                     onClick={() => setIsMovementModalOpen(true)}
                                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-xl shadow-indigo-900/40"
                                 >
-                                    <ArrowRightLeft className="w-4 h-4" /> Ajustar Estoque
+                                    <ArrowRightLeft className="w-4 h-4" /> Registrar Movimento
                                 </button>
                             ) : (
                                 <div className="space-y-3 pt-4 border-t border-white/10">
@@ -406,7 +419,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold text-gray-700 leading-none">{event.notes || 'Registro imutável'}</p>
-                                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">{new Date(event.date).toLocaleDateString()} • {event.userName || 'Sistema'}</p>
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">{new Date(event.date).toLocaleDateString()} • {event.userName || 'Sistema'} • <span className="text-indigo-600">{event.branchName || 'Sede'}</span></p>
                                             </div>
                                         </div>
                                         <p className={`text-sm font-black ${['SALE', 'TRANSFER_OUT', 'ADJUSTMENT_REMOVE'].includes(event.type) ? 'text-rose-500' : 'text-emerald-500'}`}>
@@ -448,22 +461,48 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                                     </button>
                                 ))}
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Quantidade</label><input type="number" required className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500" value={movementData.quantity || ''} onChange={e => setMovementData({...movementData, quantity: parseFloat(e.target.value) || 0})} /></div>
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Custo Médio</label><input type="number" step="0.01" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500" value={movementData.costUnitPrice || ''} onChange={e => setMovementData({...movementData, costUnitPrice: parseFloat(e.target.value) || 0})} /></div>
+                            
+                            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase text-indigo-600 mb-2 ml-1">Local / Unidade</label>
+                                    <div className="relative">
+                                        <Store className="w-4 h-4 text-indigo-400 absolute left-4 top-4" />
+                                        <select 
+                                            className="w-full pl-12 pr-4 py-4 bg-white border-none rounded-2xl text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                                            value={movementData.branchId} 
+                                            onChange={e => setMovementData({...movementData, branchId: e.target.value})}
+                                        >
+                                            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between px-2 pt-2">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Atual nesta Filial:</span>
+                                    <span className={`text-sm font-black ${selectedBranchStock <= 0 ? 'text-rose-500' : 'text-indigo-600'}`}>{selectedBranchStock} {formData.unit}</span>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Local / Unidade</label>
-                                <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={movementData.branchId} onChange={e => setMovementData({...movementData, branchId: e.target.value})}>
-                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </select>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 ml-1">Quantidade</label>
+                                    <input type="number" required className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500" value={movementData.quantity || ''} onChange={e => setMovementData({...movementData, quantity: parseFloat(e.target.value) || 0})} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-black uppercase text-gray-400 ml-1">Custo Unitário (Opcional)</label>
+                                    <div className="relative">
+                                        <DollarSign className="w-4 h-4 text-slate-300 absolute left-4 top-4" />
+                                        <input type="number" step="0.01" className="w-full pl-11 py-4 bg-gray-50 border-none rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500" value={movementData.costUnitPrice || ''} onChange={e => setMovementData({...movementData, costUnitPrice: parseFloat(e.target.value) || 0})} />
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Motivo do Ajuste</label>
-                                {/* Fix: Use movementData instead of formData to fix the TypeScript error */}
-                                <textarea className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold min-h-[80px]" value={movementData.notes} onChange={e => setMovementData({...movementData, notes: e.target.value})} placeholder="Ex: NF-e #123, Perda técnica..." />
+
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-black uppercase text-gray-400 ml-1">Motivo do Ajuste</label>
+                                <textarea className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold min-h-[80px] outline-none focus:ring-2 focus:ring-indigo-500" value={movementData.notes} onChange={e => setMovementData({...movementData, notes: e.target.value})} placeholder="Ex: Entrada de NF-e #123, Perda técnica por avaria..." />
                             </div>
-                            <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">Confirmar Registro</button>
+
+                            <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl active:scale-95">Confirmar Registro</button>
                         </form>
                     </div>
                 </div>

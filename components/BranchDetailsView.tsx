@@ -1,12 +1,12 @@
 
 import React, { useMemo, useState } from 'react';
-import { Branch, AppState, TransactionType, TransactionStatus, StockTransfer, CommercialOrder, OpticalRx } from '../types';
-// Added missing LayoutDashboard icon import
+import { Branch, AppState, TransactionType, TransactionStatus, StockTransfer, CommercialOrder, OpticalRx, ServiceItem } from '../types';
 import { 
     ArrowLeft, Store, MapPin, Phone, TrendingUp, Eye, Package, 
-    Wrench, ShoppingBag, Clock, ArrowRight, AlertTriangle,
-    CheckCircle2, Box, Landmark, Glasses, ArrowLeftRight, Download, 
-    DollarSign, Filter, Calendar, Search, Activity, History, LayoutDashboard
+    ShoppingBag, Clock, ArrowRight, AlertTriangle,
+    CheckCircle2, Landmark, Glasses, ArrowLeftRight, 
+    DollarSign, Search, History, LayoutDashboard, Box, 
+    Layers, Filter, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 
 interface BranchDetailsViewProps {
@@ -15,7 +15,7 @@ interface BranchDetailsViewProps {
     onBack: () => void;
 }
 
-type TimelineFilter = 'ALL' | 'SALES' | 'TRANSFERS' | 'RX' | 'FINANCE';
+type TimelineFilter = 'ALL' | 'SALES' | 'TRANSFERS' | 'RX' | 'FINANCE' | 'STOCK';
 
 const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, onBack }) => {
     const [activeTab, setActiveTab] = useState<TimelineFilter>('ALL');
@@ -30,6 +30,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
         const branchRxs = (state.opticalRxs || []).filter(rx => rx.branchId === branchId);
         const branchTransfers = (state.stockTransfers || []).filter(t => t.fromBranchId === branchId || t.toBranchId === branchId);
         const branchTransactions = (state.transactions || []).filter(t => t.branchId === branchId);
+        const branchInventory = (state.serviceItems || []).filter(i => i.branchId === branchId && i.type === 'PRODUCT');
 
         // Timeline Unificada
         const timeline = [
@@ -61,7 +62,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         const filteredTimeline = timeline.filter(item => {
-            const matchesSearch = (item.title + item.contact).toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = (item.title + (item.contact || '')).toLowerCase().includes(searchTerm.toLowerCase());
             if (activeTab === 'ALL') return matchesSearch;
             if (activeTab === 'SALES') return item.type === 'SALE' && matchesSearch;
             if (activeTab === 'TRANSFERS') return item.type === 'TRANSFER' && matchesSearch;
@@ -70,15 +71,19 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
             return matchesSearch;
         });
 
-        const inventoryValue = (state.serviceItems || [])
-            .filter(i => i.branchId === branchId && i.type === 'PRODUCT')
-            .reduce((acc, i) => acc + ((Number(i.stockQuantity) || 0) * (Number(i.costPrice) || 0)), 0);
+        const filteredInventory = branchInventory.filter(i => 
+            i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            (i.code || '').toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        const inventoryValue = branchInventory.reduce((acc, i) => acc + ((Number(i.stockQuantity) || 0) * (Number(i.costPrice) || 0)), 0);
 
         return {
             totalSales: branchSales.reduce((acc, o) => acc + (Number(o.amount) || 0), 0),
             rxCount: branchRxs.length,
             inventoryValue,
             timeline: filteredTimeline,
+            inventory: filteredInventory,
             revenue: branchTransactions.filter(t => t.type === TransactionType.INCOME && t.status === TransactionStatus.PAID).reduce((acc, t) => acc + t.amount, 0)
         };
     }, [branch.id, state, activeTab, searchTerm]);
@@ -133,12 +138,12 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                         <Eye className="w-6 h-6 text-indigo-500" />
                     </div>
                     <h3 className="text-3xl font-black text-gray-900">{metrics.rxCount} <span className="text-sm text-slate-400 font-bold uppercase">Pacientes</span></h3>
-                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-4 flex items-center gap-1"><Activity className="w-3 h-3"/> Conversão RX/Venda ativa</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-4 flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-500"/> Conversão RX/Venda ativa</p>
                 </div>
 
                 <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-indigo-200 transition-all">
                     <div className="flex justify-between items-start mb-4">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Valor em Estoque</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Estoque Local</p>
                         <Package className="w-6 h-6 text-indigo-500" />
                     </div>
                     <h3 className="text-3xl font-black text-gray-900">{formatCurrency(metrics.inventoryValue)}</h3>
@@ -153,27 +158,30 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                 </div>
             </div>
 
-            {/* Timeline de Rastreabilidade Operacional */}
+            {/* Abas de Gerenciamento do Cockpit */}
             <div className="bg-white rounded-[3rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
                 <div className="p-8 border-b border-gray-50 flex flex-col lg:flex-row justify-between items-center gap-6 bg-slate-50/30">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-lg shadow-indigo-100">
-                            <History className="w-6 h-6" />
+                            {activeTab === 'STOCK' ? <Layers className="w-6 h-6" /> : <History className="w-6 h-6" />}
                         </div>
                         <div>
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Timeline de Rastreabilidade</h2>
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Fluxo integrado de eventos na unidade</p>
+                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
+                                {activeTab === 'STOCK' ? 'Estoque da Unidade' : 'Timeline de Rastreabilidade'}
+                            </h2>
+                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                                {activeTab === 'STOCK' ? 'Saldo atualizado de produtos nesta filial' : 'Fluxo integrado de eventos na unidade'}
+                            </p>
                         </div>
                     </div>
 
-                    {/* Filtros da Timeline */}
                     <div className="flex flex-wrap gap-2">
                         {[
                             { id: 'ALL', label: 'Tudo', icon: LayoutDashboard },
+                            { id: 'STOCK', label: 'Estoque', icon: Box },
                             { id: 'SALES', label: 'Vendas', icon: ShoppingBag },
-                            { id: 'TRANSFERS', label: 'Estoque', icon: ArrowLeftRight },
+                            { id: 'TRANSFERS', label: 'Movimentações', icon: ArrowLeftRight },
                             { id: 'RX', label: 'Receitas', icon: Glasses },
-                            { id: 'FINANCE', label: 'Financeiro', icon: DollarSign },
                         ].map(f => (
                             <button
                                 key={f.id}
@@ -189,7 +197,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                         <Search className="w-4 h-4 text-gray-300 absolute left-4 top-3.5" />
                         <input 
                             type="text" 
-                            placeholder="Pesquisar evento..." 
+                            placeholder="Buscar no cockpit..." 
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
@@ -197,47 +205,91 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-                    {metrics.timeline.length === 0 ? (
-                        <div className="py-24 text-center">
-                            <Clock className="w-16 h-16 text-slate-100 mx-auto mb-4" />
-                            <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum evento registrado com estes filtros.</p>
+                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+                    {activeTab === 'STOCK' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {metrics.inventory.length === 0 ? (
+                                <div className="col-span-full py-24 text-center">
+                                    <Box className="w-16 h-16 text-slate-100 mx-auto mb-4" />
+                                    <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum produto em estoque nesta unidade.</p>
+                                </div>
+                            ) : (
+                                metrics.inventory.map(item => (
+                                    <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-6 hover:shadow-lg transition-all group">
+                                        <div className="flex items-center gap-4 mb-6">
+                                            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 border border-slate-100 group-hover:border-indigo-100">
+                                                {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" alt="" /> : <Box className="w-6 h-6 text-slate-300" />}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-black text-gray-800 text-sm truncate uppercase tracking-tight">{item.name}</h4>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.brand || 'Marca Geral'} • {item.code || 'S/ SKU'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-slate-50 p-4 rounded-2xl">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Saldo Atual</p>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xl font-black ${Number(item.stockQuantity) <= 2 ? 'text-rose-500' : 'text-indigo-600'}`}>{item.stockQuantity}</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{item.unit}</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-slate-50 p-4 rounded-2xl flex flex-col justify-center">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Preço Venda</p>
+                                                <p className="text-sm font-black text-gray-700">{formatCurrency(item.defaultPrice)}</p>
+                                            </div>
+                                        </div>
+                                        {Number(item.stockQuantity) <= 2 && (
+                                            <div className="mt-4 p-3 bg-rose-50 rounded-xl border border-rose-100 flex items-center gap-2">
+                                                <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
+                                                <span className="text-[9px] font-black text-rose-600 uppercase">Estoque Crítico na Unidade</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {metrics.timeline.map((event, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[1.8rem] hover:shadow-xl hover:border-indigo-100 transition-all group">
-                                    <div className="flex items-center gap-6">
-                                        <div className="flex flex-col items-center min-w-[50px]">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase leading-none">{new Date(event.date).toLocaleDateString('pt-BR', { day: '2-digit' })}</span>
-                                            <span className="text-[14px] font-black text-indigo-600 uppercase leading-none mt-1">{new Date(event.date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
-                                        </div>
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-slate-50 ${event.color} transition-colors group-hover:bg-white group-hover:shadow-md`}>
-                                            <event.icon className="w-6 h-6" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <h4 className="font-black text-gray-800 text-sm truncate">{event.title}</h4>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                                                    <User className="w-3 h-3"/> {event.contact || 'Geral'}
-                                                </span>
-                                                <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border border-slate-100 bg-slate-50 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors`}>
-                                                    {event.status}
-                                                </span>
+                            {metrics.timeline.length === 0 ? (
+                                <div className="py-24 text-center">
+                                    <Clock className="w-16 h-16 text-slate-100 mx-auto mb-4" />
+                                    <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum evento registrado com estes filtros.</p>
+                                </div>
+                            ) : (
+                                metrics.timeline.map((event, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[1.8rem] hover:shadow-xl hover:border-indigo-100 transition-all group">
+                                        <div className="flex items-center gap-6">
+                                            <div className="flex flex-col items-center min-w-[50px]">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase leading-none">{new Date(event.date).toLocaleDateString('pt-BR', { day: '2-digit' })}</span>
+                                                <span className="text-[14px] font-black text-indigo-600 uppercase leading-none mt-1">{new Date(event.date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                                            </div>
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-slate-50 ${event.color} transition-colors group-hover:bg-white group-hover:shadow-md`}>
+                                                <event.icon className="w-6 h-6" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-black text-gray-800 text-sm truncate uppercase tracking-tight">{event.title}</h4>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                                                        <UserIcon className="w-3 h-3"/> {event.contact || 'Geral'}
+                                                    </span>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border border-slate-100 bg-slate-50 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors`}>
+                                                        {event.status}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
+                                        <div className="text-right">
+                                            <p className={`text-lg font-black ${event.type === 'TRANSFER' ? 'text-indigo-600' : event.color}`}>
+                                                {event.type === 'TRANSFER' ? `${event.value} un` : formatCurrency(event.value)}
+                                            </p>
+                                            <button className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mt-1 flex items-center gap-1 ml-auto">
+                                                Detalhes <ArrowRight className="w-3 h-3" />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`text-lg font-black ${event.type === 'TRANSFER' ? 'text-indigo-600' : event.color}`}>
-                                            {event.type === 'TRANSFER' ? `${event.value} un` : formatCurrency(event.value)}
-                                        </p>
-                                        <button className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mt-1 flex items-center gap-1 ml-auto">
-                                            Detalhes <ArrowRight className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     )}
                 </div>
@@ -246,7 +298,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
     );
 };
 
-const User = ({ className }: { className?: string }) => (
+const UserIcon = ({ className }: { className?: string }) => (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 );
 
