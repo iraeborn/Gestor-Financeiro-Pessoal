@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, AppState, ViewMode, Transaction, Account, 
   Contact, Category, OpticalRx, Branch, Member, ServiceOrder, CommercialOrder, OSItem,
-  TransactionType, TransactionStatus, ServiceItem, ServiceAppointment
+  TransactionType, TransactionStatus, ServiceItem, ServiceAppointment, Laboratory
 } from './types';
 import { refreshUser, loadInitialData, api, updateSettings, getFamilyMembers, joinFamily } from './services/storageService';
 import { syncService } from './services/syncService';
@@ -34,6 +34,7 @@ import BranchDetailsView from './components/BranchDetailsView';
 import OpticalModule from './components/OpticalModule';
 import OpticalRxEditor from './components/OpticalRxEditor';
 import LabsView from './components/LabsView';
+import LabDetailsView from './components/LabDetailsView';
 import ServicesView from './components/ServicesView';
 import ServiceOrderEditor from './components/ServiceOrderEditor';
 import SaleEditor from './components/SaleEditor';
@@ -68,6 +69,7 @@ const AppContent: React.FC<{
     
     const [editingRx, setEditingRx] = useState<OpticalRx | null>(null);
     const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+    const [editingLab, setEditingLab] = useState<Laboratory | null>(null);
     const [editingOS, setEditingOS] = useState<ServiceOrder | null>(null);
     const [editingSale, setEditingSale] = useState<CommercialOrder | null>(null);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -284,7 +286,8 @@ const AppContent: React.FC<{
             case 'SYS_SALES_SCHEDULE': return editingBranch ? <SalespersonScheduleView branch={editingBranch} schedules={state.salespersonSchedules || []} salespeople={state.salespeople || []} onSaveSchedule={(s) => api.saveSalespersonSchedule(s).then(refreshData)} onDeleteSchedule={(id) => api.deleteSalespersonSchedule(id).then(refreshData)} onBack={() => setCurrentView('SYS_BRANCHES')} /> : <Dashboard {...dashboardProps} />;
             case 'OPTICAL_RX': return <OpticalModule opticalRxs={state.opticalRxs || []} contacts={state.contacts || []} laboratories={state.laboratories || []} branches={state.branches || []} onAddRx={() => { setEditingRx(null); setCurrentView('OPTICAL_RX_EDITOR'); }} onEditRx={(rx) => { setEditingRx(rx); setCurrentView('OPTICAL_RX_EDITOR'); }} onDeleteRx={(id) => api.deleteOpticalRx(id).then(refreshData)} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} onStartSaleFromRx={handleStartSaleFromRx} />;
             case 'OPTICAL_RX_EDITOR': return <OpticalRxEditor contacts={state.contacts || []} laboratories={state.laboratories || []} branches={state.branches || []} initialData={editingRx} onSave={(rx) => api.saveOpticalRx(rx).then(() => { refreshData(); setCurrentView('OPTICAL_RX'); })} onCancel={() => setCurrentView('OPTICAL_RX')} />;
-            case 'OPTICAL_LABS_MGMT': return <LabsView laboratories={state.laboratories || []} onSaveLaboratory={(l) => api.saveLaboratory(l).then(refreshData)} onDeleteLaboratory={(id) => api.deleteLaboratory(id).then(refreshData)} />;
+            case 'OPTICAL_LABS_MGMT': return <LabsView laboratories={state.laboratories || []} onSaveLaboratory={(l) => api.saveLaboratory(l).then(refreshData)} onDeleteLaboratory={(id) => api.deleteLaboratory(id).then(refreshData)} onViewDetails={(l) => { setEditingLab(l); setCurrentView('OPTICAL_LAB_DETAILS'); }} />;
+            case 'OPTICAL_LAB_DETAILS': return editingLab ? <LabDetailsView lab={editingLab} opticalRxs={state.opticalRxs || []} onBack={() => setCurrentView('OPTICAL_LABS_MGMT')} onUpdateRx={(rx) => api.saveOpticalRx(rx).then(refreshData)} /> : <Dashboard {...dashboardProps} />;
             case 'SYS_SALESPEOPLE': return <SalespeopleView salespeople={state.salespeople || []} branches={state.branches || []} members={members || []} onSaveSalesperson={(s) => api.saveLocallyAndQueue('salespeople', s).then(refreshData)} onDeleteSalesperson={(id) => api.deleteLocallyAndQueue('salespeople', id).then(refreshData)} />;
             case 'SYS_SETTINGS': return <SettingsView user={currentUser} pjData={{ companyProfile: state.companyProfile, branches: state.branches || [], costCenters: state.costCenters || [], departments: state.departments || [], projects: state.projects || [], accounts: state.accounts || [] }} onUpdateSettings={(s) => updateSettings(s).then(() => checkAuth())} onOpenCollab={() => {}} onSavePJEntity={(t, d) => api.savePJEntity(t, d).then(refreshData)} onDeletePJEntity={(t, id) => api.deletePJEntity(t, id).then(refreshData)} />;
             case 'SYS_HELP': return <HelpCenter activeModules={currentUser.settings?.activeModules} />;

@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
 import { Laboratory, LabCommPreference } from '../types';
-import { Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, FlaskConical, TestTube2, Microscope, MessageSquare, Globe, AtSign, Info } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, FlaskConical, TestTube2, Microscope, MessageSquare, Globe, AtSign, Info, LayoutDashboard, ChevronRight } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 
 interface LabsViewProps {
     laboratories: Laboratory[];
     onSaveLaboratory: (l: Laboratory) => void;
     onDeleteLaboratory: (id: string) => void;
+    onViewDetails: (l: Laboratory) => void;
 }
 
-const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onDeleteLaboratory }) => {
+const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onDeleteLaboratory, onViewDetails }) => {
     const { showConfirm } = useConfirm();
     const { showAlert } = useAlert();
     const [searchTerm, setSearchTerm] = useState('');
@@ -87,45 +88,55 @@ const LabsView: React.FC<LabsViewProps> = ({ laboratories, onSaveLaboratory, onD
                         <p className="font-bold">Nenhum laboratório cadastrado.</p>
                     </div>
                 ) : filtered.map(lab => (
-                    <div key={lab.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 hover:shadow-xl transition-all group relative overflow-hidden">
+                    <div key={lab.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 hover:shadow-xl transition-all group relative overflow-hidden flex flex-col justify-between h-full">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
                             <TestTube2 className="w-20 h-20 text-indigo-600" />
                         </div>
                         
-                        <div className="flex justify-between items-start mb-6 relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-lg shadow-sm">
-                                    {lab.name.charAt(0)}
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-gray-900 line-clamp-1">{lab.name}</h3>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${lab.preferredCommunication === 'WHATSAPP' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                            Envio: {lab.preferredCommunication}
-                                        </span>
+                        <div>
+                            <div className="flex justify-between items-start mb-6 relative z-10">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-lg shadow-sm">
+                                        {lab.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 line-clamp-1">{lab.name}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${lab.preferredCommunication === 'WHATSAPP' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                Envio: {lab.preferredCommunication}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handleOpenModal(lab)} className="p-2 text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-gray-100"><Pencil className="w-4 h-4"/></button>
+                                    <button onClick={() => handleDelete(lab.id, lab.name)} className="p-2 text-rose-500 bg-white hover:bg-rose-50 rounded-lg shadow-sm border border-gray-100"><Trash2 className="w-4 h-4"/></button>
+                                </div>
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenModal(lab)} className="p-2 text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-gray-100"><Pencil className="w-4 h-4"/></button>
-                                <button onClick={() => handleDelete(lab.id, lab.name)} className="p-2 text-rose-500 bg-white hover:bg-rose-50 rounded-lg shadow-sm border border-gray-100"><Trash2 className="w-4 h-4"/></button>
+
+                            <div className="space-y-3 relative z-10 mb-6">
+                                {lab.phone && (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                        <Phone className="w-4 h-4 text-emerald-500" />
+                                        <span className="text-sm font-medium text-gray-700">{lab.phone}</span>
+                                    </div>
+                                )}
+                                {lab.email && (
+                                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                        <Mail className="w-4 h-4 text-blue-500" />
+                                        <span className="text-sm font-medium text-gray-700 truncate">{lab.email}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        <div className="space-y-3 relative z-10">
-                            {lab.phone && (
-                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                    <Phone className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-sm font-medium text-gray-700">{lab.phone}</span>
-                                </div>
-                            )}
-                            {lab.email && (
-                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                    <Mail className="w-4 h-4 text-blue-500" />
-                                    <span className="text-sm font-medium text-gray-700 truncate">{lab.email}</span>
-                                </div>
-                            )}
-                        </div>
+                        <button 
+                            onClick={() => onViewDetails(lab)}
+                            className="w-full flex items-center justify-between px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all group/btn"
+                        >
+                            <span className="flex items-center gap-2"><LayoutDashboard className="w-4 h-4" /> Ver Performance</span>
+                            <ChevronRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                        </button>
                     </div>
                 ))}
             </div>
