@@ -1,8 +1,27 @@
+
 import { OSPriority, OSStatus, OSType, OSOrigin } from './enums_legacy';
 
 export type { OSStatus, OSType, OSOrigin, OSPriority };
 
 export type PaymentMethod = 'CARD' | 'BOLETO' | 'PIX' | 'CASH';
+
+export type InventoryEventType = 'PURCHASE' | 'SALE' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'ADJUSTMENT_ADD' | 'ADJUSTMENT_REMOVE' | 'RETURN';
+
+export interface InventoryEvent {
+    id: string;
+    serviceItemId: string;
+    type: InventoryEventType;
+    quantity: number;
+    branchId: string;
+    date: string;
+    notes?: string;
+    userId: string;
+    costUnitPrice?: number;
+    relatedEntityId?: string; // ID da Venda, Compra ou Transferência
+    // Fix: Added optional fields returned by the API during joins for display purposes
+    userName?: string;
+    branchName?: string;
+}
 
 export interface Branch { 
     id: string; 
@@ -57,7 +76,7 @@ export interface StockTransfer {
     notes?: string;
     familyId: string;
     status: TransferStatus;
-    invoiceRef?: string; // Referência para futura NF de transferência
+    invoiceRef?: string; 
     userId?: string;
 }
 
@@ -109,7 +128,7 @@ export interface ServiceItem {
   description?: string;
   imageUrl?: string;
   unit?: string;
-  branchId?: string; // Filial onde o item "mora" originalmente (Matriz na compra)
+  branchId?: string; 
   stockQuantity: number;
   warrantyEnabled?: boolean;
   warrantyDays?: number;
@@ -166,7 +185,6 @@ export interface CommercialOrder {
   installments?: number;
 }
 
-// Fix: Added missing Contract interface
 export interface Contract {
     id: string;
     contactId: string;
@@ -181,7 +199,6 @@ export interface Contract {
     deleted_at?: string;
 }
 
-// Fix: Added missing Invoice interface
 export interface Invoice {
     id: string;
     orderId: string;
@@ -199,7 +216,6 @@ export interface Invoice {
     deleted_at?: string;
 }
 
-// Fix: Added missing Kanban types
 export interface KanbanColumnConfig {
     id: string;
     label: string;
