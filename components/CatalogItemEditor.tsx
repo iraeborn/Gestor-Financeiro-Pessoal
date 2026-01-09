@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ServiceItem, Branch, VariationAttribute, ProductSKU, OSItem, InventoryEvent } from '../types';
 import { 
@@ -47,8 +46,6 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
         moduleTag: 'GENERAL'
     });
 
-    const [categoryInput, setCategoryInput] = useState('');
-    const [showCategoryMenu, setShowCategoryMenu] = useState(false);
     const [inventoryHistory, setInventoryHistory] = useState<InventoryEvent[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
@@ -91,7 +88,9 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
 
     const handleRecordMovement = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (movementData.quantity <= 0) return showAlert("Quantidade inválida.", "warning");
+        const qty = Number(movementData.quantity);
+        if (qty <= 0) return showAlert("Quantidade inválida.", "warning");
+        
         try {
             const token = localStorage.getItem('token');
             const res = await fetch('/api/catalog/inventory/event', {
@@ -102,9 +101,19 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
             if (res.ok) {
                 showAlert("Movimentação registrada!", "success");
                 setIsMovementModalOpen(false);
+                
+                // CRÍTICO: Atualiza o saldo local (Saldo em Prateleira) imediatamente
                 const mult = ['ADJUSTMENT_REMOVE', 'SALE', 'TRANSFER_OUT'].includes(movementData.type) ? -1 : 1;
-                setFormData(prev => ({ ...prev, stockQuantity: (prev.stockQuantity || 0) + (Number(movementData.quantity) * mult) }));
+                const newStock = (Number(formData.stockQuantity) || 0) + (qty * mult);
+                
+                setFormData(prev => ({ ...prev, stockQuantity: newStock }));
+                
+                // Limpa o form de movimento e recarrega histórico
+                setMovementData({ type: 'ADJUSTMENT_ADD', quantity: 0, branchId: branches[0]?.id || '', notes: '', costUnitPrice: 0 });
                 loadInventoryHistory(initialData!.id);
+            } else {
+                const err = await res.json();
+                showAlert(err.error || "Erro ao ajustar estoque.", "error");
             }
         } catch (e) { showAlert("Erro de conexão.", "error"); }
     };
@@ -170,7 +179,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                     <div>
                         <div className="flex items-center gap-3">
                             <h1 className="text-3xl font-black text-slate-900 tracking-tight">{initialData ? 'Gestão de Item' : 'Novo Item no Catálogo'}</h1>
-                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${formData.type === 'PRODUCT' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white'}`}>
+                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${formData.type === 'PRODUCT' ? 'bg-indigo-600 text-white' : 'bg-amber-50 text-white'}`}>
                                 {formData.type === 'PRODUCT' ? 'Produto' : 'Serviço'}
                             </span>
                         </div>
@@ -451,6 +460,7 @@ const CatalogItemEditor: React.FC<CatalogItemEditorProps> = ({
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Motivo do Ajuste</label>
+                                {/* Fix: Use movementData instead of formData to fix the TypeScript error */}
                                 <textarea className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold min-h-[80px]" value={movementData.notes} onChange={e => setMovementData({...movementData, notes: e.target.value})} placeholder="Ex: NF-e #123, Perda técnica..." />
                             </div>
                             <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl">Confirmar Registro</button>

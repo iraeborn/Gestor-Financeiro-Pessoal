@@ -9,7 +9,7 @@ import {
     Wrench, ShoppingBag, Plus, Search, Trash2, Box, Tag, 
     ArrowRight, ImageIcon, Save, X, DollarSign, Calendar, 
     ShieldCheck, ArrowLeftRight, Settings, Loader2, UploadCloud, 
-    Store, Zap, Info, LayoutGrid, Trello, Pencil
+    Store, Zap, Info, LayoutGrid, Trello, Pencil, Package, Layers
 } from 'lucide-react';
 import { useConfirm, useAlert } from './AlertSystem';
 import { api } from '../services/storageService';
@@ -69,9 +69,29 @@ const ServicesView: React.FC<ServicesViewProps> = ({
     const [catalogTab, setCatalogTab] = useState<'ALL' | 'SERVICE' | 'PRODUCT'>('ALL');
     const [viewType, setViewType] = useState<'GRID' | 'KANBAN'>((isOS || isSales) ? 'KANBAN' : 'GRID');
     
-    const [transferData, setTransferData] = useState<Partial<StockTransfer>>({
-        date: new Date().toISOString().split('T')[0], quantity: 0
+    // Estado para transferência multi-produto
+    const [transferHeader, setTransferHeader] = useState({
+        fromBranchId: '', toBranchId: '', date: new Date().toISOString().split('T')[0], notes: ''
     });
+    const [transferItems, setTransferItems] = useState<{serviceItemId: string, quantity: number}[]>([]);
+    const [selectedItemId, setSelectedItemId] = useState('');
+    const [selectedQty, setSelectedQty] = useState(1);
+
+    const handleAddItemToTransfer = () => {
+        if (!selectedItemId) return;
+        const exists = transferItems.find(i => i.serviceItemId === selectedItemId);
+        if (exists) {
+            setTransferItems(transferItems.map(i => i.serviceItemId === selectedItemId ? { ...i, quantity: i.quantity + selectedQty } : i));
+        } else {
+            setTransferItems([...transferItems, { serviceItemId: selectedItemId, quantity: selectedQty }]);
+        }
+        setSelectedItemId('');
+        setSelectedQty(1);
+    };
+
+    const handleRemoveItemFromTransfer = (id: string) => {
+        setTransferItems(transferItems.filter(i => i.serviceItemId !== id));
+    };
 
     const handleOpenAction = (item?: any) => {
         if (isCatalog) {
@@ -86,17 +106,27 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
     const handleTransferStock = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!transferData.serviceItemId || !transferData.fromBranchId || !transferData.toBranchId || !transferData.quantity) {
-            return showAlert("Preencha todos os campos da transferência.", "warning");
+        if (!transferHeader.fromBranchId || !transferHeader.toBranchId || transferItems.length === 0) {
+            return showAlert("Configure a origem, destino e ao menos um produto.", "warning");
         }
-        if (transferData.fromBranchId === transferData.toBranchId) {
+        if (transferHeader.fromBranchId === transferHeader.toBranchId) {
             return showAlert("Origem e destino devem ser diferentes.", "warning");
         }
         
         try {
-            await api.transferStock(transferData);
-            showAlert("Transferência registrada e agendada para sincronização!", "success");
+            // Processa cada item da transferência sequencialmente
+            for (const item of transferItems) {
+                await api.transferStock({
+                    ...transferHeader,
+                    serviceItemId: item.serviceItemId,
+                    quantity: item.quantity
+                });
+            }
+            
+            showAlert(`${transferItems.length} produto(s) transferidos com sucesso!`, "success");
             setIsTransferModalOpen(false);
+            setTransferItems([]);
+            setTransferHeader({ fromBranchId: '', toBranchId: '', date: new Date().toISOString().split('T')[0], notes: '' });
             setTimeout(() => window.location.reload(), 800);
         } catch (e) { showAlert("Erro ao registrar transferência.", "error"); }
     };
@@ -185,7 +215,7 @@ const ServicesView: React.FC<ServicesViewProps> = ({
                 <div className="flex gap-2 w-full md:w-auto">
                     {isCatalog && (
                         <button onClick={() => setIsTransferModalOpen(true)} className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-6 py-3 rounded-2xl flex items-center gap-2 text-sm font-black uppercase tracking-widest hover:bg-emerald-100 transition-all active:scale-95">
-                            <ArrowLeftRight className="w-4 h-4" /> Transferir Estoque
+                            <ArrowLeftRight className="w-4 h-4" /> Transferência em Lote
                         </button>
                     )}
                     <div className="relative flex-1 md:w-64">
@@ -217,32 +247,163 @@ const ServicesView: React.FC<ServicesViewProps> = ({
 
             <div className="flex-1 overflow-y-auto">{renderGridContent()}</div>
 
-            {/* Modal de Transferência de Estoque Multi-Filial (Mantido como modal pois é uma ação rápida de ajuste) */}
+            {/* MODAL DE TRANSFERÊNCIA EM LOTE */}
             {isTransferModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg p-10 animate-scale-up border border-slate-100 relative">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-3"><ArrowLeftRight className="w-6 h-6 text-emerald-600" /> Transferir Estoque</h2>
-                            <button onClick={() => setIsTransferModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5"/></button>
+                    <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl p-10 animate-scale-up border border-slate-100 relative max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl">
+                                    <ArrowLeftRight className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Transferência de Estoque (Lote)</h2>
+                                    <p className="text-xs text-gray-400 font-bold uppercase">Movimentação logística entre unidades</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsTransferModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-6 h-6"/></button>
                         </div>
-                        <form onSubmit={handleTransferStock} className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Produto para Movimentação</label>
-                                <select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" value={transferData.serviceItemId || ''} onChange={e => setTransferData({...transferData, serviceItemId: e.target.value})} required>
-                                    <option value="">Qual item deseja transferir?</option>
-                                    {serviceItems.filter(i => i.type === 'PRODUCT').map(i => <option key={i.id} value={i.id}>{i.name} (Saldo Atual: {i.stockQuantity})</option>)}
-                                </select>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 overflow-hidden">
+                            {/* Coluna 1: Configuração de Rota */}
+                            <div className="space-y-6">
+                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+                                    <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-2"><Store className="w-3 h-3"/> Rota Logística</h3>
+                                    <div>
+                                        <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Unidade de Origem</label>
+                                        <select 
+                                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold outline-none shadow-sm"
+                                            value={transferHeader.fromBranchId}
+                                            onChange={e => setTransferHeader({...transferHeader, fromBranchId: e.target.value})}
+                                        >
+                                            <option value="">Selecionar...</option>
+                                            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Unidade de Destino</label>
+                                        <select 
+                                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold outline-none shadow-sm"
+                                            value={transferHeader.toBranchId}
+                                            onChange={e => setTransferHeader({...transferHeader, toBranchId: e.target.value})}
+                                        >
+                                            <option value="">Selecionar...</option>
+                                            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-black uppercase text-slate-400 mb-1">Data</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm"
+                                            value={transferHeader.date}
+                                            onChange={e => setTransferHeader({...transferHeader, date: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
+                                    <div className="flex items-center gap-2 text-indigo-700 mb-2">
+                                        <Info className="w-4 h-4" />
+                                        <h4 className="text-[10px] font-black uppercase">Regra Logística</h4>
+                                    </div>
+                                    <p className="text-[10px] text-indigo-800 leading-relaxed font-medium">
+                                        A transferência em lote criará um par de eventos (saída/entrada) para cada produto da lista, garantindo a rastreabilidade fiscal e física.
+                                    </p>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Sair de (Origem)</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={transferData.fromBranchId || ''} onChange={e => setTransferData({...transferData, fromBranchId: e.target.value})} required><option value="">Selecionar...</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Entrar em (Destino)</label><select className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={transferData.toBranchId || ''} onChange={e => setTransferData({...transferData, toBranchId: e.target.value})} required><option value="">Selecionar...</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+
+                            {/* Coluna 2 e 3: Carrinho de Transferência */}
+                            <div className="lg:col-span-2 flex flex-col overflow-hidden">
+                                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col flex-1 overflow-hidden">
+                                    <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center gap-3">
+                                        <div className="flex-1 relative">
+                                            <Package className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                                            <select 
+                                                className="w-full pl-10 pr-4 py-2.5 bg-white border-none rounded-xl text-xs font-bold shadow-sm outline-none appearance-none"
+                                                value={selectedItemId}
+                                                onChange={e => setSelectedItemId(e.target.value)}
+                                            >
+                                                <option value="">+ Adicionar produto à lista...</option>
+                                                {serviceItems.filter(i => i.type === 'PRODUCT').map(i => <option key={i.id} value={i.id}>{i.name} (Saldo Global: {i.stockQuantity})</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="w-24 relative">
+                                            <input 
+                                                type="number" 
+                                                className="w-full p-2.5 bg-white border-none rounded-xl text-xs font-black shadow-sm text-center" 
+                                                value={selectedQty}
+                                                onChange={e => setSelectedQty(Number(e.target.value))}
+                                                min="1"
+                                            />
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleAddItemToTransfer}
+                                            className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin">
+                                        {transferItems.length === 0 ? (
+                                            <div className="py-20 text-center text-slate-300 italic flex flex-col items-center gap-3">
+                                                <Layers className="w-12 h-12 opacity-10" />
+                                                <span className="text-xs font-bold uppercase tracking-widest">Nenhum item na lista de envio</span>
+                                            </div>
+                                        ) : transferItems.map(item => {
+                                            const catalogItem = serviceItems.find(i => i.id === item.serviceItemId);
+                                            return (
+                                                <div key={item.serviceItemId} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl group hover:bg-white hover:border-indigo-100 transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center">
+                                                            <Box className="w-5 h-5 text-indigo-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-700">{catalogItem?.name || 'Item desconhecido'}</p>
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase">{catalogItem?.brand || 'Sem Marca'}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="text-right">
+                                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Mover</p>
+                                                            <p className="text-sm font-black text-indigo-600">{item.quantity} un</p>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleRemoveItemFromTransfer(item.serviceItemId)}
+                                                            className="p-2 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="p-6 bg-slate-900 border-t border-slate-800 rounded-b-[2rem]">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <div className="text-white">
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Resumo de Carga</p>
+                                                <p className="text-lg font-black">{transferItems.length} referências selecionadas</p>
+                                            </div>
+                                            <div className="text-right text-white">
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Volume Total</p>
+                                                <p className="text-lg font-black">{transferItems.reduce((acc, i) => acc + i.quantity, 0)} unidades</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={handleTransferStock}
+                                            disabled={transferItems.length === 0}
+                                            className="w-full bg-emerald-600 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-emerald-900/50 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:grayscale"
+                                        >
+                                            <ArrowLeftRight className="w-5 h-5" /> Processar Transferência em Lote
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Quantidade</label><input type="number" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-black" value={transferData.quantity} onChange={e => setTransferData({...transferData, quantity: Number(e.target.value)})} required min="1" /></div>
-                                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 ml-1">Data</label><input type="date" className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold" value={transferData.date} onChange={e => setTransferData({...transferData, date: e.target.value})} /></div>
-                            </div>
-                            <button type="submit" className="w-full bg-emerald-600 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">Confirmar Movimentação</button>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
