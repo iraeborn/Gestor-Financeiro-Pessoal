@@ -197,11 +197,13 @@ export const updatePublicOrderStatus = async (token: string, status: string) => 
     return handleResponse(res);
 };
 
-export const loadInitialData = async () => {
-    try {
-        await syncService.pullFromServer();
-    } catch (e) {
-        console.warn("Offline: carregando apenas banco local.");
+export const loadInitialData = async (fetchFromServer = true) => {
+    if (fetchFromServer) {
+        try {
+            await syncService.pullFromServer();
+        } catch (e) {
+            console.warn("Offline ou erro ao sincronizar: carregando banco local.");
+        }
     }
 
     const [
@@ -247,7 +249,6 @@ export const loadInitialData = async () => {
 
 export const api = {
     saveTransaction: async (t: Transaction, nc?: Contact, ncat?: Category) => {
-        // Garante que a transação tenha um ID antes de processar
         const payload = { ...t, id: t.id || crypto.randomUUID() };
         
         if (nc) await api.saveContact(nc);
