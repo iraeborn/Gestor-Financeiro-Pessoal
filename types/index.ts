@@ -6,7 +6,7 @@ export * from './health';
 export * from './system';
 
 import { Account, Transaction, FinancialGoal, Category } from './finance';
-import { Branch, CostCenter, Department, Project, ServiceItem, ServiceOrder, CommercialOrder, Contract, StockTransfer, Salesperson, SalespersonSchedule, Invoice } from './operations';
+import { Branch, CostCenter, Department, Project, ServiceItem, ServiceOrder, CommercialOrder, Contract, StockTransfer, Salesperson, SalespersonSchedule, Invoice, InventoryEvent } from './operations';
 import { ServiceClient, ServiceAppointment, OpticalRx, Laboratory } from './health';
 import { CompanyProfile } from './system';
 import { Contact } from './contact'; // Se houver um contact.ts, ou mova para finance
@@ -34,4 +34,5 @@ export interface AppState {
   laboratories: Laboratory[];
   companyProfile?: CompanyProfile | null;
   stockTransfers: StockTransfer[];
+  inventoryEvents: InventoryEvent[];
 }

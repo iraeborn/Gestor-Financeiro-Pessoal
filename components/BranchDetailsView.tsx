@@ -1,12 +1,12 @@
 
 import React, { useMemo, useState } from 'react';
-import { Branch, AppState, TransactionType, TransactionStatus, StockTransfer, CommercialOrder, OpticalRx, ServiceItem } from '../types';
+import { Branch, AppState, TransactionType, TransactionStatus, StockTransfer, CommercialOrder, OpticalRx, ServiceItem, InventoryEvent } from '../types';
 import { 
     ArrowLeft, Store, MapPin, Phone, TrendingUp, Eye, Package, 
     ShoppingBag, Clock, ArrowRight, AlertTriangle,
     CheckCircle2, Landmark, Glasses, ArrowLeftRight, 
     DollarSign, Search, History, LayoutDashboard, Box, 
-    Layers, Filter, ArrowUpRight, ArrowDownRight
+    Layers, Filter, ArrowUpRight, ArrowDownRight, User as UserIcon, RefreshCw, Archive
 } from 'lucide-react';
 
 interface BranchDetailsViewProps {
@@ -31,19 +31,25 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
         const branchTransfers = (state.stockTransfers || []).filter(t => t.fromBranchId === branchId || t.toBranchId === branchId);
         const branchTransactions = (state.transactions || []).filter(t => t.branchId === branchId);
         const branchInventory = (state.serviceItems || []).filter(i => i.branchId === branchId && i.type === 'PRODUCT');
+        const branchEvents = (state.inventoryEvents || []).filter(e => e.branchId === branchId);
 
-        // Timeline Unificada
+        // Timeline Unificada - Correção do Filtro "Tudo"
         const timeline = [
+            // Vendas e Compras
             ...branchSales.map(o => ({ 
                 id: o.id, date: o.date, type: 'SALE' as const, 
-                title: `Venda: ${o.description}`, value: o.amount, 
-                status: o.status, contact: o.contactName, icon: ShoppingBag, color: 'text-emerald-600'
+                title: o.type === 'PURCHASE' ? `Compra: ${o.description}` : `Venda: ${o.description}`, 
+                value: o.amount, 
+                status: o.status, contact: o.contactName, icon: o.type === 'PURCHASE' ? Archive : ShoppingBag, 
+                color: o.type === 'PURCHASE' ? 'text-amber-600' : 'text-emerald-600'
             })),
+            // Receitas Óticas
             ...branchRxs.map(rx => ({
                 id: rx.id, date: rx.rxDate, type: 'RX' as const,
                 title: `Receita RX: ${rx.rxNumber}`, value: 0,
                 status: rx.status, contact: rx.contactName, icon: Eye, color: 'text-indigo-600'
             })),
+            // Transferências Logísticas
             ...branchTransfers.map(t => {
                 const isOut = t.fromBranchId === branchId;
                 return {
@@ -51,12 +57,21 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                     title: isOut ? `Envio para ${t.toBranchName || 'Outra Loja'}` : `Recebimento de ${t.fromBranchName || 'HUB'}`,
                     value: t.quantity, status: 'CONCLUÍDO',
                     contact: state.serviceItems.find(i => i.id === t.serviceItemId)?.name,
-                    icon: ArrowLeftRight, color: isOut ? 'text-amber-600' : 'text-blue-600'
+                    icon: ArrowLeftRight, color: isOut ? 'text-rose-600' : 'text-blue-600'
                 };
             }),
+            // Movimentações de Ajuste Manual de Estoque (Novidade na Timeline)
+            ...branchEvents.filter(e => ['ADJUSTMENT_ADD', 'ADJUSTMENT_REMOVE', 'RETURN'].includes(e.type)).map(e => ({
+                id: e.id, date: e.date, type: 'STOCK' as const,
+                title: e.type === 'ADJUSTMENT_ADD' ? `Entrada Manual: ${e.notes || 'Ajuste'}` : `Saída Manual: ${e.notes || 'Ajuste'}`,
+                value: e.quantity, status: 'AJUSTADO',
+                contact: state.serviceItems.find(i => i.id === e.serviceItemId)?.name,
+                icon: RefreshCw, color: e.type === 'ADJUSTMENT_ADD' ? 'text-emerald-500' : 'text-rose-500'
+            })),
+            // Transações Financeiras (Filtrando as que já são ordens de venda/compra)
             ...branchTransactions.filter(t => !branchSales.some(s => s.transactionId === t.id)).map(t => ({
                 id: t.id, date: t.date, type: 'FINANCE' as const,
-                title: `Financeiro: ${t.description}`, value: t.amount,
+                title: `Fluxo: ${t.description}`, value: t.amount,
                 status: t.status, contact: t.category, icon: DollarSign, color: t.type === TransactionType.INCOME ? 'text-emerald-500' : 'text-rose-500'
             }))
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -68,6 +83,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
             if (activeTab === 'TRANSFERS') return item.type === 'TRANSFER' && matchesSearch;
             if (activeTab === 'RX') return item.type === 'RX' && matchesSearch;
             if (activeTab === 'FINANCE') return item.type === 'FINANCE' && matchesSearch;
+            if (activeTab === 'STOCK') return item.type === 'STOCK' && matchesSearch;
             return matchesSearch;
         });
 
@@ -79,7 +95,7 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
         const inventoryValue = branchInventory.reduce((acc, i) => acc + ((Number(i.stockQuantity) || 0) * (Number(i.costPrice) || 0)), 0);
 
         return {
-            totalSales: branchSales.reduce((acc, o) => acc + (Number(o.amount) || 0), 0),
+            totalSales: branchSales.filter(o => o.type === 'SALE').reduce((acc, o) => acc + (Number(o.amount) || 0), 0),
             rxCount: branchRxs.length,
             inventoryValue,
             timeline: filteredTimeline,
@@ -125,11 +141,11 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-indigo-200 transition-all">
                     <div className="flex justify-between items-start mb-4">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Faturamento Bruto</p>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Vendas Brutas</p>
                         <TrendingUp className="w-6 h-6 text-indigo-500 group-hover:scale-110 transition-transform" />
                     </div>
                     <h3 className="text-3xl font-black text-gray-900">{formatCurrency(metrics.totalSales)}</h3>
-                    <p className="text-[9px] text-indigo-600 font-bold uppercase mt-4 flex items-center gap-1"><History className="w-3 h-3"/> Total histórico da loja</p>
+                    <p className="text-[9px] text-indigo-600 font-bold uppercase mt-4 flex items-center gap-1"><History className="w-3 h-3"/> Somente saídas de PDV</p>
                 </div>
 
                 <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-indigo-200 transition-all">
@@ -167,10 +183,10 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">
-                                {activeTab === 'STOCK' ? 'Estoque da Unidade' : 'Timeline de Rastreabilidade'}
+                                {activeTab === 'STOCK' ? 'Grade de Inventário' : 'Timeline de Rastreabilidade'}
                             </h2>
                             <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
-                                {activeTab === 'STOCK' ? 'Saldo atualizado de produtos nesta filial' : 'Fluxo integrado de eventos na unidade'}
+                                {activeTab === 'STOCK' ? 'Saldo atualizado de produtos nesta filial' : 'Fluxo integrado de eventos operacionais'}
                             </p>
                         </div>
                     </div>
@@ -178,9 +194,9 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                     <div className="flex flex-wrap gap-2">
                         {[
                             { id: 'ALL', label: 'Tudo', icon: LayoutDashboard },
-                            { id: 'STOCK', label: 'Estoque', icon: Box },
-                            { id: 'SALES', label: 'Vendas', icon: ShoppingBag },
-                            { id: 'TRANSFERS', label: 'Movimentações', icon: ArrowLeftRight },
+                            { id: 'SALES', label: 'Vendas/PDV', icon: ShoppingBag },
+                            { id: 'STOCK', label: 'Ajustes Estoque', icon: Box },
+                            { id: 'TRANSFERS', label: 'Transferências', icon: ArrowLeftRight },
                             { id: 'RX', label: 'Receitas', icon: Glasses },
                         ].map(f => (
                             <button
@@ -206,18 +222,13 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-                    {activeTab === 'STOCK' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                            {metrics.inventory.length === 0 ? (
-                                <div className="col-span-full py-24 text-center">
-                                    <Box className="w-16 h-16 text-slate-100 mx-auto mb-4" />
-                                    <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum produto em estoque nesta unidade.</p>
-                                </div>
-                            ) : (
-                                metrics.inventory.map(item => (
+                    {activeTab === 'STOCK' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+                             {/* Mostra apenas a grade de estoque na aba específica ou integra na timeline */}
+                             {metrics.inventory.map(item => (
                                     <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-6 hover:shadow-lg transition-all group">
                                         <div className="flex items-center gap-4 mb-6">
-                                            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 border border-slate-100 group-hover:border-indigo-100">
+                                            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 border border-slate-100">
                                                 {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" alt="" /> : <Box className="w-6 h-6 text-slate-300" />}
                                             </div>
                                             <div className="min-w-0">
@@ -238,68 +249,57 @@ const BranchDetailsView: React.FC<BranchDetailsViewProps> = ({ branch, state, on
                                                 <p className="text-sm font-black text-gray-700">{formatCurrency(item.defaultPrice)}</p>
                                             </div>
                                         </div>
-                                        {Number(item.stockQuantity) <= 2 && (
-                                            <div className="mt-4 p-3 bg-rose-50 rounded-xl border border-rose-100 flex items-center gap-2">
-                                                <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />
-                                                <span className="text-[9px] font-black text-rose-600 uppercase">Estoque Crítico na Unidade</span>
-                                            </div>
-                                        )}
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {metrics.timeline.length === 0 ? (
-                                <div className="py-24 text-center">
-                                    <Clock className="w-16 h-16 text-slate-100 mx-auto mb-4" />
-                                    <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum evento registrado com estes filtros.</p>
-                                </div>
-                            ) : (
-                                metrics.timeline.map((event, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[1.8rem] hover:shadow-xl hover:border-indigo-100 transition-all group">
-                                        <div className="flex items-center gap-6">
-                                            <div className="flex flex-col items-center min-w-[50px]">
-                                                <span className="text-[10px] font-black text-slate-400 uppercase leading-none">{new Date(event.date).toLocaleDateString('pt-BR', { day: '2-digit' })}</span>
-                                                <span className="text-[14px] font-black text-indigo-600 uppercase leading-none mt-1">{new Date(event.date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
-                                            </div>
-                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-slate-50 ${event.color} transition-colors group-hover:bg-white group-hover:shadow-md`}>
-                                                <event.icon className="w-6 h-6" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <h4 className="font-black text-gray-800 text-sm truncate uppercase tracking-tight">{event.title}</h4>
-                                                <div className="flex items-center gap-3 mt-1">
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                                                        <UserIcon className="w-3 h-3"/> {event.contact || 'Geral'}
-                                                    </span>
-                                                    <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border border-slate-100 bg-slate-50 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors`}>
-                                                        {event.status}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className={`text-lg font-black ${event.type === 'TRANSFER' ? 'text-indigo-600' : event.color}`}>
-                                                {event.type === 'TRANSFER' ? `${event.value} un` : formatCurrency(event.value)}
-                                            </p>
-                                            <button className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mt-1 flex items-center gap-1 ml-auto">
-                                                Detalhes <ArrowRight className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
+                             ))}
                         </div>
                     )}
+                    
+                    <div className="space-y-3">
+                        {metrics.timeline.length === 0 ? (
+                            <div className="py-24 text-center">
+                                <Clock className="w-16 h-16 text-slate-100 mx-auto mb-4" />
+                                <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Nenhum evento registrado com estes filtros.</p>
+                            </div>
+                        ) : (
+                            metrics.timeline.map((event, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-[1.8rem] hover:shadow-xl hover:border-indigo-100 transition-all group">
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex flex-col items-center min-w-[50px]">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase leading-none">{new Date(event.date).toLocaleDateString('pt-BR', { day: '2-digit' })}</span>
+                                            <span className="text-[14px] font-black text-indigo-600 uppercase leading-none mt-1">{new Date(event.date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                                        </div>
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-slate-50 ${event.color} transition-colors group-hover:bg-white group-hover:shadow-md`}>
+                                            <event.icon className="w-6 h-6" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="font-black text-gray-800 text-sm truncate uppercase tracking-tight">{event.title}</h4>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                                                    <UserIcon className="w-3 h-3"/> {event.contact || 'Geral'}
+                                                </span>
+                                                <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg border border-slate-100 bg-slate-50 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors`}>
+                                                    {event.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`text-lg font-black ${['TRANSFER', 'STOCK'].includes(event.type) ? 'text-indigo-600' : event.color}`}>
+                                            {['TRANSFER', 'STOCK'].includes(event.type) ? `${event.value} un` : formatCurrency(event.value)}
+                                        </p>
+                                        <button className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors mt-1 flex items-center gap-1 ml-auto">
+                                            Detalhes <ArrowRight className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
-
-const UserIcon = ({ className }: { className?: string }) => (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-);
 
 export default BranchDetailsView;

@@ -5,7 +5,7 @@ import {
     Member, ServiceClient, ServiceItem, ServiceAppointment, AuditLog, 
     NotificationLog, OpticalRx, Salesperson, Laboratory, SalespersonSchedule, 
     StockTransfer, CommercialOrder, ServiceOrder, Contract, Invoice,
-    Branch, CostCenter, Department, Project
+    Branch, CostCenter, Department, Project, InventoryEvent
 } from '../types';
 import { localDb } from './localDb';
 import { syncService } from './syncService';
@@ -217,7 +217,7 @@ export const loadInitialData = async () => {
         serviceAppointments, goals, categories, branches, costCenters,
         departments, projects, serviceOrders, commercialOrders, contracts,
         invoices, opticalRxs, companyProfile, salespeople, salespersonSchedules,
-        laboratories, stockTransfers
+        laboratories, stockTransfers, inventoryEvents
     ] = await Promise.all([
         localDb.getAll<Account>('accounts'),
         localDb.getAll<Transaction>('transactions'),
@@ -237,10 +237,12 @@ export const loadInitialData = async () => {
         localDb.getAll<Invoice>('invoices'),
         localDb.getAll<OpticalRx>('opticalRxs'),
         localDb.getAll<CompanyProfile>('companyProfile'),
+        // Fix: Changed Salespeople to Salesperson as Salespeople was not defined
         localDb.getAll<Salesperson>('salespeople'),
         localDb.getAll<SalespersonSchedule>('salespersonSchedules'),
         localDb.getAll<Laboratory>('laboratories'),
         localDb.getAll<StockTransfer>('stockTransfers'),
+        localDb.getAll<InventoryEvent>('inventoryEvents'),
     ]);
 
     return {
@@ -248,7 +250,7 @@ export const loadInitialData = async () => {
         serviceAppointments, goals, categories, branches, costCenters,
         departments, projects, serviceOrders, commercialOrders, contracts,
         invoices, opticalRxs, companyProfile: companyProfile[0] || null,
-        salespeople, salespersonSchedules, laboratories, stockTransfers
+        salespeople, salespersonSchedules, laboratories, stockTransfers, inventoryEvents
     } as AppState;
 };
 

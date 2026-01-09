@@ -65,7 +65,8 @@ export default function(logAudit) {
                 laboratories: ['SELECT *, family_id FROM laboratories WHERE family_id = $1 AND deleted_at IS NULL ORDER BY name ASC', [familyId]],
                 goals: ['SELECT *, family_id FROM goals WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
                 serviceClients: ['SELECT *, family_id FROM service_clients WHERE family_id = $1 AND deleted_at IS NULL', [familyId]],
-                stockTransfers: ['SELECT *, family_id FROM stock_transfers WHERE family_id = $1 ORDER BY date DESC', [familyId]]
+                stockTransfers: ['SELECT *, family_id FROM stock_transfers WHERE family_id = $1 ORDER BY date DESC', [familyId]],
+                inventoryEvents: ['SELECT * FROM inventory_events WHERE family_id = $1 ORDER BY created_at DESC', [familyId]]
             };
 
             const results = {};
@@ -81,52 +82,6 @@ export default function(logAudit) {
             res.json(results);
         } catch (err) { 
             console.error("Initial Data Error:", err);
-            res.status(500).json({ error: err.message }); 
-        }
-    });
-
-    // Rota legada de fallback para sincronização de itens simples
-    router.post('/sync/process', authenticateToken, async (req, res) => {
-        const { action, store, payload } = req.body;
-        const userId = req.user.id;
-        try {
-            const familyIdRes = await pool.query('SELECT family_id FROM users WHERE id = $1', [userId]);
-            const familyId = familyIdRes.rows[0]?.family_id || userId;
-
-            const tableMap = {
-                'accounts': 'accounts', 'goals': 'goals', 'categories': 'categories', 
-                'branches': 'branches', 'serviceItems': 'service_items', 
-                'serviceOrders': 'service_orders', 'commercialOrders': 'commercial_orders', 
-                'opticalRxs': 'optical_rxs', 'salespeople': 'salespeople', 
-                'laboratories': 'laboratories', 'salespersonSchedules': 'salesperson_schedules', 
-                'serviceClients': 'service_clients'
-            };
-
-            const tableName = tableMap[store];
-            if (!tableName) throw new Error(`Loja ${store} não mapeada ou já migrada para controller próprio.`);
-
-            if (action === 'DELETE') {
-                await pool.query(`UPDATE ${tableName} SET deleted_at = NOW() WHERE id = $1 AND family_id = $2`, [payload.id, familyId]);
-            } else {
-                const fields = Object.keys(payload).filter(k => 
-                    !k.startsWith('_') && 
-                    !['id', 'familyId', 'family_id', 'userId', 'user_id', 'contactName', 'assigneeName', 'branchName'].includes(k)
-                );
-                
-                const snakeFields = fields.map(f => f.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`));
-                const placeholders = fields.map((_, i) => `$${i + 4}`).join(', ');
-                const updateStr = snakeFields.map((f, i) => `${f} = $${i + 4}`).join(', ');
-
-                const query = `INSERT INTO ${tableName} (id, user_id, family_id, ${snakeFields.join(', ')}) 
-                               VALUES ($1, $2, $3, ${placeholders}) 
-                               ON CONFLICT (id) DO UPDATE SET ${updateStr}, deleted_at = NULL`;
-                
-                const values = [payload.id, userId, familyId, ...fields.map(f => payload[f])];
-                await pool.query(query, values);
-            }
-            res.json({ success: true });
-        } catch (err) { 
-            console.error("Sync Process Error:", err);
             res.status(500).json({ error: err.message }); 
         }
     });
